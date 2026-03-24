@@ -276,6 +276,7 @@ function FeatureShowcase() {
   const [isPreviewDragging, setIsPreviewDragging] = useState(false);
   const [isCarouselDragging, setIsCarouselDragging] = useState(false);
   const previewViewportRef = useRef<HTMLDivElement | null>(null);
+  const previewZoomTargetRef = useRef<{ xRatio: number; yRatio: number } | null>(null);
   const previewDragRef = useRef<{
     startX: number;
     startY: number;
@@ -312,6 +313,7 @@ function FeatureShowcase() {
     setIsPreviewZoomed(false);
     setIsPreviewDragging(false);
     previewDragRef.current = null;
+    previewZoomTargetRef.current = null;
     suppressPreviewClickRef.current = false;
   };
 
@@ -359,21 +361,41 @@ function FeatureShowcase() {
 
     if (!isPreviewZoomed) {
       viewport.scrollTo({ left: 0, top: 0 });
+      previewZoomTargetRef.current = null;
       return;
     }
 
     const frameId = window.requestAnimationFrame(() => {
-      viewport.scrollLeft = Math.max(0, (viewport.scrollWidth - viewport.clientWidth) / 2);
-      viewport.scrollTop = Math.max(0, (viewport.scrollHeight - viewport.clientHeight) / 2);
+      const maxScrollLeft = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+      const maxScrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+
+      if (previewZoomTargetRef.current) {
+        viewport.scrollLeft = maxScrollLeft * previewZoomTargetRef.current.xRatio;
+        viewport.scrollTop = maxScrollTop * previewZoomTargetRef.current.yRatio;
+      } else {
+        viewport.scrollLeft = maxScrollLeft / 2;
+        viewport.scrollTop = maxScrollTop / 2;
+      }
+
+      previewZoomTargetRef.current = null;
     });
 
     return () => window.cancelAnimationFrame(frameId);
   }, [isPreviewZoomed, previewSlide]);
 
-  const togglePreviewZoom = () => {
+  const togglePreviewZoom = (event?: { clientX: number; clientY: number }) => {
     if (suppressPreviewClickRef.current) {
       suppressPreviewClickRef.current = false;
       return;
+    }
+
+    if (!isPreviewZoomed && event && previewViewportRef.current) {
+      const rect = previewViewportRef.current.getBoundingClientRect();
+
+      previewZoomTargetRef.current = {
+        xRatio: Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)),
+        yRatio: Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height)),
+      };
     }
 
     setIsPreviewZoomed((current) => !current);
