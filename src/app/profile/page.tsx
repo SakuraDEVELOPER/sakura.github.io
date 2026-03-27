@@ -217,6 +217,7 @@ export default function ProfilePage() {
 
   const isOwner = Boolean(currentUser && profile && currentUser.uid === profile.uid);
   const activeProfile = profile;
+  const profileRoles = activeProfile?.roles?.length ? activeProfile.roles : ["user"];
   const shouldShowPendingState =
     !authError &&
     !activeProfile &&
@@ -317,6 +318,7 @@ export default function ProfilePage() {
                     <div className="mt-3 flex flex-wrap items-center gap-3">
                       <span className="inline-flex rounded-full border border-[#2b1b1e] bg-[#1a1012] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-[#ffb7c5]">{activeProfile.login ? `@${activeProfile.login}` : "login pending"}</span>
                       <span className={`inline-flex rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${activeProfile.presence?.isOnline ? "border-[#1f3b2f] bg-[#0d1713] text-[#8ce5b2]" : "border-[#312228] bg-[#140d11] text-[#ffb7c5]"}`}>{activeProfile.presence?.isOnline ? "Online" : "Offline"}</span>
+                      {profileRoles.map((role) => <span key={role} className={`inline-flex rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${role === "admin" ? "border-[#8b6b2b] bg-[#17120a] text-[#ffd88a]" : role === "moderator" ? "border-[#2c3f56] bg-[#101826] text-[#9fcbff]" : "border-[#1f3b2f] bg-[#0d1713] text-[#8ce5b2]"}`}>{formatRole(role)}</span>)}
                     </div>
                     <p className="mt-3 break-all text-sm leading-relaxed text-gray-400">{activeProfile.email ?? "Email not provided"}</p>
                   </div>
@@ -328,6 +330,7 @@ export default function ProfilePage() {
                   ["Login", activeProfile.login ? `@${activeProfile.login}` : "Not assigned"],
                   ["Email", activeProfile.email ?? "Not provided"],
                   ["User ID", activeProfile.uid],
+                  ["Roles", profileRoles.map(formatRole).join(", ")],
                   ["Account Created", formatTime(activeProfile.creationTime)],
                   ["Last Sign-In", formatTime(activeProfile.lastSignInTime)],
                 ].map(([label, value]) => <div key={label} className="rounded-[26px] border border-[#1d1d1d] bg-[#090909] p-5"><p className="font-mono text-[10px] uppercase tracking-[0.32em] text-gray-600">{label}</p><p className="mt-3 break-all text-sm leading-relaxed text-gray-300">{value}</p></div>)}
@@ -337,7 +340,7 @@ export default function ProfilePage() {
             <div className="flex flex-col gap-6">
               <div className="rounded-[32px] border border-[#201517] bg-[#0d0d0d] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
                 <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">Roles</p>
-                <div className="mt-5 flex flex-wrap gap-3">{(activeProfile.roles.length ? activeProfile.roles : ["user"]).map((role) => <span key={role} className={`inline-flex rounded-full border px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] ${role === "admin" ? "border-[#8b6b2b] bg-[#17120a] text-[#ffd88a]" : role === "moderator" ? "border-[#2c3f56] bg-[#101826] text-[#9fcbff]" : "border-[#1f3b2f] bg-[#0d1713] text-[#8ce5b2]"}`}>{formatRole(role)}</span>)}</div>
+                <div className="mt-5 flex flex-wrap gap-3">{profileRoles.map((role) => <span key={role} className={`inline-flex rounded-full border px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] ${role === "admin" ? "border-[#8b6b2b] bg-[#17120a] text-[#ffd88a]" : role === "moderator" ? "border-[#2c3f56] bg-[#101826] text-[#9fcbff]" : "border-[#1f3b2f] bg-[#0d1713] text-[#8ce5b2]"}`}>{formatRole(role)}</span>)}</div>
               </div>
 
               <div className="rounded-[32px] border border-[#201517] bg-[#0d0d0d] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
