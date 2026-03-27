@@ -40,7 +40,8 @@ const firebaseModuleScript = `
   const LOGIN_MAX_LENGTH = 24;
   const LOGIN_MIN_LENGTH = 3;
   const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
-  const AVATAR_INLINE_SIZE = 256;
+  const AVATAR_INLINE_SIZE = 160;
+  const AVATAR_EXPORT_QUALITY = 0.72;
   const USER_UPDATE_EVENT = "sakura-user-update";
   const AVATAR_CONTENT_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
   const LOGIN_PATTERN = /^[A-Za-zА-Яа-яЁё0-9._-]+$/;
@@ -81,9 +82,20 @@ const firebaseModuleScript = `
       image.src = src;
     });
 
-  const createInlineAvatarDataUrl = async (file) => {
+  const loadAvatarSource = async (file) => {
+    if ("createImageBitmap" in window) {
+      try {
+        return await createImageBitmap(file);
+      } catch (error) {
+      }
+    }
+
     const source = await readFileAsDataUrl(file);
-    const image = await loadImageFromDataUrl(source);
+    return loadImageFromDataUrl(source);
+  };
+
+  const createInlineAvatarDataUrl = async (file) => {
+    const image = await loadAvatarSource(file);
     const width = image.naturalWidth || image.width || 0;
     const height = image.naturalHeight || image.height || 0;
 
@@ -105,6 +117,9 @@ const firebaseModuleScript = `
       throw createFirebaseError("storage/no-canvas-context", "Could not prepare the avatar preview.");
     }
 
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "medium";
+
     context.drawImage(
       image,
       offsetX,
@@ -117,7 +132,17 @@ const firebaseModuleScript = `
       AVATAR_INLINE_SIZE
     );
 
-    return canvas.toDataURL("image/jpeg", 0.86);
+    if ("close" in image && typeof image.close === "function") {
+      image.close();
+    }
+
+    const webpAvatar = canvas.toDataURL("image/webp", AVATAR_EXPORT_QUALITY);
+
+    if (webpAvatar.startsWith("data:image/webp")) {
+      return webpAvatar;
+    }
+
+    return canvas.toDataURL("image/jpeg", AVATAR_EXPORT_QUALITY);
   };
 
   const getErrorCode = (error) =>
