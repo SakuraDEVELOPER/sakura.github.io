@@ -42,7 +42,7 @@ const AUTH_ERROR_EVENT = "sakura-auth-error";
 const USER_UPDATE_EVENT = "sakura-user-update";
 const PROFILE_PATH_STORAGE_KEY = "sakura-profile-path";
 const CURRENT_PROFILE_ID_STORAGE_KEY = "sakura-current-profile-id";
-const PROFILE_BUILD_MARKER = "role-colors-v9";
+const PROFILE_BUILD_MARKER = "role-colors-v10";
 const repoBasePath = "/sakura.github.io";
 const restoreProfilePathScript = `
   (function () {
@@ -152,13 +152,49 @@ const formatRole = (role: string) => {
 
   return cleanRoleLabel(role) || "user";
 };
-const roleBadgeLabel = (role: string) =>
-  formatRole(role)
+const roleDisplayLabel = (role: string) => {
+  const normalizedRole = normalizeRoleName(role);
+
+  if (normalizedRole === "root") {
+    return "Root";
+  }
+
+  if (normalizedRole === "co-owner") {
+    return "Co-Owner";
+  }
+
+  if (normalizedRole === "super administrator") {
+    return "Super Administrator";
+  }
+
+  if (normalizedRole === "administrator") {
+    return "Administrator";
+  }
+
+  if (normalizedRole === "moderator") {
+    return "Moderator";
+  }
+
+  if (normalizedRole === "tester") {
+    return "Tester";
+  }
+
+  if (normalizedRole === "subscriber") {
+    return "Subscriber";
+  }
+
+  if (normalizedRole === "user") {
+    return "User";
+  }
+
+  return formatRole(role)
     .split(/([\s-]+)/)
     .map((part) =>
       /[\s-]+/.test(part) ? part : part.charAt(0).toUpperCase() + part.slice(1)
     )
     .join("");
+};
+const roleBadgeLabel = (role: string) => roleDisplayLabel(role);
 const renderRoleBadgeText = (role: string) =>
   roleBadgeLabel(role).split("").map((character, index) =>
     character === " "
@@ -609,7 +645,7 @@ export default function ProfilePage() {
               <div className="grid gap-4 px-8 py-8 sm:grid-cols-2">
                 {[
                   ["Profile ID", String(activeProfile.profileId ?? "Not assigned")],
-                  ["Roles", profileRoles.map(formatRole).join(", ")],
+                  ["Roles", profileRoles.map(roleDisplayLabel).join(", ")],
                   ["Account Created", formatTime(activeProfile.creationTime)],
                 ].map(([label, value]) => <div key={label} className="rounded-[26px] border border-[#1d1d1d] bg-[#090909] p-5"><p className="font-mono text-[10px] uppercase tracking-[0.32em] text-gray-600">{label}</p><p className="mt-3 break-all text-sm leading-relaxed text-gray-300">{value}</p></div>)}
               </div>
