@@ -24,6 +24,7 @@ type UserProfile = {
 
 type Bridge = {
   getProfileById: (profileId: number) => Promise<UserProfile | null>;
+  resendVerificationEmail: () => Promise<UserProfile | null>;
   updateProfileRoles: (profileId: number, roles: string[]) => Promise<UserProfile | null>;
   updateAvatar: (file: File) => Promise<UserProfile | null>;
   deleteAvatar: () => Promise<UserProfile | null>;
@@ -371,8 +372,11 @@ export default function ProfilePage() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isAvatarUploading, setIsAvatarUploading] = useState(false);
   const [isAvatarDeleting, setIsAvatarDeleting] = useState(false);
+  const [isVerificationSending, setIsVerificationSending] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [avatarSuccess, setAvatarSuccess] = useState<string | null>(null);
+  const [verificationError, setVerificationError] = useState<string | null>(null);
+  const [verificationSuccess, setVerificationSuccess] = useState<string | null>(null);
   const [draftRoles, setDraftRoles] = useState<string[]>([]);
   const [isRolesSaving, setIsRolesSaving] = useState(false);
   const [rolesError, setRolesError] = useState<string | null>(null);
@@ -460,6 +464,9 @@ export default function ProfilePage() {
   const visibleCurrentUser = currentUser && !currentUser.isAnonymous ? currentUser : null;
   const isOwner = Boolean(visibleCurrentUser && profile && visibleCurrentUser.uid === profile.uid);
   const activeProfile = profile;
+  const shouldShowVerificationBanner = Boolean(
+    isOwner && activeProfile?.email && activeProfile.emailVerified === false
+  );
   const profileRoles = activeProfile?.roles?.length ? normalizeRoleSelection(activeProfile.roles) : ["user"];
   const normalizedProfileRoles = profileRoles;
   const canManageRoleAssignments = Boolean(visibleCurrentUser && canManageRoles(visibleCurrentUser.roles));
@@ -492,12 +499,16 @@ export default function ProfilePage() {
       setDraftRoles([]);
       setRolesError(null);
       setRolesSuccess(null);
+      setVerificationError(null);
+      setVerificationSuccess(null);
       return;
     }
 
     setDraftRoles(normalizeRoleSelection(activeProfile.roles));
     setRolesError(null);
     setRolesSuccess(null);
+    setVerificationError(null);
+    setVerificationSuccess(null);
   }, [activeProfile, activeProfileRoleSignature]);
 
   const normalizedDraftRoles = normalizeRoleSelection(draftRoles);
@@ -615,6 +626,36 @@ export default function ProfilePage() {
     }
   };
 
+  const handleResendVerification = async () => {
+    const bridge = getWindowState().sakuraFirebaseAuth;
+
+    if (!bridge || !isOwner) {
+      return;
+    }
+
+    setVerificationError(null);
+    setVerificationSuccess(null);
+    setIsVerificationSending(true);
+
+    try {
+      const snapshot = await bridge.resendVerificationEmail();
+
+      if (snapshot) {
+        setCurrentUser(snapshot);
+
+        if (activeProfile && snapshot.uid === activeProfile.uid) {
+          setProfile(snapshot);
+        }
+      }
+
+      setVerificationSuccess("Verification email sent.");
+    } catch (error) {
+      setVerificationError(error instanceof Error ? error.message : "Could not send verification email.");
+    } finally {
+      setIsVerificationSending(false);
+    }
+  };
+
   return (
     <main
       data-profile-build={PROFILE_BUILD_MARKER}
@@ -662,6 +703,16 @@ export default function ProfilePage() {
             </div>
 
             <div className="flex flex-col gap-6">
+              {shouldShowVerificationBanner ? <div className="rounded-[32px] border border-[#4d3024] bg-[linear-gradient(180deg,#1a110d_0%,#120d0a_100%)] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
+                <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">Email not verified</p>
+                <p className="mt-3 text-sm leading-relaxed text-[#f3d2c5]">Подтвердите почту, чтобы сохранить доступ к аккаунту и восстановлению входа.</p>
+                <div className="mt-5 flex flex-wrap items-center gap-3">
+                  <button type="button" onClick={handleResendVerification} disabled={isVerificationSending} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">{isVerificationSending ? "Sending..." : "Resend verification email"}</button>
+                </div>
+                {verificationError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{verificationError}</p> : null}
+                {verificationSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{verificationSuccess}</p> : null}
+              </div> : null}
+
               {canManageRoleAssignments && activeProfile?.profileId ? <div className="rounded-[32px] border border-[#201517] bg-[#0d0d0d] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
                 <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">Role Access</p>
                 <p className="mt-3 text-xs leading-relaxed text-gray-400">Open any participant profile and manage its roles here. Only root accounts can save changes.</p>

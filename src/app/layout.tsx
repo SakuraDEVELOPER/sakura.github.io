@@ -368,6 +368,7 @@ const firebaseModuleScript = `
         login: fallbackLogin,
         loginLower: fallbackLogin ? normalizeLogin(fallbackLogin) : null,
         displayName: preferredDisplayName ?? user.displayName ?? fallbackLogin,
+        emailVerified: Boolean(user.emailVerified),
         profileId: null,
         photoURL: user.photoURL ?? null,
         providerIds: getProviderIds(user),
@@ -386,6 +387,8 @@ const firebaseModuleScript = `
     login: details.login ?? null,
     loginLower: details.loginLower ?? null,
     displayName: details.displayName ?? user.displayName ?? details.login ?? null,
+    emailVerified:
+      typeof details.emailVerified === "boolean" ? details.emailVerified : Boolean(user.emailVerified),
     profileId: typeof details.profileId === "number" ? details.profileId : null,
     photoURL: resolvePhotoURL(details, user.photoURL ?? null),
     providerIds: Array.isArray(details.providerIds) ? details.providerIds : getProviderIds(user),
@@ -403,6 +406,8 @@ const firebaseModuleScript = `
           uid: user.uid,
           isAnonymous: Boolean(user.isAnonymous),
           email: user.email ?? null,
+          emailVerified:
+            typeof details.emailVerified === "boolean" ? details.emailVerified : Boolean(user.emailVerified),
           login: details.login ?? null,
           displayName: user.displayName ?? details.displayName ?? details.login ?? null,
           profileId: typeof details.profileId === "number" ? details.profileId : null,
@@ -424,6 +429,7 @@ const firebaseModuleScript = `
     uid,
     isAnonymous: false,
     email: typeof details.email === "string" ? details.email : null,
+    emailVerified: typeof details.emailVerified === "boolean" ? details.emailVerified : null,
     login: typeof details.login === "string" ? details.login : null,
     displayName:
       typeof details.displayName === "string"
@@ -1161,6 +1167,44 @@ const firebaseModuleScript = `
       return snapshot;
     };
 
+    const resendVerificationEmail = async () => {
+      const user = auth.currentUser;
+
+      if (!user || user.isAnonymous) {
+        throw createFirebaseError("auth/no-current-user", "Sign in again to verify your email.");
+      }
+
+      if (user.emailVerified) {
+        const snapshot = publishUserSnapshot(
+          toUserSnapshot(user, {
+            ...(window.sakuraCurrentUserSnapshot ?? {}),
+            emailVerified: true,
+            verificationEmailSent: false,
+          })
+        );
+
+        return {
+          ...snapshot,
+          verificationEmailSent: false,
+        };
+      }
+
+      await sendEmailVerification(user);
+
+      const snapshot = publishUserSnapshot(
+        toUserSnapshot(user, {
+          ...(window.sakuraCurrentUserSnapshot ?? {}),
+          emailVerified: false,
+          verificationEmailSent: true,
+        })
+      );
+
+      return {
+        ...snapshot,
+        verificationEmailSent: true,
+      };
+    };
+
     window.sakuraFirebaseAuth = {
       register: async ({ login, email, password }) => {
         const credentials = await createUserWithEmailAndPassword(auth, email, password);
@@ -1222,6 +1266,7 @@ const firebaseModuleScript = `
       },
       loginWithGoogle,
       getProfileById,
+      resendVerificationEmail,
       updateProfileRoles,
       updateAvatar,
       deleteAvatar,
