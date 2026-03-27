@@ -155,8 +155,6 @@ export default function ProfilePage() {
   const activeProfile = profile;
   const primaryName = activeProfile ? nameOf(activeProfile) : "Sakura User";
   const initials = activeProfile ? initialsOf(activeProfile) : "SA";
-  const projectId = typeof window === "undefined" ? "sakura-bfa74" : getWindowState().firebaseConfig?.projectId ?? "sakura-bfa74";
-
   const handleLogout = async () => {
     const bridge = getWindowState().sakuraFirebaseAuth;
     if (!bridge) return;
@@ -244,8 +242,6 @@ export default function ProfilePage() {
                   ["User ID", activeProfile.uid],
                   ["Account Created", formatTime(activeProfile.creationTime)],
                   ["Last Sign-In", formatTime(activeProfile.lastSignInTime)],
-                  ["Profile Route", activeProfile.profileId ? profilePath(activeProfile.profileId) : "Not assigned"],
-                  ["Firebase Project", projectId],
                 ].map(([label, value]) => <div key={label} className="rounded-[26px] border border-[#1d1d1d] bg-[#090909] p-5"><p className="font-mono text-[10px] uppercase tracking-[0.32em] text-gray-600">{label}</p><p className="mt-3 break-all text-sm leading-relaxed text-gray-300">{value}</p></div>)}
               </div>
             </div>
