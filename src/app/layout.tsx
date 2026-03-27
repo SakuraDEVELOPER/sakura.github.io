@@ -6,6 +6,7 @@ const firebaseModuleScript = `
   import { getApps, initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
   import {
     createUserWithEmailAndPassword,
+    deleteUser,
     GoogleAuthProvider,
     getAuth,
     onAuthStateChanged,
@@ -48,6 +49,15 @@ const firebaseModuleScript = `
     return error;
   };
 
+  const getErrorCode = (error) =>
+    typeof error === "object" && error !== null && "code" in error
+      ? String(error.code)
+      : "";
+
+  const isPermissionDeniedError = (error) =>
+    getErrorCode(error) === "permission-denied" ||
+    (error instanceof Error && /Missing or insufficient permissions/i.test(error.message));
+
   const sanitizeLogin = (value) =>
     value
       .trim()
@@ -68,6 +78,9 @@ const firebaseModuleScript = `
 
     return cleaned || \`user\${user.uid.slice(0, 6)}\`;
   };
+
+  const getProviderIds = (user) =>
+    user.providerData.map((providerData) => providerData?.providerId).filter(Boolean);
 
   const buildLoginHistory = (existingHistory, creationTime, lastSignInTime) => {
     const previousEntries = Array.isArray(existingHistory)
@@ -117,6 +130,33 @@ const firebaseModuleScript = `
           )
       )
       .slice(0, 12);
+
+  const buildFallbackUserDetails = (user, options = {}) => {
+    const preferredDisplayName =
+      typeof options.preferredDisplayName === "string" && options.preferredDisplayName.trim()
+        ? options.preferredDisplayName.trim()
+        : null;
+    const requestedLogin =
+      typeof options.requestedLogin === "string" && options.requestedLogin.trim()
+        ? options.requestedLogin.trim()
+        : preferredDisplayName || deriveLoginSeed(user, preferredDisplayName);
+    const fallbackLogin = sanitizeLogin(requestedLogin) || null;
+
+    return {
+      login: fallbackLogin,
+      loginLower: fallbackLogin ? normalizeLogin(fallbackLogin) : null,
+      displayName: preferredDisplayName ?? user.displayName ?? fallbackLogin,
+      profileId: null,
+      providerIds: getProviderIds(user),
+      loginHistory: buildLoginHistory(
+        [],
+        user.metadata.creationTime ?? null,
+        user.metadata.lastSignInTime ?? null
+      ),
+      visitHistory: [],
+      presence: normalizePresence(null, window.location.pathname),
+    };
+  };
 
   const toUserSnapshot = (user, details = {}) =>
     user
@@ -250,57 +290,77 @@ const firebaseModuleScript = `
     };
 
     const syncPresence = async (user, options = {}) => {
-      const userRef = userRefFor(user.uid);
-      const userSnapshot = await getDoc(userRef);
-      const existingData = userSnapshot.exists() ? userSnapshot.data() : {};
-      const nowIso = new Date().toISOString();
-      const currentPath =
-        typeof options.path === "string" && options.path
-          ? options.path
-          : window.location.pathname;
-      const isVisible = typeof document === "undefined" || document.visibilityState !== "hidden";
-      const isOnline = Boolean(navigator.onLine) && isVisible;
-      const status = isOnline ? "online" : "offline";
-      const source = typeof options.source === "string" ? options.source : "activity";
-      const signature = status + "|" + currentPath + "|" + source;
-      const previousVisits = normalizeVisitHistory(existingData?.visitHistory);
-      const lastVisit = previousVisits[0] ?? null;
-      const shouldRecordVisit =
-        Boolean(options.forceVisit) ||
-        !lastVisit ||
-        lastVisit.path !== currentPath ||
-        lastVisit.status !== status ||
-        Date.now() - lastPresenceAt > 5 * 60 * 1000 ||
-        lastPresenceSignature !== signature;
-      const presence = {
-        status,
-        isOnline,
-        currentPath,
-        lastSeenAt: nowIso,
-      };
-      const visitHistory = shouldRecordVisit
-        ? buildVisitHistory(previousVisits, {
-            timestamp: nowIso,
-            path: currentPath,
-            source,
-            status,
-          })
-        : previousVisits;
+      try {
+        const userRef = userRefFor(user.uid);
+        const userSnapshot = await getDoc(userRef);
+        const existingData = userSnapshot.exists() ? userSnapshot.data() : {};
+        const nowIso = new Date().toISOString();
+        const currentPath =
+          typeof options.path === "string" && options.path
+            ? options.path
+            : window.location.pathname;
+        const isVisible = typeof document === "undefined" || document.visibilityState !== "hidden";
+        const isOnline = Boolean(navigator.onLine) && isVisible;
+        const status = isOnline ? "online" : "offline";
+        const source = typeof options.source === "string" ? options.source : "activity";
+        const signature = status + "|" + currentPath + "|" + source;
+        const previousVisits = normalizeVisitHistory(existingData?.visitHistory);
+        const lastVisit = previousVisits[0] ?? null;
+        const shouldRecordVisit =
+          Boolean(options.forceVisit) ||
+          !lastVisit ||
+          lastVisit.path !== currentPath ||
+          lastVisit.status !== status ||
+          Date.now() - lastPresenceAt > 5 * 60 * 1000 ||
+          lastPresenceSignature !== signature;
+        const presence = {
+          status,
+          isOnline,
+          currentPath,
+          lastSeenAt: nowIso,
+        };
+        const visitHistory = shouldRecordVisit
+          ? buildVisitHistory(previousVisits, {
+              timestamp: nowIso,
+              path: currentPath,
+              source,
+              status,
+            })
+          : previousVisits;
 
-      lastPresenceSignature = signature;
-      lastPresenceAt = Date.now();
+        lastPresenceSignature = signature;
+        lastPresenceAt = Date.now();
 
-      await setDoc(
-        userRef,
-        {
-          presence,
-          visitHistory,
-          updatedAt: nowIso,
-        },
-        { merge: true }
-      );
+        await setDoc(
+          userRef,
+          {
+            presence,
+            visitHistory,
+            updatedAt: nowIso,
+          },
+          { merge: true }
+        );
 
-      return publishUserSnapshot(toUserSnapshot(user, { ...existingData, visitHistory, presence }));
+        return publishUserSnapshot(toUserSnapshot(user, { ...existingData, visitHistory, presence }));
+      } catch (error) {
+        if (!isPermissionDeniedError(error)) {
+          throw error;
+        }
+
+        const fallbackDetails = window.sakuraCurrentUserSnapshot
+          ? {
+              login: window.sakuraCurrentUserSnapshot.login,
+              displayName: window.sakuraCurrentUserSnapshot.displayName,
+              profileId: window.sakuraCurrentUserSnapshot.profileId,
+              providerIds: window.sakuraCurrentUserSnapshot.providerIds,
+              loginHistory: window.sakuraCurrentUserSnapshot.loginHistory,
+              visitHistory: window.sakuraCurrentUserSnapshot.visitHistory,
+              presence: window.sakuraCurrentUserSnapshot.presence,
+            }
+          : buildFallbackUserDetails(user, options);
+
+        return publishUserSnapshot(toUserSnapshot(user, fallbackDetails));
+      }
     };
 
     const ensureProfileRecord = async (user, options = {}) => {
@@ -309,9 +369,7 @@ const firebaseModuleScript = `
       const existingData = userSnapshot.exists() ? userSnapshot.data() : null;
       const existingProfileId =
         typeof existingData?.profileId === "number" ? existingData.profileId : null;
-      const providerIds = user.providerData
-        .map((providerData) => providerData?.providerId)
-        .filter(Boolean);
+      const providerIds = getProviderIds(user);
       const preferredDisplayName =
         typeof options.preferredDisplayName === "string" && options.preferredDisplayName.trim()
           ? options.preferredDisplayName.trim()
@@ -396,9 +454,17 @@ const firebaseModuleScript = `
     };
 
     const resolveUserSnapshot = async (user, options = {}) => {
-      const details = await ensureProfileRecord(user, options);
+      try {
+        const details = await ensureProfileRecord(user, options);
 
-      return publishUserSnapshot(toUserSnapshot(user, details));
+        return publishUserSnapshot(toUserSnapshot(user, details));
+      } catch (error) {
+        if (!isPermissionDeniedError(error)) {
+          throw error;
+        }
+
+        return publishUserSnapshot(toUserSnapshot(user, buildFallbackUserDetails(user, options)));
+      }
     };
 
     const startPresenceTracking = (user) => {
@@ -467,23 +533,39 @@ const firebaseModuleScript = `
 
     window.sakuraFirebaseAuth = {
       register: async ({ login, email, password }) => {
-        const resolvedLogin = await resolveAvailableLogin(login);
         const credentials = await createUserWithEmailAndPassword(auth, email, password);
+        const preferredLogin = sanitizeLogin(login) || login.trim();
 
-        await updateProfile(credentials.user, {
-          displayName: resolvedLogin.login,
-        });
+        try {
+          const snapshot = await resolveUserSnapshot(credentials.user, {
+            requestedLogin: login,
+            preferredDisplayName: preferredLogin,
+          });
 
-        const snapshot = await resolveUserSnapshot(credentials.user, {
-          requestedLogin: resolvedLogin.login,
-          preferredDisplayName: resolvedLogin.login,
-        });
-        await syncPresence(credentials.user, {
-          path: window.location.pathname,
-          source: "register",
-          forceVisit: true,
-        });
-        return snapshot;
+          await updateProfile(credentials.user, {
+            displayName: snapshot?.login ?? preferredLogin,
+          });
+
+          await syncPresence(credentials.user, {
+            path: window.location.pathname,
+            source: "register",
+            forceVisit: true,
+          });
+
+          return snapshot;
+        } catch (error) {
+          const errorCode = getErrorCode(error);
+
+          if (errorCode === "auth/login-already-in-use" || errorCode === "auth/invalid-login") {
+            try {
+              await deleteUser(credentials.user);
+            } catch (cleanupError) {
+              console.error("Failed to rollback registration:", cleanupError);
+            }
+          }
+
+          throw error;
+        }
       },
       login: async (identifier, password) => {
         const email = await resolveEmailForLogin(identifier);

@@ -157,6 +157,10 @@ function getFirebaseErrorMessage(error: unknown) {
     return "Аккаунт с таким логином не найден.";
   }
 
+  if (code === "permission-denied") {
+    return "Firestore blocked access. Проверьте rules для users и meta/counters в Firebase Console.";
+  }
+
   switch (code) {
     case "auth/email-already-in-use":
       return "Этот email уже зарегистрирован.";
