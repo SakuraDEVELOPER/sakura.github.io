@@ -13,13 +13,13 @@ const firebaseModuleScript = `
   } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
   const firebaseConfig = {
-    apiKey: "AIzaSyAnZQt5NMXGOMuz3STh_vy-dSENVM9_ZY",
+    apiKey: "AIzaSyAnZQt5NWXGOWuz3STh_vy-dSENVBM9_ZY",
     authDomain: "sakura-bfa74.firebaseapp.com",
     projectId: "sakura-bfa74",
     storageBucket: "sakura-bfa74.firebasestorage.app",
     messagingSenderId: "145336250722",
     appId: "1:145336250722:web:d31610ae8258c398e47c3b",
-    measurementId: "G-1V87L6BRL0"
+    measurementId: "G-1V07L6BRL0"
   };
 
   const toUserSnapshot = (user) =>
