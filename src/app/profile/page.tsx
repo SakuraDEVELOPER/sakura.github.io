@@ -40,6 +40,7 @@ const AUTH_ERROR_EVENT = "sakura-auth-error";
 const USER_UPDATE_EVENT = "sakura-user-update";
 const PROFILE_PATH_STORAGE_KEY = "sakura-profile-path";
 const CURRENT_PROFILE_ID_STORAGE_KEY = "sakura-current-profile-id";
+const PROFILE_BUILD_MARKER = "role-colors-v3";
 const repoBasePath = "/sakura.github.io";
 const restoreProfilePathScript = `
   (function () {
@@ -105,54 +106,54 @@ const roleBadgeStyle = (role: string): CSSProperties => {
 
   if (normalizedRole === "root") {
     return {
-      borderColor: "#ff4b5c",
-      backgroundColor: "#1d0a0e",
-      color: "#ffb8c0",
-      boxShadow: "0 0 16px rgba(255,75,92,0.18)",
+      borderColor: "#ff3b30",
+      backgroundColor: "#220909",
+      color: "#ffd5d2",
+      boxShadow: "0 0 18px rgba(255,59,48,0.28)",
     };
   }
 
   if (normalizedRole === "administrator") {
     return {
-      borderColor: "#4a93ff",
-      backgroundColor: "#091321",
-      color: "#bedaff",
-      boxShadow: "0 0 16px rgba(74,147,255,0.18)",
+      borderColor: "#3b82f6",
+      backgroundColor: "#081222",
+      color: "#d6e7ff",
+      boxShadow: "0 0 18px rgba(59,130,246,0.28)",
     };
   }
 
   if (normalizedRole === "moderator") {
     return {
-      borderColor: "#8f6cff",
-      backgroundColor: "#151028",
-      color: "#ddd1ff",
-      boxShadow: "0 0 16px rgba(143,108,255,0.18)",
+      borderColor: "#8b5cf6",
+      backgroundColor: "#161022",
+      color: "#e3d8ff",
+      boxShadow: "0 0 18px rgba(139,92,246,0.24)",
     };
   }
 
   if (normalizedRole === "tester") {
     return {
-      borderColor: "#f2f2f2",
+      borderColor: "#ffffff",
       backgroundColor: "#151515",
       color: "#ffffff",
-      boxShadow: "0 0 16px rgba(255,255,255,0.12)",
+      boxShadow: "0 0 18px rgba(255,255,255,0.2)",
     };
   }
 
   if (normalizedRole === "subscriber") {
     return {
-      borderColor: "#f0c54c",
-      backgroundColor: "#1a1406",
-      color: "#ffe7a3",
-      boxShadow: "0 0 16px rgba(240,197,76,0.18)",
+      borderColor: "#facc15",
+      backgroundColor: "#1e1806",
+      color: "#fff0ae",
+      boxShadow: "0 0 18px rgba(250,204,21,0.24)",
     };
   }
 
   return {
-    borderColor: "#43c980",
-    backgroundColor: "#0b1711",
-    color: "#b7f3cf",
-    boxShadow: "0 0 16px rgba(67,201,128,0.16)",
+    borderColor: "#22c55e",
+    backgroundColor: "#08170d",
+    color: "#c6f6d5",
+    boxShadow: "0 0 18px rgba(34,197,94,0.22)",
   };
 };
 const nameOf = (user: UserProfile) => user.displayName?.trim() || user.login?.trim() || "Sakura User";
@@ -361,7 +362,10 @@ export default function ProfilePage() {
   };
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(255,183,197,0.14),transparent_35%),linear-gradient(180deg,#090909_0%,#040404_100%)] px-5 py-8 text-white sm:px-8">
+    <main
+      data-profile-build={PROFILE_BUILD_MARKER}
+      className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(255,183,197,0.14),transparent_35%),linear-gradient(180deg,#090909_0%,#040404_100%)] px-5 py-8 text-white sm:px-8"
+    >
       <script
         dangerouslySetInnerHTML={{
           __html: restoreProfilePathScript,
