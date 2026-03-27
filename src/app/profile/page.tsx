@@ -84,6 +84,10 @@ const normalizeRoleName = (role: string) => {
     return "administrator";
   }
 
+  if (normalizedRole === "r00t") {
+    return "root";
+  }
+
   return normalizedRole;
 };
 const formatRole = (role: string) => {
