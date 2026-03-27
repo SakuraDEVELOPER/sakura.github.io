@@ -547,14 +547,13 @@ function HeaderAuth() {
         <div className="flex flex-wrap items-center justify-end gap-2">
           <Link
             href="/profile"
-            className="inline-flex items-center justify-center rounded-full border border-[#2a2a2a] bg-[#101010] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-gray-300 transition hover:border-[#4a4a4a] hover:text-white"
+            className="group inline-flex max-w-full items-center gap-1 rounded-full border border-[#1f3b2f] bg-[#0d1713] p-1 transition hover:border-[#56c48e]/45 hover:bg-[#102018]"
           >
-            {currentUser.profileId ? `Profile #${currentUser.profileId}` : "Profile"}
-          </Link>
-          <Link
-            href="/profile"
-            className="group inline-flex max-w-full items-center gap-3 rounded-full border border-[#1f3b2f] bg-[#0d1713] py-1.5 pr-4 pl-1.5 transition hover:border-[#56c48e]/45 hover:bg-[#102018]"
-          >
+            <span className="inline-flex items-center justify-center self-stretch rounded-full border border-[#2a2a2a] bg-[#101010] px-4 text-[11px] font-bold uppercase tracking-[0.18em] text-gray-300 transition group-hover:border-[#4a4a4a] group-hover:text-white">
+              {currentUser.profileId ? `Profile #${currentUser.profileId}` : "Profile"}
+            </span>
+
+            <span className="inline-flex min-w-0 items-center gap-3 py-1.5 pr-4 pl-1.5">
             {currentUser.photoURL ? (
               <img
                 src={currentUser.photoURL}
@@ -571,6 +570,7 @@ function HeaderAuth() {
               <span className="max-w-[220px] truncate text-[12px] font-medium text-[#d6f2e2]">
                 {userLabel}
               </span>
+            </span>
             </span>
           </Link>
           <button
