@@ -3,7 +3,6 @@
 /* eslint-disable @next/next/no-img-element */
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 
@@ -218,6 +217,10 @@ function buildUserInitials(user: AuthUserSnapshot) {
     .slice(0, 2);
 }
 
+function profileHref(profileId: number | null | undefined) {
+  return profileId ? `${repoBasePath}/profile/${profileId}` : `${repoBasePath}/`;
+}
+
 function scrollToSection(sectionId: string) {
   const target = document.getElementById(sectionId);
 
@@ -282,10 +285,11 @@ function SakuraBackground() {
     setSubmitError(null);
 
     try {
-      await window.sakuraFirebaseAuth.loginWithGoogle();
+      let snapshot: AuthUserSnapshot | null;
+      const snapshot = await window.sakuraFirebaseAuth.loginWithGoogle();
       setFlashMessage("Вход через Google выполнен.");
       closeModal();
-      router.push("/profile");
+      navigateToProfile(snapshot);
     } catch (error) {
       setSubmitError(getFirebaseErrorMessage(error));
     } finally {
@@ -327,7 +331,6 @@ function SakuraBackground() {
 }
 
 function HeaderAuth() {
-  const router = useRouter();
   const [mode, setMode] = useState<AuthMode>("login");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [authReady, setAuthReady] = useState(false);
@@ -479,6 +482,10 @@ function HeaderAuth() {
     setConfirmPassword("");
   };
 
+  const navigateToProfile = (user: AuthUserSnapshot | null) => {
+    window.location.assign(profileHref(user?.profileId ?? window.sakuraCurrentUserSnapshot?.profileId));
+  };
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -526,20 +533,21 @@ function HeaderAuth() {
     setSubmitError(null);
 
     try {
+      let snapshot: AuthUserSnapshot | null;
       if (mode === "register") {
-        await window.sakuraFirebaseAuth.register({
+        snapshot = await window.sakuraFirebaseAuth.register({
           login: loginName.trim().replace(/\s+/g, ""),
           email: identifier.trim(),
           password,
         });
         setFlashMessage("Аккаунт создан. Вход выполнен автоматически.");
       } else {
-        await window.sakuraFirebaseAuth.login(identifier.trim(), password);
+        snapshot = await window.sakuraFirebaseAuth.login(identifier.trim(), password);
         setFlashMessage("Вход выполнен.");
       }
 
       closeModal();
-      router.push("/profile");
+      navigateToProfile(snapshot);
     } catch (error) {
       setSubmitError(getFirebaseErrorMessage(error));
     } finally {
@@ -579,10 +587,10 @@ function HeaderAuth() {
     setSubmitError(null);
 
     try {
-      await window.sakuraFirebaseAuth.loginWithGoogle();
+      const snapshot = await window.sakuraFirebaseAuth.loginWithGoogle();
       setFlashMessage("Вход через Google выполнен.");
       closeModal();
-      router.push("/profile");
+      navigateToProfile(snapshot);
     } catch (error) {
       setSubmitError(getFirebaseErrorMessage(error));
     } finally {
@@ -597,8 +605,8 @@ function HeaderAuth() {
     <>
       {currentUser ? (
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <Link
-            href="/profile"
+          <a
+            href={profileHref(currentUser.profileId)}
             className="group inline-flex max-w-full items-center gap-3 rounded-full border border-[#1f3b2f] bg-[#0d1713] py-1.5 pr-4 pl-1.5 transition hover:border-[#56c48e]/45 hover:bg-[#102018]"
           >
             {currentUser.photoURL ? (
@@ -618,7 +626,7 @@ function HeaderAuth() {
                 {userLabel}
               </span>
             </span>
-          </Link>
+          </a>
           <button
             type="button"
             onClick={handleLogout}

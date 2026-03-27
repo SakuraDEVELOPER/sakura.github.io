@@ -3,10 +3,30 @@ const redirectScript = `
   (function () {
     var profilePattern = new RegExp("^" + ${JSON.stringify(repoBasePath)} + "/profile/\\\\d+$");
     var currentPath = window.location.pathname;
+    var loadProfilePage = function () {
+      fetch(${JSON.stringify(repoBasePath + "/profile.html")}, {
+        cache: "no-store",
+        credentials: "same-origin"
+      })
+        .then(function (response) {
+          if (!response.ok) {
+            throw new Error("Profile page bootstrap failed.");
+          }
+
+          return response.text();
+        })
+        .then(function (html) {
+          document.open();
+          document.write(html);
+          document.close();
+        })
+        .catch(function () {
+          window.location.replace(${JSON.stringify(repoBasePath + "/")});
+        });
+    };
 
     if (profilePattern.test(currentPath)) {
-      window.sessionStorage.setItem("sakura-profile-path", currentPath);
-      window.location.replace(${JSON.stringify(repoBasePath + "/profile")});
+      loadProfilePage();
       return;
     }
 
