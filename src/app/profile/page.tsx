@@ -85,11 +85,13 @@ const normalizeRoleName = (role: string) => {
     return "administrator";
   }
 
+  if (compactRole === "superadministrator" || compactRole === "superadmin") {
+    return "super administrator";
+  }
+
   if (
     compactRole === "root" ||
     compactRole === "r00t" ||
-    compactRole === "superadministrator" ||
-    compactRole === "superadmin" ||
     compactRole === "owner"
   ) {
     return "root";
@@ -117,6 +119,7 @@ const formatRole = (role: string) => {
   const normalizedRole = normalizeRoleName(role);
 
   if (normalizedRole === "root") return "Root";
+  if (normalizedRole === "super administrator") return "Super Administrator";
   if (normalizedRole === "administrator") return "Administrator";
   if (normalizedRole === "moderator") return "Moderator";
   if (normalizedRole === "tester") return "Tester";
@@ -132,7 +135,7 @@ const formatRole = (role: string) => {
 const roleBadgeStyle = (role: string): CSSProperties => {
   const normalizedRole = normalizeRoleName(role);
 
-  if (normalizedRole === "root") {
+  if (normalizedRole === "root" || normalizedRole === "super administrator") {
     return {
       borderColor: "#ff3b30",
       backgroundColor: "#220909",

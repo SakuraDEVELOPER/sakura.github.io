@@ -218,11 +218,13 @@ const firebaseModuleScript = `
       return "administrator";
     }
 
+    if (compactRole === "superadministrator" || compactRole === "superadmin") {
+      return "super administrator";
+    }
+
     if (
       compactRole === "root" ||
       compactRole === "r00t" ||
-      compactRole === "superadministrator" ||
-      compactRole === "superadmin" ||
       compactRole === "owner"
     ) {
       return "root";
