@@ -42,10 +42,19 @@ jobs:
       - name: Ensure GitHub Pages serves _next assets
         run: touch out/.nojekyll
 
+      - name: Package GitHub Pages artifact
+        run: |
+          tar --dereference --hard-dereference --directory out -cvf github-pages.tar .
+          gzip -f github-pages.tar
+
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-artifact@v4
         with:
-          path: ./out
+          name: github-pages
+          path: ./github-pages.tar.gz
+          retention-days: 1
+          compression-level: 0
+          overwrite: true
 
   deploy:
     needs: build
