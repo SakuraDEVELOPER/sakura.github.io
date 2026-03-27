@@ -430,6 +430,19 @@ const firebaseModuleScript = `
       }
 
       const nextProfileId = await runTransaction(db, async (transaction) => {
+        const userSnapshotInTransaction = await transaction.get(userRef);
+        const existingTransactionData = userSnapshotInTransaction.exists()
+          ? userSnapshotInTransaction.data()
+          : null;
+        const existingTransactionProfileId =
+          typeof existingTransactionData?.profileId === "number"
+            ? existingTransactionData.profileId
+            : null;
+
+        if (existingTransactionProfileId !== null) {
+          return existingTransactionProfileId;
+        }
+
         const countersSnapshot = await transaction.get(countersRef);
         const currentCount =
           countersSnapshot.exists() && typeof countersSnapshot.data()?.profileCount === "number"
@@ -447,9 +460,26 @@ const firebaseModuleScript = `
         return profileId;
       });
 
+      const finalSnapshot = await getDoc(userRef);
+      const finalData = finalSnapshot.exists() ? finalSnapshot.data() : null;
+
       return {
         ...profilePayload,
-        profileId: nextProfileId,
+        ...(finalData ?? {}),
+        login: typeof finalData?.login === "string" ? finalData.login : profilePayload.login,
+        loginLower:
+          typeof finalData?.loginLower === "string"
+            ? finalData.loginLower
+            : profilePayload.loginLower,
+        displayName:
+          typeof finalData?.displayName === "string"
+            ? finalData.displayName
+            : profilePayload.displayName,
+        providerIds: Array.isArray(finalData?.providerIds) ? finalData.providerIds : providerIds,
+        loginHistory: Array.isArray(finalData?.loginHistory) ? finalData.loginHistory : loginHistory,
+        visitHistory: normalizeVisitHistory(finalData?.visitHistory ?? visitHistory),
+        presence: normalizePresence(finalData?.presence, window.location.pathname),
+        profileId: typeof finalData?.profileId === "number" ? finalData.profileId : nextProfileId,
       };
     };
 
