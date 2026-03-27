@@ -42,7 +42,7 @@ const AUTH_ERROR_EVENT = "sakura-auth-error";
 const USER_UPDATE_EVENT = "sakura-user-update";
 const PROFILE_PATH_STORAGE_KEY = "sakura-profile-path";
 const CURRENT_PROFILE_ID_STORAGE_KEY = "sakura-current-profile-id";
-const PROFILE_BUILD_MARKER = "role-colors-v7";
+const PROFILE_BUILD_MARKER = "role-colors-v8";
 const repoBasePath = "/sakura.github.io";
 const restoreProfilePathScript = `
   (function () {
@@ -132,14 +132,38 @@ const normalizeRoleName = (role: string) => {
 const cleanRoleLabel = (role: string) =>
   isUserLikeRole(role) ? "user" : role.trim().replace(/\s+/g, " ");
 const formatRole = (role: string) => {
+  const normalizedRole = normalizeRoleName(role);
+
+  if (normalizedRole === "administrator") {
+    return "administrator";
+  }
+
+  if (normalizedRole === "super administrator") {
+    return "super administrator";
+  }
+
+  if (normalizedRole === "subscriber") {
+    return "subscriber";
+  }
+
+  if (normalizedRole === "tester") {
+    return "tester";
+  }
+
   return cleanRoleLabel(role) || "user";
 };
-const roleBadgeLabel = (role: string) => formatRole(role).toUpperCase();
+const roleBadgeLabel = (role: string) =>
+  formatRole(role)
+    .split(/([\s-]+)/)
+    .map((part) =>
+      /[\s-]+/.test(part) ? part : part.charAt(0).toUpperCase() + part.slice(1)
+    )
+    .join("");
 const roleBadgeTextStyle: CSSProperties = {
-  fontFamily: "\"Segoe UI\", Arial, sans-serif",
+  fontFamily: "Verdana, Arial, sans-serif",
   fontVariantLigatures: "none",
   fontFeatureSettings: "\"liga\" 0, \"calt\" 0",
-  letterSpacing: "0.14em",
+  letterSpacing: "0.04em",
   textTransform: "none",
   whiteSpace: "nowrap",
 };
