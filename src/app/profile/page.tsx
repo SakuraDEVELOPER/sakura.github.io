@@ -265,7 +265,6 @@ export default function ProfilePage() {
 
   const userInitials = currentUser ? buildInitials(currentUser) : "SA";
   const primaryName = currentUser ? buildPrimaryName(currentUser) : "Sakura User";
-  const siteVisits = currentUser?.visitHistory?.length ? currentUser.visitHistory : [];
   const avatarMode = currentUser?.photoURL ? "Cloud Avatar" : "Generated Avatar";
   const privateSections = [
     {
@@ -522,45 +521,6 @@ export default function ProfilePage() {
 
               <div className="rounded-[32px] border border-[#201517] bg-[#0d0d0d] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
                 <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">
-                  Site Visit History
-                </p>
-                <div className="mt-5 space-y-3">
-                  {siteVisits.length ? (
-                    siteVisits.map((entry, index) => (
-                      <div
-                        key={`${entry.timestamp}-${index}`}
-                        className="rounded-[22px] border border-[#1d1d1d] bg-[#090909] px-4 py-3"
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-600">
-                            {index === 0 ? "Latest Visit" : `Visit #${index + 1}`}
-                          </p>
-                          <span
-                            className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${
-                              entry.status === "online"
-                                ? "border border-[#1f3b2f] bg-[#0d1713] text-[#8ce5b2]"
-                                : "border border-[#3b2428] bg-[#170f11] text-[#ff9aa9]"
-                            }`}
-                          >
-                            {entry.status}
-                          </span>
-                        </div>
-                        <p className="mt-2 text-sm text-gray-300">{formatTimestamp(entry.timestamp)}</p>
-                        <p className="mt-1 text-xs text-gray-500">
-                          {entry.path} · {entry.source}
-                        </p>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="rounded-[22px] border border-[#1d1d1d] bg-[#090909] px-4 py-3 text-sm text-gray-400">
-                      История посещений появится после первой синхронизации активности.
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="rounded-[32px] border border-[#201517] bg-[#0d0d0d] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
-                <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">
                   Private Sections
                 </p>
                 <div className="mt-5 space-y-3">
@@ -581,16 +541,6 @@ export default function ProfilePage() {
                 </div>
               </div>
 
-              <div className="rounded-[32px] border border-[#201517] bg-[#0d0d0d] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
-                <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">
-                  Next Step
-                </p>
-                <p className="mt-4 text-sm leading-relaxed text-gray-400">
-                  Теперь у тебя есть отдельная страница профиля. Следующим шагом можно добавить
-                  редактирование имени, аватар, историю входов или приватные разделы только для
-                  авторизованных пользователей.
-                </p>
-              </div>
             </motion.div>
           </section>
         ) : null}
