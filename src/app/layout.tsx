@@ -823,16 +823,8 @@ const firebaseModuleScript = `
         return window.sakuraCurrentUserSnapshot;
       }
 
-      const viewer = await ensureProfileViewer();
-
-      if (viewer.isAnonymous) {
-        publishUserSnapshot(toAnonymousViewerSnapshot(viewer));
-      }
-
-      let profileDoc;
-
-      try {
-        profileDoc = await withTimeout(
+      const readProfileDoc = async () =>
+        withTimeout(
           findUserByProfileId(profileId),
           PROFILE_LOOKUP_TIMEOUT_MS,
           () =>
@@ -841,11 +833,37 @@ const firebaseModuleScript = `
               "Profile loading took too long. Refresh the page and try again."
             )
         );
+
+      let profileDoc = null;
+      let publicReadDenied = false;
+
+      try {
+        profileDoc = await readProfileDoc();
+      } catch (error) {
+        if (!isPermissionDeniedError(error)) {
+          throw error;
+        }
+
+        publicReadDenied = true;
+      }
+
+      if (!publicReadDenied) {
+        return profileDoc ? toStoredUserSnapshot(profileDoc.id, profileDoc.data()) : null;
+      }
+
+      const viewer = await ensureProfileViewer();
+
+      if (viewer.isAnonymous) {
+        publishUserSnapshot(toAnonymousViewerSnapshot(viewer));
+      }
+
+      try {
+        profileDoc = await readProfileDoc();
       } catch (error) {
         if (isPermissionDeniedError(error)) {
           throw createFirebaseError(
             "profile/public-view-denied",
-            "Public profile viewing is blocked by Firestore rules. Allow anonymous users to read users collection."
+            "Public profile viewing is blocked by Firestore rules. Allow public read access or anonymous users to read users collection."
           );
         }
 
