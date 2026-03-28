@@ -450,6 +450,17 @@ const EDITABLE_ROLE_OPTIONS = [
 const ROLE_DISPLAY_ORDER = new Map(
   EDITABLE_ROLE_OPTIONS.map((role, index) => [normalizeRoleName(role), index])
 );
+const COMMENT_AUTHOR_ROLE_ORDER = new Map([
+  ["root", 0],
+  ["co-owner", 1],
+  ["super administrator", 2],
+  ["administrator", 3],
+  ["sponsor", 4],
+  ["moderator", 5],
+  ["tester", 6],
+  ["subscriber", 7],
+  ["user", 8],
+]);
 const sortRolesForDisplay = (roles: string[]) =>
   [...roles].sort((left, right) => {
     const leftOrder = ROLE_DISPLAY_ORDER.get(normalizeRoleName(left)) ?? Number.MAX_SAFE_INTEGER;
@@ -472,6 +483,28 @@ const normalizeRoleSelection = (roles: string[]) => {
   );
 
   return uniqueRoles.length ? sortRolesForDisplay(uniqueRoles) : ["user"];
+};
+const pickCommentAuthorAccentRole = (roles: string[] | null | undefined) => {
+  const nextRoles = Array.isArray(roles)
+    ? roles.map((role) => normalizeRoleName(role)).filter(Boolean)
+    : [];
+  const uniqueRoles = nextRoles.filter(
+    (role, index, entries) => index === entries.findIndex((candidate) => candidate === role)
+  );
+  const sortedRoles = [...uniqueRoles].sort((left, right) => {
+    const leftOrder =
+      COMMENT_AUTHOR_ROLE_ORDER.get(normalizeRoleName(left)) ?? Number.MAX_SAFE_INTEGER;
+    const rightOrder =
+      COMMENT_AUTHOR_ROLE_ORDER.get(normalizeRoleName(right)) ?? Number.MAX_SAFE_INTEGER;
+
+    if (leftOrder !== rightOrder) {
+      return leftOrder - rightOrder;
+    }
+
+    return formatRole(left).localeCompare(formatRole(right), "en");
+  });
+
+  return sortedRoles[0] ?? null;
 };
 const canManageRoles = (roles: string[]) =>
   normalizeRoleSelection(roles).some((role) => ROLE_MANAGER_NAMES.has(normalizeRoleName(role)));
@@ -696,27 +729,53 @@ export default function ProfilePage() {
   const primaryName = activeProfile ? nameOf(activeProfile) : "Sakura User";
   const initials = activeProfile ? initialsOf(activeProfile) : "SA";
   const activeProfileRoleSignature = activeProfile?.roles?.join("|") ?? "";
+  const normalizeCommentAuthorKey = (value: string | null | undefined) =>
+    typeof value === "string"
+      ? value.trim().replace(/^@+/, "").toLocaleLowerCase().replace(/\s+/g, " ")
+      : "";
+  const commentMatchesUser = (comment: ProfileComment, user: UserProfile | null) => {
+    if (!user) {
+      return false;
+    }
+
+    if (comment.authorUid && comment.authorUid === user.uid) {
+      return true;
+    }
+
+    if (
+      typeof comment.authorProfileId === "number" &&
+      typeof user.profileId === "number" &&
+      comment.authorProfileId === user.profileId
+    ) {
+      return true;
+    }
+
+    const authorKey = normalizeCommentAuthorKey(comment.authorName);
+
+    if (!authorKey) {
+      return false;
+    }
+
+    const userKeys = [
+      user.login,
+      user.displayName,
+      nameOf(user),
+      typeof user.profileId === "number" ? `Profile #${user.profileId}` : null,
+    ];
+
+    return userKeys.some((value) => normalizeCommentAuthorKey(value) === authorKey);
+  };
   const resolveCommentAuthorRole = (comment: ProfileComment) => {
     if (comment.authorAccentRole) {
       return comment.authorAccentRole;
     }
 
-    if (
-      activeProfile &&
-      ((comment.authorUid && comment.authorUid === activeProfile.uid) ||
-        (typeof comment.authorProfileId === "number" &&
-          comment.authorProfileId === activeProfile.profileId))
-    ) {
-      return normalizeRoleSelection(activeProfile.roles)[0] ?? null;
+    if (activeProfile && commentMatchesUser(comment, activeProfile)) {
+      return pickCommentAuthorAccentRole(activeProfile.roles) ?? null;
     }
 
-    if (
-      visibleCurrentUser &&
-      ((comment.authorUid && comment.authorUid === visibleCurrentUser.uid) ||
-        (typeof comment.authorProfileId === "number" &&
-          comment.authorProfileId === visibleCurrentUser.profileId))
-    ) {
-      return normalizeRoleSelection(visibleCurrentUser.roles)[0] ?? null;
+    if (visibleCurrentUser && commentMatchesUser(comment, visibleCurrentUser)) {
+      return pickCommentAuthorAccentRole(visibleCurrentUser.roles) ?? null;
     }
 
     return null;
@@ -726,21 +785,11 @@ export default function ProfilePage() {
       return comment.authorPhotoURL;
     }
 
-    if (
-      activeProfile &&
-      ((comment.authorUid && comment.authorUid === activeProfile.uid) ||
-        (typeof comment.authorProfileId === "number" &&
-          comment.authorProfileId === activeProfile.profileId))
-    ) {
+    if (activeProfile && commentMatchesUser(comment, activeProfile)) {
       return activeProfile.photoURL ?? null;
     }
 
-    if (
-      visibleCurrentUser &&
-      ((comment.authorUid && comment.authorUid === visibleCurrentUser.uid) ||
-        (typeof comment.authorProfileId === "number" &&
-          comment.authorProfileId === visibleCurrentUser.profileId))
-    ) {
+    if (visibleCurrentUser && commentMatchesUser(comment, visibleCurrentUser)) {
       return visibleCurrentUser.photoURL ?? null;
     }
 
