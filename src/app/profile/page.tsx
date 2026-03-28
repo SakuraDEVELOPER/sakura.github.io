@@ -392,29 +392,46 @@ const roleHeadlineStyle = (role: string | null | undefined): CSSProperties => {
     textShadow: typeof badgeStyle.boxShadow === "string" ? badgeStyle.boxShadow : "0 0 18px rgba(255,255,255,0.08)",
   };
 };
-const roleCommentAuthorStyle = (role: string | null | undefined): CSSProperties => {
-  if (!role) {
-    return {
-      color: "#ffffff",
-      textShadow: "0 0 14px rgba(255,255,255,0.06)",
-    };
+const roleCommentAuthorColor = (role: string | null | undefined) => {
+  const normalizedRole = normalizeRoleName(role ?? "");
+
+  if (normalizedRole === "root") {
+    return "#ff5a54";
   }
 
-  const badgeStyle = roleBadgeStyle(role);
+  if (normalizedRole === "co-owner") {
+    return "#ff7a6f";
+  }
 
-  return {
-    color:
-      typeof badgeStyle.borderColor === "string"
-        ? badgeStyle.borderColor
-        : typeof badgeStyle.color === "string"
-          ? badgeStyle.color
-          : "#ffffff",
-    textShadow:
-      typeof badgeStyle.boxShadow === "string"
-        ? badgeStyle.boxShadow
-        : "0 0 14px rgba(255,255,255,0.06)",
-  };
+  if (normalizedRole === "super administrator") {
+    return "#4f7cff";
+  }
+
+  if (normalizedRole === "administrator") {
+    return "#60a5fa";
+  }
+
+  if (normalizedRole === "moderator") {
+    return "#7c9cff";
+  }
+
+  if (normalizedRole === "sponsor") {
+    return "#a78bfa";
+  }
+
+  if (normalizedRole === "tester") {
+    return "#f3f4f6";
+  }
+
+  if (normalizedRole === "subscriber") {
+    return "#facc15";
+  }
+
+  return "#ffffff";
 };
+const roleCommentAuthorStyle = (role: string | null | undefined): CSSProperties => ({
+  color: roleCommentAuthorColor(role),
+});
 const ROLE_MANAGER_NAMES = new Set(["root"]);
 const COMMENT_MODERATOR_ROLE_NAMES = new Set(["root", "co-owner", "moderator"]);
 const REMOVED_ROLE_NAMES = new Set([
