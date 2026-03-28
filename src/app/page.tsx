@@ -230,7 +230,17 @@ function getFirebaseErrorMessage(error: unknown) {
 }
 
 function buildUserLabel(user: AuthUserSnapshot) {
-  return user.displayName?.trim() || user.login?.trim() || user.email?.trim() || "Signed in";
+  const shouldPreferLogin =
+    Boolean(user.login?.trim()) &&
+    (user.providerIds.includes("password") || !user.displayName?.trim());
+
+  return (
+    (shouldPreferLogin ? user.login?.trim() : user.displayName?.trim()) ||
+    user.displayName?.trim() ||
+    user.login?.trim() ||
+    user.email?.trim() ||
+    "Signed in"
+  );
 }
 
 function buildUserInitials(user: AuthUserSnapshot) {

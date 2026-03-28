@@ -49,7 +49,7 @@ const AUTH_STATE_SETTLED_EVENT = "sakura-auth-state-settled";
 const USER_UPDATE_EVENT = "sakura-user-update";
 const PROFILE_PATH_STORAGE_KEY = "sakura-profile-path";
 const CURRENT_PROFILE_ID_STORAGE_KEY = "sakura-current-profile-id";
-const PROFILE_BUILD_MARKER = "role-colors-v14";
+const PROFILE_BUILD_MARKER = "role-colors-v15";
 const repoBasePath = "/sakura.github.io";
 const restoreProfilePathScript = `
   (function () {
@@ -147,6 +147,10 @@ const normalizeRoleName = (role: string) => {
     return "moderator";
   }
 
+  if (compactRole === "sponsor") {
+    return "sponsor";
+  }
+
   if (compactRole === "tester") {
     return "tester";
   }
@@ -207,6 +211,10 @@ const roleDisplayLabel = (role: string) => {
     return "Moderator";
   }
 
+  if (normalizedRole === "sponsor") {
+    return "Sponsor";
+  }
+
   if (normalizedRole === "tester") {
     return "Tester";
   }
@@ -263,6 +271,15 @@ const roleBadgeStyle = (role: string): CSSProperties => {
 
   if (normalizedRole === "moderator") {
     return {
+      borderColor: "#4f7cff",
+      backgroundColor: "#0a1328",
+      color: "#d8e3ff",
+      boxShadow: "0 0 18px rgba(79,124,255,0.24)",
+    };
+  }
+
+  if (normalizedRole === "sponsor") {
+    return {
       borderColor: "#8b5cf6",
       backgroundColor: "#161022",
       color: "#e3d8ff",
@@ -303,10 +320,11 @@ const REMOVED_ROLE_NAMES = new Set([
   "subscriber",
 ]);
 const EDITABLE_ROLE_OPTIONS = [
+  "root",
   "co-owner",
+  "sponsor",
   "moderator",
   "user",
-  "root",
 ];
 const ROLE_DISPLAY_ORDER = new Map(
   EDITABLE_ROLE_OPTIONS.map((role, index) => [normalizeRoleName(role), index])
@@ -336,12 +354,16 @@ const normalizeRoleSelection = (roles: string[]) => {
 };
 const canManageRoles = (roles: string[]) =>
   normalizeRoleSelection(roles).some((role) => ROLE_MANAGER_NAMES.has(normalizeRoleName(role)));
+const shouldPreferLoginName = (user: Pick<UserProfile, "login" | "displayName" | "providerIds">) =>
+  Boolean(user.login?.trim()) &&
+  (user.providerIds.includes("password") || !user.displayName?.trim());
 const nameOf = (user: UserProfile) =>
+  (shouldPreferLoginName(user) ? user.login?.trim() : user.displayName?.trim()) ||
   user.displayName?.trim() ||
   user.login?.trim() ||
   (typeof user.profileId === "number" ? `Profile #${user.profileId}` : "Sakura User");
 const initialsOf = (user: UserProfile) =>
-  (user.displayName || user.login || user.email || (typeof user.profileId === "number" ? `Profile ${user.profileId}` : "SA"))
+  (nameOf(user) || user.email || (typeof user.profileId === "number" ? `Profile ${user.profileId}` : "SA"))
     .split(/[\s@._-]+/)
     .filter(Boolean)
     .slice(0, 2)

@@ -251,6 +251,10 @@ const firebaseModuleScript = `
       return "moderator";
     }
 
+    if (compactRole === "sponsor") {
+      return "sponsor";
+    }
+
     if (compactRole === "tester") {
       return "tester";
     }
@@ -279,6 +283,24 @@ const firebaseModuleScript = `
     "tester",
     "subscriber",
   ]);
+  const ROLE_SORT_ORDER = new Map([
+    ["root", 0],
+    ["co-owner", 1],
+    ["sponsor", 2],
+    ["moderator", 3],
+    ["user", 4],
+  ]);
+  const sortRoles = (roles) =>
+    [...roles].sort((left, right) => {
+      const leftOrder = ROLE_SORT_ORDER.get(normalizeRoleName(left)) ?? Number.MAX_SAFE_INTEGER;
+      const rightOrder = ROLE_SORT_ORDER.get(normalizeRoleName(right)) ?? Number.MAX_SAFE_INTEGER;
+
+      if (leftOrder !== rightOrder) {
+        return leftOrder - rightOrder;
+      }
+
+      return cleanRoleLabel(left).localeCompare(cleanRoleLabel(right), "en");
+    });
 
   const normalizeRoles = (roles) => {
     const nextRoles = Array.isArray(roles)
@@ -290,12 +312,14 @@ const firebaseModuleScript = `
       : [];
 
     return nextRoles.length
-      ? nextRoles.filter(
-        (role, index, entries) =>
-          index ===
-          entries.findIndex(
-            (candidate) => normalizeRoleName(candidate) === normalizeRoleName(role)
-          )
+      ? sortRoles(
+        nextRoles.filter(
+          (role, index, entries) =>
+            index ===
+            entries.findIndex(
+              (candidate) => normalizeRoleName(candidate) === normalizeRoleName(role)
+            )
+        )
       )
       : ["user"];
   };
@@ -941,6 +965,19 @@ const firebaseModuleScript = `
       const userRef = userRefFor(user.uid);
       const existingSnapshot = await getDoc(userRef);
       const existingData = existingSnapshot.exists() ? existingSnapshot.data() : {};
+      const previousLogin =
+        typeof existingData?.login === "string" ? existingData.login.trim() : null;
+      const existingDisplayName =
+        typeof existingData?.displayName === "string" ? existingData.displayName.trim() : null;
+      const authDisplayName =
+        typeof user.displayName === "string" ? user.displayName.trim() : null;
+      const shouldSyncDisplayName =
+        !existingDisplayName ||
+        (previousLogin !== null &&
+          (existingDisplayName === previousLogin || authDisplayName === previousLogin));
+      const nextDisplayName = shouldSyncDisplayName
+        ? usernameDetails.login
+        : existingDisplayName ?? authDisplayName ?? usernameDetails.login;
 
       try {
         await setDoc(
@@ -948,6 +985,7 @@ const firebaseModuleScript = `
           {
             login: usernameDetails.login,
             loginLower: usernameDetails.loginLower,
+            ...(shouldSyncDisplayName ? { displayName: nextDisplayName } : {}),
             updatedAt: new Date().toISOString(),
           },
           { merge: true }
@@ -963,15 +1001,20 @@ const firebaseModuleScript = `
         );
       }
 
+      if (shouldSyncDisplayName && authDisplayName !== nextDisplayName) {
+        try {
+          await updateProfile(user, { displayName: nextDisplayName });
+        } catch (error) {
+          console.error("Failed to sync Firebase Auth displayName after username change:", error);
+        }
+      }
+
       const snapshot = publishUserSnapshot(
         toUserSnapshot(user, {
           ...existingData,
           login: usernameDetails.login,
           loginLower: usernameDetails.loginLower,
-          displayName:
-            existingData?.displayName ??
-            user.displayName ??
-            usernameDetails.login,
+          displayName: nextDisplayName,
         })
       );
 
