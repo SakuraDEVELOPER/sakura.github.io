@@ -330,6 +330,17 @@ const firebaseModuleScript = `
     ["moderator", 3],
     ["user", 4],
   ]);
+  const COMMENT_ACCENT_ROLE_ORDER = new Map([
+    ["root", 0],
+    ["co-owner", 1],
+    ["super administrator", 2],
+    ["administrator", 3],
+    ["sponsor", 4],
+    ["moderator", 5],
+    ["tester", 6],
+    ["subscriber", 7],
+    ["user", 8],
+  ]);
   const sortRoles = (roles) =>
     [...roles].sort((left, right) => {
       const leftOrder = ROLE_SORT_ORDER.get(normalizeRoleName(left)) ?? Number.MAX_SAFE_INTEGER;
@@ -362,6 +373,35 @@ const firebaseModuleScript = `
         )
       )
       : ["user"];
+  };
+  const pickCommentAccentRole = (roles, fallbackRole = "user") => {
+    const normalizedRoles = Array.isArray(roles)
+      ? roles
+        .filter((role) => typeof role === "string")
+        .map((role) => normalizeRoleName(role))
+        .filter(Boolean)
+      : [];
+    const uniqueRoles = normalizedRoles.filter(
+      (role, index, entries) => index === entries.findIndex((candidate) => candidate === role)
+    );
+    const sortedRoles = [...uniqueRoles].sort((left, right) => {
+      const leftOrder =
+        COMMENT_ACCENT_ROLE_ORDER.get(normalizeRoleName(left)) ?? Number.MAX_SAFE_INTEGER;
+      const rightOrder =
+        COMMENT_ACCENT_ROLE_ORDER.get(normalizeRoleName(right)) ?? Number.MAX_SAFE_INTEGER;
+
+      if (leftOrder !== rightOrder) {
+        return leftOrder - rightOrder;
+      }
+
+      return cleanRoleLabel(left).localeCompare(cleanRoleLabel(right), "en");
+    });
+
+    return (
+      sortedRoles[0] ??
+      normalizeRoleName(fallbackRole ?? "") ??
+      "user"
+    );
   };
 
   const ROLE_MANAGER_NAMES = new Set(["root"]);
@@ -543,7 +583,10 @@ const firebaseModuleScript = `
       return {
         ...comment,
         authorPhotoURL: resolvePhotoURL(authorDetails, comment.authorPhotoURL),
-        authorAccentRole: normalizeRoles(authorDetails?.roles ?? [])[0] ?? comment.authorAccentRole,
+        authorAccentRole: pickCommentAccentRole(
+          authorDetails?.roles ?? [],
+          comment.authorAccentRole
+        ),
       };
     });
   };
@@ -1408,7 +1451,7 @@ const firebaseModuleScript = `
           typeof authorSnapshot?.profileId === "number" ? authorSnapshot.profileId : null,
         authorName,
         authorPhotoURL: authorSnapshot?.photoURL ?? user.photoURL ?? null,
-        authorAccentRole: normalizeRoles(authorSnapshot?.roles ?? [])[0] ?? "user",
+        authorAccentRole: pickCommentAccentRole(authorSnapshot?.roles ?? [], "user"),
         message: normalizedMessage,
         createdAt,
       };
