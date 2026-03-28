@@ -209,11 +209,13 @@
     (error instanceof Error && /Missing or insufficient permissions/i.test(error.message));
 
   const sanitizeLogin = (value) =>
-    value
-      .trim()
-      .replace(/\\s+/g, "")
-      .replace(/[^A-Za-z\u0400-\u04FF0-9._-]/g, "")
-      .slice(0, LOGIN_MAX_LENGTH);
+    typeof value === "string"
+      ? value
+          .trim()
+          .replace(/\\s+/g, "")
+          .replace(/[^A-Za-z\u0400-\u04FF0-9._-]/g, "")
+          .slice(0, LOGIN_MAX_LENGTH)
+      : "";
   const sanitizeDisplayName = (value) =>
     typeof value === "string"
       ? value.trim().replace(/\\s+/g, " ").slice(0, DISPLAY_NAME_MAX_LENGTH)
@@ -2254,7 +2256,10 @@
     window.sakuraFirebaseAuth = {
       register: async ({ login, displayName, email, password }) => {
         const credentials = await createUserWithEmailAndPassword(auth, email, password);
-        const preferredLogin = sanitizeLogin(login) || login.trim();
+        const preferredLogin =
+          sanitizeLogin(login) ||
+          (typeof login === "string" ? login.trim() : "") ||
+          ("user" + credentials.user.uid.slice(0, 6));
         const preferredDisplayName = sanitizeDisplayName(displayName);
         let verificationEmailSent = false;
 
