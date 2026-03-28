@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type FormEvent } from "react";
 
 type UserProfile = {
   uid: string;
@@ -23,8 +23,20 @@ type UserProfile = {
   presence: { isOnline: boolean; currentPath: string | null; lastSeenAt: string | null } | null;
 };
 
+type ProfileComment = {
+  id: string;
+  profileId: number | null;
+  authorUid: string | null;
+  authorProfileId: number | null;
+  authorName: string;
+  message: string;
+  createdAt: string | null;
+};
+
 type Bridge = {
   getProfileById: (profileId: number) => Promise<UserProfile | null>;
+  getProfileComments: (profileId: number) => Promise<ProfileComment[]>;
+  addProfileComment: (profileId: number, message: string) => Promise<ProfileComment>;
   resendVerificationEmail: () => Promise<UserProfile | null>;
   updateUsername: (username: string) => Promise<UserProfile | null>;
   updateProfileRoles: (profileId: number, roles: string[]) => Promise<UserProfile | null>;
@@ -49,7 +61,7 @@ const AUTH_STATE_SETTLED_EVENT = "sakura-auth-state-settled";
 const USER_UPDATE_EVENT = "sakura-user-update";
 const PROFILE_PATH_STORAGE_KEY = "sakura-profile-path";
 const CURRENT_PROFILE_ID_STORAGE_KEY = "sakura-current-profile-id";
-const PROFILE_BUILD_MARKER = "role-colors-v15";
+const PROFILE_BUILD_MARKER = "role-colors-v17";
 const repoBasePath = "/sakura.github.io";
 const restoreProfilePathScript = `
   (function () {
@@ -76,6 +88,23 @@ const restoreProfilePathScript = `
 
 const getWindowState = () => window as RuntimeWindow;
 const profilePath = (id: number) => `${repoBasePath}/profile/${id}`;
+const getErrorCode = (error: unknown) =>
+  typeof error === "object" && error !== null && "code" in error
+    ? String((error as { code?: unknown }).code)
+    : "";
+const getProfileActionErrorMessage = (error: unknown, fallback: string) => {
+  const code = getErrorCode(error);
+
+  if (code === "auth/too-many-requests") {
+    return "Too many requests. Wait a little before resending the verification email.";
+  }
+
+  if (code === "comments/login-required") {
+    return "Sign in to leave a comment on this profile.";
+  }
+
+  return error instanceof Error ? error.message : fallback;
+};
 const parseProfileId = (path: string | null) => {
   if (!path || !path.startsWith(`${repoBasePath}/profile/`)) return null;
   const raw = path.slice(`${repoBasePath}/profile/`.length);
@@ -111,9 +140,22 @@ const formatTime = (value: string | null) =>
     ? new Intl.DateTimeFormat("ru-RU", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value))
     : "Not available";
 const isUserLikeRole = (role: string) => /^u(?:[\s_-]*s)?[\s_-]*e[\s_-]*r$/i.test(role.trim());
+const toCompactRoleToken = (role: string) =>
+  role
+    .trim()
+    .toLowerCase()
+    .replace(/[\u0430]/g, "a")
+    .replace(/[\u0435\u0451]/g, "e")
+    .replace(/[\u043E]/g, "o")
+    .replace(/[\u0440]/g, "p")
+    .replace(/[\u0441]/g, "s")
+    .replace(/[\u0443]/g, "y")
+    .replace(/[\u0445]/g, "x")
+    .replace(/[\u0456]/g, "i")
+    .replace(/[^a-z0-9]+/g, "");
 const normalizeRoleName = (role: string) => {
   const normalizedRole = role.trim().toLowerCase().replace(/\s+/g, " ");
-  const compactRole = normalizedRole.replace(/[\s_-]+/g, "");
+  const compactRole = toCompactRoleToken(role);
 
   if (isUserLikeRole(role)) {
     return "user";
@@ -147,7 +189,14 @@ const normalizeRoleName = (role: string) => {
     return "moderator";
   }
 
-  if (/^s?pons?or$/.test(compactRole)) {
+  if (
+    compactRole === "sponsor" ||
+    compactRole === "ponsor" ||
+    compactRole === "sponor" ||
+    compactRole === "ponor" ||
+    compactRole === "sp0ns0r" ||
+    compactRole === "p0n0r"
+  ) {
     return "sponsor";
   }
 
@@ -436,6 +485,13 @@ export default function ProfilePage() {
   const [isRolesSaving, setIsRolesSaving] = useState(false);
   const [rolesError, setRolesError] = useState<string | null>(null);
   const [rolesSuccess, setRolesSuccess] = useState<string | null>(null);
+  const [comments, setComments] = useState<ProfileComment[]>([]);
+  const [isCommentsLoading, setIsCommentsLoading] = useState(false);
+  const [commentsError, setCommentsError] = useState<string | null>(null);
+  const [commentInput, setCommentInput] = useState("");
+  const [commentError, setCommentError] = useState<string | null>(null);
+  const [commentSuccess, setCommentSuccess] = useState<string | null>(null);
+  const [isCommentSubmitting, setIsCommentSubmitting] = useState(false);
 
   useEffect(() => {
     setHasHydrated(true);
@@ -565,6 +621,11 @@ export default function ProfilePage() {
       setRolesSuccess(null);
       setVerificationError(null);
       setVerificationSuccess(null);
+      setComments([]);
+      setCommentsError(null);
+      setCommentInput("");
+      setCommentError(null);
+      setCommentSuccess(null);
       return;
     }
 
@@ -576,7 +637,49 @@ export default function ProfilePage() {
     setUsernameInput(activeProfile.login ?? "");
     setUsernameError(null);
     setUsernameSuccess(null);
+    setCommentInput("");
+    setCommentError(null);
+    setCommentSuccess(null);
   }, [activeProfile, activeProfileRoleSignature]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !authReady || !authStateSettled || authError || !activeProfile?.profileId) {
+      if (!activeProfile?.profileId) {
+        setComments([]);
+        setCommentsError(null);
+        setIsCommentsLoading(false);
+      }
+      return;
+    }
+
+    const bridge = getWindowState().sakuraFirebaseAuth;
+    if (!bridge) return;
+
+    let isCancelled = false;
+    setIsCommentsLoading(true);
+    setCommentsError(null);
+
+    bridge
+      .getProfileComments(activeProfile.profileId)
+      .then((nextComments) => {
+        if (isCancelled) return;
+        setComments(nextComments);
+      })
+      .catch((error) => {
+        if (isCancelled) return;
+        setComments([]);
+        setCommentsError(getProfileActionErrorMessage(error, "Could not load profile comments."));
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setIsCommentsLoading(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeProfile?.profileId, authReady, authStateSettled, authError]);
 
   const normalizedDraftRoles = normalizeRoleSelection(draftRoles);
   const availableRoleOptions = EDITABLE_ROLE_OPTIONS.filter(
@@ -717,7 +820,7 @@ export default function ProfilePage() {
 
       setVerificationSuccess("Verification email sent.");
     } catch (error) {
-      setVerificationError(error instanceof Error ? error.message : "Could not send verification email.");
+      setVerificationError(getProfileActionErrorMessage(error, "Could not send verification email."));
     } finally {
       setIsVerificationSending(false);
     }
@@ -755,6 +858,36 @@ export default function ProfilePage() {
       setUsernameError(error instanceof Error ? error.message : "Could not save username.");
     } finally {
       setIsUsernameSaving(false);
+    }
+  };
+
+  const handleCommentSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const bridge = getWindowState().sakuraFirebaseAuth;
+    const nextComment = commentInput.trim();
+
+    if (!bridge || !activeProfile?.profileId) {
+      return;
+    }
+
+    if (!nextComment) {
+      setCommentError("Write a comment before sending.");
+      return;
+    }
+
+    setCommentError(null);
+    setCommentSuccess(null);
+    setIsCommentSubmitting(true);
+
+    try {
+      const savedComment = await bridge.addProfileComment(activeProfile.profileId, nextComment);
+      setComments((currentComments) => [savedComment, ...currentComments.filter((comment) => comment.id !== savedComment.id)]);
+      setCommentInput("");
+      setCommentSuccess("Comment posted.");
+    } catch (error) {
+      setCommentError(getProfileActionErrorMessage(error, "Could not post this comment."));
+    } finally {
+      setIsCommentSubmitting(false);
     }
   };
 
@@ -867,6 +1000,49 @@ export default function ProfilePage() {
                   {isOwner ? <div className="mt-4 flex flex-wrap items-center gap-3"><button type="button" onClick={() => avatarInputRef.current?.click()} disabled={isAvatarUploading || isAvatarDeleting} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">{isAvatarUploading ? "Uploading..." : activeProfile.photoURL ? "Replace Avatar" : "Upload Avatar"}</button>{activeProfile.photoURL ? <button type="button" onClick={handleAvatarDelete} disabled={isAvatarUploading || isAvatarDeleting} className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60">{isAvatarDeleting ? "Deleting..." : "Delete Avatar"}</button> : null}<input ref={avatarInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={handleAvatarChange} className="hidden" /></div> : null}
                   {avatarError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{avatarError}</p> : null}
                   {avatarSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{avatarSuccess}</p> : null}
+                </div>
+              </div>
+
+              <div className="rounded-[32px] border border-[#201517] bg-[#0d0d0d] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
+                <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">Profile Comments</p>
+                <p className="mt-3 text-sm leading-relaxed text-gray-400">A public wall for this profile. Only signed-in users can leave a message.</p>
+
+                {visibleCurrentUser ? (
+                  <form onSubmit={handleCommentSubmit} className="mt-5">
+                    <label className="block">
+                      <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">New Comment</span>
+                      <textarea value={commentInput} maxLength={280} rows={4} onChange={(event) => setCommentInput(event.target.value)} className="w-full resize-y rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55" placeholder={`Write something for ${primaryName}...`} />
+                    </label>
+                    <div className="mt-2 flex items-center justify-between gap-3 text-xs text-gray-500">
+                      <span>Posting as @{visibleCurrentUser.login ?? visibleCurrentUser.displayName ?? "member"}</span>
+                      <span>{commentInput.trim().length}/280</span>
+                    </div>
+                    <div className="mt-4 flex flex-wrap items-center gap-3">
+                      <button type="submit" disabled={isCommentSubmitting || !commentInput.trim()} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">{isCommentSubmitting ? "Posting..." : "Post Comment"}</button>
+                    </div>
+                    {commentError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{commentError}</p> : null}
+                    {commentSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{commentSuccess}</p> : null}
+                  </form>
+                ) : (
+                  <div className="mt-5 rounded-[24px] border border-[#1d1d1d] bg-[#090909] px-4 py-4">
+                    <p className="text-sm leading-relaxed text-gray-400">Sign in to leave a comment on this profile. Guests can read comments, but cannot post.</p>
+                  </div>
+                )}
+
+                <div className="mt-6">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">Recent Messages</p>
+                  {isCommentsLoading ? <p className="mt-4 text-sm text-gray-500">Loading comments...</p> : null}
+                  {!isCommentsLoading && commentsError ? <p className="mt-4 text-sm leading-relaxed text-[#ff9aa9]">{commentsError}</p> : null}
+                  {!isCommentsLoading && !commentsError && !comments.length ? <p className="mt-4 text-sm text-gray-500">No comments yet.</p> : null}
+                  {!isCommentsLoading && !commentsError && comments.length ? <div className="mt-4 flex flex-col gap-3">
+                    {comments.map((comment) => <div key={comment.id} className="rounded-[24px] border border-[#1d1d1d] bg-[#090909] px-4 py-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        {comment.authorProfileId ? <a href={profilePath(comment.authorProfileId)} className="text-sm font-semibold text-[#ffd2dc] transition hover:text-white">{comment.authorName}</a> : <p className="text-sm font-semibold text-[#ffd2dc]">{comment.authorName}</p>}
+                        <p className="text-xs text-gray-500">{formatTime(comment.createdAt)}</p>
+                      </div>
+                      <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-relaxed text-gray-300">{comment.message}</p>
+                    </div>)}
+                  </div> : null}
                 </div>
               </div>
 

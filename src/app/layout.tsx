@@ -44,6 +44,7 @@ const firebaseModuleScript = `
   const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
   const AVATAR_INLINE_SIZE = 160;
   const AVATAR_EXPORT_QUALITY = 0.72;
+  const PROFILE_COMMENT_MAX_LENGTH = 280;
   const PROFILE_LOOKUP_TIMEOUT_MS = 5000;
   const USER_UPDATE_EVENT = "sakura-user-update";
   const AUTH_STATE_SETTLED_EVENT = "sakura-auth-state-settled";
@@ -209,11 +210,26 @@ const firebaseModuleScript = `
 
   const isUserLikeRole = (role) =>
     typeof role === "string" && /^u(?:[\s_-]*s)?[\s_-]*e[\s_-]*r$/i.test(role.trim());
+  const toCompactRoleToken = (role) =>
+    typeof role === "string"
+      ? role
+        .trim()
+        .toLowerCase()
+        .replace(/[\u0430]/g, "a")
+        .replace(/[\u0435\u0451]/g, "e")
+        .replace(/[\u043E]/g, "o")
+        .replace(/[\u0440]/g, "p")
+        .replace(/[\u0441]/g, "s")
+        .replace(/[\u0443]/g, "y")
+        .replace(/[\u0445]/g, "x")
+        .replace(/[\u0456]/g, "i")
+        .replace(/[^a-z0-9]+/g, "")
+      : "";
 
   const normalizeRoleName = (role) => {
     const normalizedRole =
       typeof role === "string" ? role.trim().toLowerCase().replace(/\s+/g, " ") : "";
-    const compactRole = normalizedRole.replace(/[\s_-]+/g, "");
+    const compactRole = toCompactRoleToken(role);
 
     if (!normalizedRole) {
       return "";
@@ -251,7 +267,14 @@ const firebaseModuleScript = `
       return "moderator";
     }
 
-    if (/^s?pons?or$/.test(compactRole)) {
+    if (
+      compactRole === "sponsor" ||
+      compactRole === "ponsor" ||
+      compactRole === "sponor" ||
+      compactRole === "ponor" ||
+      compactRole === "sp0ns0r" ||
+      compactRole === "p0n0r"
+    ) {
       return "sponsor";
     }
 
@@ -365,8 +388,35 @@ const firebaseModuleScript = `
             typeof entry.path === "string" &&
             typeof entry.source === "string" &&
             typeof entry.status === "string"
-        )
+      )
       : [];
+  const normalizeProfileCommentMessage = (value) =>
+    typeof value === "string"
+      ? value.replace(/\r\n/g, "\n").trim().slice(0, PROFILE_COMMENT_MAX_LENGTH)
+      : "";
+  const normalizeProfileCommentAuthorName = (value) =>
+    typeof value === "string"
+      ? value.trim().replace(/\s+/g, " ").slice(0, 48)
+      : "";
+  const toStoredProfileComment = (id, details = {}) => ({
+    id,
+    profileId: typeof details.profileId === "number" ? details.profileId : null,
+    authorUid: typeof details.authorUid === "string" ? details.authorUid : null,
+    authorProfileId:
+      typeof details.authorProfileId === "number" ? details.authorProfileId : null,
+    authorName:
+      normalizeProfileCommentAuthorName(details.authorName) ||
+      (typeof details.authorProfileId === "number"
+        ? \`Profile #\${details.authorProfileId}\`
+        : "Member"),
+    message: normalizeProfileCommentMessage(details.message),
+    createdAt: typeof details.createdAt === "string" ? details.createdAt : null,
+  });
+  const sortProfileComments = (comments) =>
+    [...comments].sort(
+      (left, right) =>
+        new Date(right.createdAt ?? 0).getTime() - new Date(left.createdAt ?? 0).getTime()
+    );
 
   const buildVisitHistory = (existingHistory, nextEntry) =>
     [nextEntry, ...normalizeVisitHistory(existingHistory)]
@@ -511,6 +561,7 @@ const firebaseModuleScript = `
     const userRefFor = (uid) => doc(db, "users", uid);
     const countersRef = doc(db, "meta", "counters");
     const usersCollection = collection(db, "users");
+    const profileCommentsCollection = collection(db, "profileComments");
     let stopPresenceTracking = () => {};
     let lastPresenceSignature = "";
     let lastPresenceAt = 0;
@@ -1118,6 +1169,132 @@ const firebaseModuleScript = `
       return toStoredUserSnapshot(profileDoc.id, profileDoc.data());
     };
 
+    const getProfileComments = async (profileId) => {
+      if (!Number.isInteger(profileId) || profileId <= 0) {
+        throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
+      }
+
+      const readComments = async () => {
+        const snapshot = await getDocs(
+          query(profileCommentsCollection, where("profileId", "==", profileId))
+        );
+
+        return sortProfileComments(
+          snapshot.docs
+            .map((commentDoc) => toStoredProfileComment(commentDoc.id, commentDoc.data()))
+            .filter(
+              (comment) =>
+                comment.profileId === profileId &&
+                typeof comment.message === "string" &&
+                comment.message
+            )
+        );
+      };
+
+      try {
+        return await readComments();
+      } catch (error) {
+        if (!isPermissionDeniedError(error)) {
+          throw error;
+        }
+      }
+
+      await waitForAuthStateSettlement();
+
+      if (auth.currentUser && !auth.currentUser.isAnonymous) {
+        try {
+          return await readComments();
+        } catch (error) {
+          if (!isPermissionDeniedError(error)) {
+            throw error;
+          }
+        }
+      }
+
+      const viewer = await ensureProfileViewer();
+
+      if (viewer.isAnonymous) {
+        publishUserSnapshot(toAnonymousViewerSnapshot(viewer));
+      }
+
+      try {
+        return await readComments();
+      } catch (error) {
+        if (isPermissionDeniedError(error)) {
+          throw createFirebaseError(
+            "comments/read-denied",
+            "Profile comments are blocked by Firestore rules. Allow read access to profileComments."
+          );
+        }
+
+        throw error;
+      }
+    };
+
+    const addProfileComment = async (profileId, message) => {
+      if (!Number.isInteger(profileId) || profileId <= 0) {
+        throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
+      }
+
+      const normalizedMessage = normalizeProfileCommentMessage(message);
+
+      if (!normalizedMessage) {
+        throw createFirebaseError(
+          "comments/empty-message",
+          "Write a comment before sending."
+        );
+      }
+
+      const user = auth.currentUser;
+
+      if (!user || user.isAnonymous) {
+        throw createFirebaseError(
+          "comments/login-required",
+          "Sign in to leave a comment on this profile."
+        );
+      }
+
+      let authorSnapshot = window.sakuraCurrentUserSnapshot;
+      if (!authorSnapshot || authorSnapshot.isAnonymous || authorSnapshot.uid !== user.uid) {
+        authorSnapshot = await resolveUserSnapshot(user);
+      }
+
+      const commentRef = doc(profileCommentsCollection);
+      const createdAt = new Date().toISOString();
+      const authorName =
+        authorSnapshot?.login?.trim() ||
+        authorSnapshot?.displayName?.trim() ||
+        user.displayName?.trim() ||
+        user.email?.split("@")[0]?.trim() ||
+        (typeof authorSnapshot?.profileId === "number"
+          ? \`Profile #\${authorSnapshot.profileId}\`
+          : "Member");
+      const commentPayload = {
+        profileId,
+        authorUid: user.uid,
+        authorProfileId:
+          typeof authorSnapshot?.profileId === "number" ? authorSnapshot.profileId : null,
+        authorName,
+        message: normalizedMessage,
+        createdAt,
+      };
+
+      try {
+        await setDoc(commentRef, commentPayload);
+      } catch (error) {
+        if (isPermissionDeniedError(error)) {
+          throw createFirebaseError(
+            "comments/write-denied",
+            "Comments could not be saved. Check Firestore rules for profileComments."
+          );
+        }
+
+        throw error;
+      }
+
+      return toStoredProfileComment(commentRef.id, commentPayload);
+    };
+
     const updateAvatar = async (file) => {
       const user = auth.currentUser;
 
@@ -1407,6 +1584,8 @@ const firebaseModuleScript = `
       loginWithGoogle,
       updateUsername,
       getProfileById,
+      getProfileComments,
+      addProfileComment,
       resendVerificationEmail,
       updateProfileRoles,
       updateAvatar,
