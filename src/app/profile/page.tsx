@@ -73,7 +73,7 @@ const AUTH_STATE_SETTLED_EVENT = "sakura-auth-state-settled";
 const USER_UPDATE_EVENT = "sakura-user-update";
 const PROFILE_PATH_STORAGE_KEY = "sakura-profile-path";
 const CURRENT_PROFILE_ID_STORAGE_KEY = "sakura-current-profile-id";
-const PROFILE_BUILD_MARKER = "role-colors-v24";
+const PROFILE_BUILD_MARKER = "role-colors-v25";
 const repoBasePath = "/sakura.github.io";
 const restoreProfilePathScript = `
   (function () {
@@ -117,6 +117,14 @@ const getProfileActionErrorMessage = (error: unknown, fallback: string) => {
 
   if (code === "comments/delete-forbidden") {
     return "You can only delete your own comments, comments on your profile, or moderate comments with staff roles.";
+  }
+
+  if (code === "ban/self-forbidden") {
+    return "You cannot ban your own account.";
+  }
+
+  if (code === "auth/account-banned") {
+    return "This account has been banned by an administrator.";
   }
 
   return error instanceof Error ? error.message : fallback;
@@ -727,7 +735,8 @@ export default function ProfilePage() {
   );
   const canManageRoleAssignments = Boolean(visibleCurrentUser && canManageRoles(visibleCurrentUser.roles));
   const canOpenAdminPanel = Boolean(canManageRoleAssignments && activeProfile?.profileId);
-  const isTargetBanned = Boolean(activeProfile?.isBanned);
+  const isTargetBanned = activeProfile?.isBanned === true;
+  const isAdminSelfTarget = Boolean(canOpenAdminPanel && isOwner);
   const shouldShowPendingState =
     !authError &&
     !activeProfile &&
@@ -1158,6 +1167,12 @@ export default function ProfilePage() {
       return;
     }
 
+    if (isAdminSelfTarget && !isTargetBanned) {
+      setBanError("You cannot ban your own account.");
+      setBanSuccess(null);
+      return;
+    }
+
     setBanError(null);
     setBanSuccess(null);
     setIsBanSaving(true);
@@ -1500,7 +1515,7 @@ export default function ProfilePage() {
                         <button
                           type="button"
                           onClick={handleBanToggle}
-                          disabled={isBanSaving}
+                          disabled={isBanSaving || (isAdminSelfTarget && !isTargetBanned)}
                           className={`inline-flex items-center justify-center rounded-full border px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition disabled:cursor-not-allowed disabled:opacity-60 ${
                             isTargetBanned
                               ? "border-[#1f3b2f] bg-[#0d1713] text-[#8ce5b2] hover:border-[#8ce5b2]/50 hover:text-white"
@@ -1510,6 +1525,11 @@ export default function ProfilePage() {
                           {isBanSaving ? "Saving..." : isTargetBanned ? "Unban Account" : "Ban Account"}
                         </button>
                       </div>
+                      {isAdminSelfTarget && !isTargetBanned ? (
+                        <p className="mt-3 text-xs leading-relaxed text-gray-500">
+                          Self-ban is blocked to prevent losing access to your root account.
+                        </p>
+                      ) : null}
                       {banError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{banError}</p> : null}
                       {banSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{banSuccess}</p> : null}
                     </section>

@@ -696,7 +696,7 @@
     photoURL: resolvePhotoURL(details, user.photoURL ?? null),
     providerIds: Array.isArray(details.providerIds) ? details.providerIds : getProviderIds(user),
     roles: normalizeRoles(details.roles),
-    isBanned: Boolean(details.isBanned),
+    isBanned: details.isBanned === true,
     bannedAt: resolveBannedAt(details),
     verificationRequired:
       typeof details.verificationRequired === "boolean"
@@ -722,7 +722,7 @@
           profileId: typeof details.profileId === "number" ? details.profileId : null,
           photoURL: resolvePhotoURL(details, user.photoURL ?? null),
           roles: normalizeRoles(details.roles),
-          isBanned: Boolean(details.isBanned),
+          isBanned: details.isBanned === true,
           bannedAt: resolveBannedAt(details),
           verificationRequired:
             typeof details.verificationRequired === "boolean"
@@ -755,7 +755,7 @@
     profileId: typeof details.profileId === "number" ? details.profileId : null,
     photoURL: resolvePhotoURL(details, null),
     roles: normalizeRoles(details.roles),
-    isBanned: Boolean(details.isBanned),
+    isBanned: details.isBanned === true,
     bannedAt: resolveBannedAt(details),
     verificationRequired:
       typeof details.verificationRequired === "boolean"
@@ -1190,7 +1190,7 @@
           "Sakura User",
         photoURL: resolvePhotoURL(existingData, user.photoURL ?? null),
         roles,
-        isBanned: Boolean(existingData?.isBanned),
+        isBanned: existingData?.isBanned === true,
         bannedAt: resolveBannedAt(existingData),
         providerIds,
         creationTime: user.metadata.creationTime ?? null,
@@ -2093,6 +2093,13 @@
 
       const isBanned = Boolean(nextIsBanned);
       const bannedAt = isBanned ? new Date().toISOString() : null;
+
+      if (targetDoc.id === user.uid && isBanned) {
+        throw createFirebaseError(
+          "ban/self-forbidden",
+          "You cannot ban your own account."
+        );
+      }
 
       try {
         await setDoc(
