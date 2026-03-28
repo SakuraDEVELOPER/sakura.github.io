@@ -33,6 +33,7 @@ const firebaseModuleScript = `
           limit,
           query,
           runTransaction,
+          serverTimestamp,
           setDoc,
           where
         }
@@ -458,6 +459,32 @@ const firebaseModuleScript = `
       : "";
   const normalizeProfileCommentPhotoURL = (value) =>
     typeof value === "string" && value ? value : null;
+  const normalizeProfileCommentCreatedAt = (value) => {
+    if (typeof value === "string" && value) {
+      return value;
+    }
+
+    if (value && typeof value.toDate === "function") {
+      try {
+        const nextDate = value.toDate();
+
+        return nextDate instanceof Date && !Number.isNaN(nextDate.getTime())
+          ? nextDate.toISOString()
+          : null;
+      } catch (error) {
+      }
+    }
+
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+      return value.toISOString();
+    }
+
+    return null;
+  };
+  const stripNullishFields = (value) =>
+    Object.fromEntries(
+      Object.entries(value).filter(([, entryValue]) => entryValue !== null && entryValue !== undefined)
+    );
   const toStoredProfileComment = (id, details = {}) => ({
     id,
     profileId: typeof details.profileId === "number" ? details.profileId : null,
@@ -475,7 +502,7 @@ const firebaseModuleScript = `
         ? normalizeRoleName(details.authorAccentRole)
         : null,
     message: normalizeProfileCommentMessage(details.message),
-    createdAt: typeof details.createdAt === "string" ? details.createdAt : null,
+    createdAt: normalizeProfileCommentCreatedAt(details.createdAt),
   });
   const sortProfileComments = (comments) =>
     [...comments].sort(
@@ -1444,7 +1471,7 @@ const firebaseModuleScript = `
         (typeof authorSnapshot?.profileId === "number"
           ? \`Profile #\${authorSnapshot.profileId}\`
           : "Member");
-      const persistedCommentPayload = {
+      const persistedCommentPayload = stripNullishFields({
         profileId,
         authorUid: user.uid,
         authorProfileId:
@@ -1452,11 +1479,22 @@ const firebaseModuleScript = `
         authorName,
         message: normalizedMessage,
         createdAt,
-      };
+      });
       const displayCommentPayload = {
         ...persistedCommentPayload,
         authorPhotoURL: authorSnapshot?.photoURL ?? user.photoURL ?? null,
         authorAccentRole: pickCommentAccentRole(authorSnapshot?.roles ?? [], "user"),
+      };
+      const timestampCommentPayload = {
+        ...stripNullishFields({
+          profileId,
+          authorUid: user.uid,
+          authorProfileId:
+            typeof authorSnapshot?.profileId === "number" ? authorSnapshot.profileId : null,
+          authorName,
+          message: normalizedMessage,
+        }),
+        createdAt: serverTimestamp(),
       };
 
       try {
@@ -1467,10 +1505,18 @@ const firebaseModuleScript = `
             await setDoc(commentRef, persistedCommentPayload);
           } catch (fallbackError) {
             if (isPermissionDeniedError(fallbackError)) {
-              throw createFirebaseError(
-                "comments/write-denied",
-                "Comments could not be saved. Check Firestore rules for profileComments."
-              );
+              try {
+                await setDoc(commentRef, timestampCommentPayload);
+              } catch (timestampError) {
+                if (isPermissionDeniedError(timestampError)) {
+                  throw createFirebaseError(
+                    "comments/write-denied",
+                    "Comments could not be saved. Check Firestore rules for profileComments."
+                  );
+                }
+
+                throw timestampError;
+              }
             }
 
             throw fallbackError;
