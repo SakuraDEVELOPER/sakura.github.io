@@ -73,7 +73,7 @@ const AUTH_STATE_SETTLED_EVENT = "sakura-auth-state-settled";
 const USER_UPDATE_EVENT = "sakura-user-update";
 const PROFILE_PATH_STORAGE_KEY = "sakura-profile-path";
 const CURRENT_PROFILE_ID_STORAGE_KEY = "sakura-current-profile-id";
-const PROFILE_BUILD_MARKER = "role-colors-v27";
+const PROFILE_BUILD_MARKER = "role-colors-v28";
 const repoBasePath = "/sakura.github.io";
 const restoreProfilePathScript = `
   (function () {
@@ -440,8 +440,8 @@ const withAlpha = (value: string, alpha: number) => {
   return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 };
 const profileMetaCardStyle = (role: string | null | undefined): CSSProperties => {
-  const borderColor = "#8b5cf6";
-  const accentTextColor = "#e9ddff";
+  const borderColor = "#ff8fb1";
+  const accentTextColor = "#ffd3de";
 
   return {
     borderColor: withAlpha(borderColor, 0.4),
@@ -454,7 +454,7 @@ const profileMetaCardStyle = (role: string | null | undefined): CSSProperties =>
   };
 };
 const profileMetaLabelStyle = (role: string | null | undefined): CSSProperties => {
-  const borderColor = "#8b5cf6";
+  const borderColor = "#ff8fb1";
 
   return {
     color: withAlpha(borderColor, 0.78),
@@ -473,12 +473,12 @@ const profileMetaValueStyle = (role: string | null | undefined): CSSProperties =
   };
 };
 const profileMetaValuePillStyle = (role: string | null | undefined): CSSProperties => {
-  const borderColor = "#8b5cf6";
+  const borderColor = "#ff8fb1";
 
   return {
     borderColor: withAlpha(borderColor, 0.36),
-    backgroundColor: "#120f18",
-    backgroundImage: `linear-gradient(180deg, ${withAlpha(borderColor, 0.1)} 0%, rgba(18,15,24,0.96) 100%)`,
+    backgroundColor: "#171012",
+    backgroundImage: `linear-gradient(180deg, ${withAlpha(borderColor, 0.1)} 0%, rgba(23,16,18,0.96) 100%)`,
     boxShadow: `0 0 22px ${withAlpha(borderColor, 0.12)}, inset 0 1px 0 rgba(255,255,255,0.04)`,
   };
 };
@@ -1432,6 +1432,24 @@ export default function ProfilePage() {
                   </div>
                 ))}
               </div>
+              <div className="px-8 pb-8">
+                <div className="rounded-[26px] border border-[#2f161d] bg-[radial-gradient(circle_at_top_left,rgba(255,183,197,0.1),transparent_58%),linear-gradient(180deg,#0c0a0b_0%,#090909_100%)] p-5 shadow-[0_0_26px_rgba(255,143,177,0.08)]">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">Subscription</p>
+                      <p className="mt-3 text-sm leading-relaxed text-gray-400">Current access tier and profile perks for this account.</p>
+                    </div>
+                    <span style={{ ...subscriptionBadgeStyle, ...roleBadgeTextStyle }} className="inline-flex shrink-0 rounded-full border px-3 py-1 text-[10px] font-bold">
+                      {subscriptionSummary.status}
+                    </span>
+                  </div>
+                  <div className="mt-5 rounded-[22px] border border-[#24171b] bg-[radial-gradient(circle_at_top_left,rgba(255,183,197,0.08),transparent_62%),#090909] p-4">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-[#b78a95]">Current Tier</p>
+                    <p className="mt-3 text-lg font-bold text-white">{subscriptionSummary.title}</p>
+                    <p className="mt-3 text-xs leading-relaxed text-gray-400">{subscriptionSummary.description}</p>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="flex flex-col gap-6">
@@ -1447,23 +1465,6 @@ export default function ProfilePage() {
                       ? "Profile settings and account access details for the currently opened account."
                       : "Overview and account-related details for this profile."}
                 </p>
-              </div> : null}
-
-              {activeProfile ? <div className="rounded-[32px] border border-[#201517] bg-[#0d0d0d] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">Subscription</p>
-                    <p className="mt-3 text-sm leading-relaxed text-gray-400">Current access tier and future profile perks for this account.</p>
-                  </div>
-                  <span style={{ ...subscriptionBadgeStyle, ...roleBadgeTextStyle }} className="inline-flex shrink-0 rounded-full border px-3 py-1 text-[10px] font-bold">
-                    {subscriptionSummary.status}
-                  </span>
-                </div>
-                <div className="mt-5 rounded-[24px] border border-[#1d1d1d] bg-[radial-gradient(circle_at_top_left,rgba(255,183,197,0.08),transparent_62%),#090909] p-4">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">Current Tier</p>
-                  <p className="mt-3 text-lg font-bold text-white">{subscriptionSummary.title}</p>
-                  <p className="mt-3 text-xs leading-relaxed text-gray-400">{subscriptionSummary.description}</p>
-                </div>
               </div> : null}
 
               {isOwner && activeProfile ? <div className="rounded-[32px] border border-[#201517] bg-[#0d0d0d] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
