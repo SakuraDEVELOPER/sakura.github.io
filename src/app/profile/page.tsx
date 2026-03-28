@@ -17,6 +17,8 @@ type UserProfile = {
   profileId: number | null;
   photoURL: string | null;
   roles: string[];
+  isBanned?: boolean;
+  bannedAt?: string | null;
   providerIds: string[];
   creationTime: string | null;
   lastSignInTime: string | null;
@@ -43,9 +45,14 @@ type Bridge = {
   resendVerificationEmail: () => Promise<UserProfile | null>;
   updateDisplayName: (displayName: string) => Promise<UserProfile | null>;
   updateUsername: (username: string) => Promise<UserProfile | null>;
+  adminUpdateProfileDisplayName: (profileId: number, displayName: string) => Promise<UserProfile | null>;
+  adminUpdateProfileLogin: (profileId: number, login: string) => Promise<UserProfile | null>;
+  adminSetProfileBan: (profileId: number, isBanned: boolean) => Promise<UserProfile | null>;
   updateProfileRoles: (profileId: number, roles: string[]) => Promise<UserProfile | null>;
   updateAvatar: (file: File) => Promise<UserProfile | null>;
   deleteAvatar: () => Promise<UserProfile | null>;
+  adminUpdateProfileAvatar: (profileId: number, file: File) => Promise<UserProfile | null>;
+  adminDeleteProfileAvatar: (profileId: number) => Promise<UserProfile | null>;
   syncPresence: (options?: { path?: string; source?: string; forceVisit?: boolean }) => Promise<UserProfile | null>;
   logout: () => Promise<void>;
   onAuthStateChanged: (callback: (user: UserProfile | null) => void) => () => void;
@@ -66,7 +73,7 @@ const AUTH_STATE_SETTLED_EVENT = "sakura-auth-state-settled";
 const USER_UPDATE_EVENT = "sakura-user-update";
 const PROFILE_PATH_STORAGE_KEY = "sakura-profile-path";
 const CURRENT_PROFILE_ID_STORAGE_KEY = "sakura-current-profile-id";
-const PROFILE_BUILD_MARKER = "role-colors-v23";
+const PROFILE_BUILD_MARKER = "role-colors-v24";
 const repoBasePath = "/sakura.github.io";
 const restoreProfilePathScript = `
   (function () {
@@ -566,6 +573,7 @@ const getInitialBootstrap = () => {
 export default function ProfilePage() {
   const router = useRouter();
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
+  const adminAvatarInputRef = useRef<HTMLInputElement | null>(null);
   const [bootstrap] = useState(getInitialBootstrap);
   const [authReady, setAuthReady] = useState(bootstrap.authReady);
   const [authStateSettled, setAuthStateSettled] = useState(bootstrap.authStateSettled);
@@ -597,6 +605,10 @@ export default function ProfilePage() {
   const [isRolesSaving, setIsRolesSaving] = useState(false);
   const [rolesError, setRolesError] = useState<string | null>(null);
   const [rolesSuccess, setRolesSuccess] = useState<string | null>(null);
+  const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
+  const [isBanSaving, setIsBanSaving] = useState(false);
+  const [banError, setBanError] = useState<string | null>(null);
+  const [banSuccess, setBanSuccess] = useState<string | null>(null);
   const [comments, setComments] = useState<ProfileComment[]>([]);
   const [isCommentsLoading, setIsCommentsLoading] = useState(false);
   const [commentsError, setCommentsError] = useState<string | null>(null);
@@ -714,6 +726,8 @@ export default function ProfilePage() {
       activeProfile.verificationRequired !== false
   );
   const canManageRoleAssignments = Boolean(visibleCurrentUser && canManageRoles(visibleCurrentUser.roles));
+  const canOpenAdminPanel = Boolean(canManageRoleAssignments && activeProfile?.profileId);
+  const isTargetBanned = Boolean(activeProfile?.isBanned);
   const shouldShowPendingState =
     !authError &&
     !activeProfile &&
@@ -737,6 +751,19 @@ export default function ProfilePage() {
   const primaryName = activeProfile ? nameOf(activeProfile) : "Sakura User";
   const initials = activeProfile ? initialsOf(activeProfile) : "SA";
   const activeProfileRoleSignature = activeProfile?.roles?.join("|") ?? "";
+  const applyUpdatedProfileSnapshot = (snapshot: UserProfile | null) => {
+    if (!snapshot) {
+      return;
+    }
+
+    if (activeProfile && snapshot.uid === activeProfile.uid) {
+      setProfile(snapshot);
+    }
+
+    if (visibleCurrentUser?.uid === snapshot.uid) {
+      setCurrentUser(snapshot);
+    }
+  };
   const normalizeCommentAuthorKey = (value: string | null | undefined) =>
     typeof value === "string"
       ? value.trim().replace(/^@+/, "").toLocaleLowerCase().replace(/\s+/g, " ")
@@ -822,6 +849,9 @@ export default function ProfilePage() {
       setVerificationSuccess(null);
       setComments([]);
       setCommentsError(null);
+      setIsAdminPanelOpen(false);
+      setBanError(null);
+      setBanSuccess(null);
       setCommentInput("");
       setCommentError(null);
       setCommentSuccess(null);
@@ -834,6 +864,8 @@ export default function ProfilePage() {
     setRolesSuccess(null);
     setVerificationError(null);
     setVerificationSuccess(null);
+    setBanError(null);
+    setBanSuccess(null);
     setDisplayNameInput(activeProfile.displayName ?? activeProfile.login ?? "");
     setDisplayNameError(null);
     setDisplayNameSuccess(null);
@@ -845,6 +877,12 @@ export default function ProfilePage() {
     setCommentSuccess(null);
     setDeletingCommentId(null);
   }, [activeProfile, activeProfileRoleSignature]);
+
+  useEffect(() => {
+    if (!canOpenAdminPanel) {
+      setIsAdminPanelOpen(false);
+    }
+  }, [canOpenAdminPanel]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !authReady || !authStateSettled || authError || !activeProfile?.profileId) {
@@ -911,14 +949,21 @@ export default function ProfilePage() {
     const file = event.target.files?.[0] ?? null;
     event.target.value = "";
     const bridge = getWindowState().sakuraFirebaseAuth;
-    if (!file || !bridge || !isOwner) return;
+    if (!file || !bridge) return;
     setAvatarError(null);
     setAvatarSuccess(null);
     setIsAvatarUploading(true);
     try {
-      const snapshot = await bridge.updateAvatar(file);
-      if (snapshot) setProfile(snapshot);
-      setAvatarSuccess("Avatar saved.");
+      let snapshot: UserProfile | null = null;
+
+      if (isOwner) {
+        snapshot = await bridge.updateAvatar(file);
+      } else if (canOpenAdminPanel && activeProfile?.profileId) {
+        snapshot = await bridge.adminUpdateProfileAvatar(activeProfile.profileId, file);
+      }
+
+      applyUpdatedProfileSnapshot(snapshot);
+      setAvatarSuccess(isOwner ? "Avatar saved." : "Avatar updated.");
     } catch (error) {
       setAvatarError(avatarErrorMessage(error));
     } finally {
@@ -928,13 +973,20 @@ export default function ProfilePage() {
 
   const handleAvatarDelete = async () => {
     const bridge = getWindowState().sakuraFirebaseAuth;
-    if (!bridge || !isOwner) return;
+    if (!bridge) return;
     setAvatarError(null);
     setAvatarSuccess(null);
     setIsAvatarDeleting(true);
     try {
-      const snapshot = await bridge.deleteAvatar();
-      if (snapshot) setProfile(snapshot);
+      let snapshot: UserProfile | null = null;
+
+      if (isOwner) {
+        snapshot = await bridge.deleteAvatar();
+      } else if (canOpenAdminPanel && activeProfile?.profileId) {
+        snapshot = await bridge.adminDeleteProfileAvatar(activeProfile.profileId);
+      }
+
+      applyUpdatedProfileSnapshot(snapshot);
       setAvatarSuccess("Avatar deleted.");
     } catch (error) {
       setAvatarError(avatarErrorMessage(error));
@@ -1034,7 +1086,7 @@ export default function ProfilePage() {
     const bridge = getWindowState().sakuraFirebaseAuth;
     const nextDisplayName = displayNameInput.trim();
 
-    if (!bridge || !isOwner) {
+    if (!bridge) {
       return;
     }
 
@@ -1048,16 +1100,16 @@ export default function ProfilePage() {
     setIsDisplayNameSaving(true);
 
     try {
-      const snapshot = await bridge.updateDisplayName(nextDisplayName);
+      let snapshot: UserProfile | null = null;
 
-      if (snapshot) {
-        setCurrentUser(snapshot);
-        if (activeProfile && snapshot.uid === activeProfile.uid) {
-          setProfile(snapshot);
-        }
+      if (isOwner) {
+        snapshot = await bridge.updateDisplayName(nextDisplayName);
+      } else if (canOpenAdminPanel && activeProfile?.profileId) {
+        snapshot = await bridge.adminUpdateProfileDisplayName(activeProfile.profileId, nextDisplayName);
       }
 
-      setDisplayNameSuccess("Profile name saved.");
+      applyUpdatedProfileSnapshot(snapshot);
+      setDisplayNameSuccess(isOwner ? "Profile name saved." : "Profile name updated.");
     } catch (error) {
       setDisplayNameError(error instanceof Error ? error.message : "Could not save profile name.");
     } finally {
@@ -1069,7 +1121,7 @@ export default function ProfilePage() {
     const bridge = getWindowState().sakuraFirebaseAuth;
     const nextUsername = usernameInput.trim().replace(/\s+/g, "");
 
-    if (!bridge || !isOwner) {
+    if (!bridge) {
       return;
     }
 
@@ -1083,20 +1135,42 @@ export default function ProfilePage() {
     setIsUsernameSaving(true);
 
     try {
-      const snapshot = await bridge.updateUsername(nextUsername);
+      let snapshot: UserProfile | null = null;
 
-      if (snapshot) {
-        setCurrentUser(snapshot);
-        if (activeProfile && snapshot.uid === activeProfile.uid) {
-          setProfile(snapshot);
-        }
+      if (isOwner) {
+        snapshot = await bridge.updateUsername(nextUsername);
+      } else if (canOpenAdminPanel && activeProfile?.profileId) {
+        snapshot = await bridge.adminUpdateProfileLogin(activeProfile.profileId, nextUsername);
       }
 
-      setUsernameSuccess("Login saved.");
+      applyUpdatedProfileSnapshot(snapshot);
+      setUsernameSuccess(isOwner ? "Login saved." : "Login updated.");
     } catch (error) {
       setUsernameError(error instanceof Error ? error.message : "Could not save login.");
     } finally {
       setIsUsernameSaving(false);
+    }
+  };
+  const handleBanToggle = async () => {
+    const bridge = getWindowState().sakuraFirebaseAuth;
+
+    if (!bridge || !canOpenAdminPanel || !activeProfile?.profileId) {
+      return;
+    }
+
+    setBanError(null);
+    setBanSuccess(null);
+    setIsBanSaving(true);
+
+    try {
+      const snapshot = await bridge.adminSetProfileBan(activeProfile.profileId, !isTargetBanned);
+
+      applyUpdatedProfileSnapshot(snapshot);
+      setBanSuccess(isTargetBanned ? "Account unbanned." : "Account banned.");
+    } catch (error) {
+      setBanError(error instanceof Error ? error.message : "Could not update the ban status.");
+    } finally {
+      setIsBanSaving(false);
     }
   };
 
@@ -1259,7 +1333,7 @@ export default function ProfilePage() {
                 {verificationSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{verificationSuccess}</p> : null}
               </div> : null}
 
-              {canManageRoleAssignments && activeProfile?.profileId ? <div className="rounded-[32px] border border-[#201517] bg-[#0d0d0d] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
+              {false && canManageRoleAssignments && activeProfile?.profileId ? <div className="rounded-[32px] border border-[#201517] bg-[#0d0d0d] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
                 <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">Role Access</p>
                 <p className="mt-3 text-xs leading-relaxed text-gray-400">Open any participant profile and manage its roles here. Only root accounts can save changes.</p>
                 <div className="mt-5">
@@ -1357,6 +1431,263 @@ export default function ProfilePage() {
           </section>
         ) : null}
       </div>
+      {canOpenAdminPanel && activeProfile ? (
+        <>
+          <button
+            type="button"
+            onClick={() => setIsAdminPanelOpen(true)}
+            className={`fixed bottom-6 right-6 z-40 inline-flex items-center justify-center rounded-full border px-5 py-3 text-[11px] font-bold uppercase tracking-[0.22em] shadow-[0_0_30px_rgba(255,183,197,0.14)] transition hover:text-white ${
+              isTargetBanned
+                ? "border-[#ff5a54]/50 bg-[#19090b] text-[#ffb3ad] hover:border-[#ff5a54]"
+                : "border-[#ffb7c5]/35 bg-[#140d11] text-[#ffb7c5] hover:border-[#ffb7c5]/60"
+            }`}
+          >
+            Admin Panel
+          </button>
+          {isAdminPanelOpen ? (
+            <div className="fixed inset-0 z-50">
+              <button
+                type="button"
+                aria-label="Close admin panel"
+                onClick={() => setIsAdminPanelOpen(false)}
+                className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+              />
+              <aside className="absolute inset-y-4 right-4 flex w-[min(92vw,430px)] flex-col overflow-hidden rounded-[32px] border border-[#2a171c] bg-[#090909] shadow-[0_0_80px_rgba(255,183,197,0.12)]">
+                <div className="border-b border-[#1c1c1c] bg-[radial-gradient(circle_at_top,rgba(255,183,197,0.16),transparent_60%)] px-6 py-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">Admin Panel</p>
+                      <p className="mt-3 text-sm leading-relaxed text-gray-300">
+                        Root controls for profile #{activeProfile.profileId ?? "?"}.
+                      </p>
+                      <p className="mt-1 text-xs text-gray-500">
+                        Managing {primaryName}{hasUsername ? ` · @${activeProfile.login}` : ""}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsAdminPanelOpen(false)}
+                      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#312228] bg-[#140d11] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto px-6 py-5">
+                  <div className="space-y-5">
+                    <section className="rounded-[24px] border border-[#1d1d1d] bg-[#0d0d0d] p-5">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">Status</p>
+                          <p className="mt-2 text-sm font-semibold text-white">
+                            {isTargetBanned ? "Account is banned" : "Account is active"}
+                          </p>
+                          {activeProfile.bannedAt ? (
+                            <p className="mt-1 text-xs text-gray-500">Updated {formatTime(activeProfile.bannedAt)}</p>
+                          ) : null}
+                        </div>
+                        <span
+                          className={`inline-flex shrink-0 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${
+                            isTargetBanned
+                              ? "border-[#ff5a54]/40 bg-[#18090b] text-[#ffb3ad]"
+                              : "border-[#1f3b2f] bg-[#0d1713] text-[#8ce5b2]"
+                          }`}
+                        >
+                          {isTargetBanned ? "Banned" : "Active"}
+                        </span>
+                      </div>
+                      <div className="mt-4 flex flex-wrap items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={handleBanToggle}
+                          disabled={isBanSaving}
+                          className={`inline-flex items-center justify-center rounded-full border px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                            isTargetBanned
+                              ? "border-[#1f3b2f] bg-[#0d1713] text-[#8ce5b2] hover:border-[#8ce5b2]/50 hover:text-white"
+                              : "border-[#ff5a54]/35 bg-[#ff5a54] text-black hover:bg-[#ff746f]"
+                          }`}
+                        >
+                          {isBanSaving ? "Saving..." : isTargetBanned ? "Unban Account" : "Ban Account"}
+                        </button>
+                      </div>
+                      {banError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{banError}</p> : null}
+                      {banSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{banSuccess}</p> : null}
+                    </section>
+
+                    <section className="rounded-[24px] border border-[#1d1d1d] bg-[#0d0d0d] p-5">
+                      <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">Profile Name</p>
+                      <label className="mt-4 block">
+                        <span className="mb-2 block text-xs text-gray-500">Displayed name</span>
+                        <input
+                          type="text"
+                          value={displayNameInput}
+                          maxLength={48}
+                          autoComplete="nickname"
+                          onChange={(event) => {
+                            setDisplayNameInput(event.target.value);
+                            setDisplayNameError(null);
+                            setDisplayNameSuccess(null);
+                          }}
+                          className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55"
+                          placeholder="Absolute"
+                        />
+                      </label>
+                      <div className="mt-4 flex flex-wrap items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={handleDisplayNameSave}
+                          disabled={isDisplayNameSaving}
+                          className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isDisplayNameSaving ? "Saving..." : "Save Name"}
+                        </button>
+                      </div>
+                      {displayNameError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{displayNameError}</p> : null}
+                      {displayNameSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{displayNameSuccess}</p> : null}
+                    </section>
+
+                    <section className="rounded-[24px] border border-[#1d1d1d] bg-[#0d0d0d] p-5">
+                      <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">Login</p>
+                      <label className="mt-4 block">
+                        <span className="mb-2 block text-xs text-gray-500">Sign-in login</span>
+                        <input
+                          type="text"
+                          value={usernameInput}
+                          minLength={3}
+                          maxLength={24}
+                          autoComplete="username"
+                          onChange={(event) => {
+                            setUsernameInput(event.target.value);
+                            setUsernameError(null);
+                            setUsernameSuccess(null);
+                          }}
+                          className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55"
+                          placeholder="your_login"
+                        />
+                      </label>
+                      <p className="mt-2 text-xs leading-relaxed text-gray-500">Login without spaces. Letters, numbers, `.`, `_`, and `-` are supported.</p>
+                      <div className="mt-4 flex flex-wrap items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={handleUsernameSave}
+                          disabled={isUsernameSaving}
+                          className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isUsernameSaving ? "Saving..." : "Save Login"}
+                        </button>
+                      </div>
+                      {usernameError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{usernameError}</p> : null}
+                      {usernameSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{usernameSuccess}</p> : null}
+                    </section>
+
+                    <section className="rounded-[24px] border border-[#1d1d1d] bg-[#0d0d0d] p-5">
+                      <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">Roles</p>
+                      <div className="mt-4">
+                        <p className="text-xs uppercase tracking-[0.22em] text-gray-500">Assigned</p>
+                        <div className="mt-3 flex flex-wrap gap-3">
+                          {normalizedDraftRoles.map((role) => {
+                            const isLastUserRole =
+                              normalizedDraftRoles.length === 1 &&
+                              normalizeRoleName(role) === "user";
+
+                            return (
+                              <button
+                                key={role}
+                                type="button"
+                                title={roleBadgeLabel(role)}
+                                onClick={() => removeRole(role)}
+                                disabled={isLastUserRole || isRolesSaving}
+                                style={{ ...roleBadgeStyle(role), ...roleBadgeTextStyle }}
+                                className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border px-4 py-2 text-[11px] font-bold disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                <span aria-hidden="true" className="inline-flex items-center">{renderRoleBadgeText(role)}</span>
+                                <span className="ml-2 text-[14px] leading-none">×</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div className="mt-5">
+                        <p className="text-xs uppercase tracking-[0.22em] text-gray-500">Available</p>
+                        <div className="mt-3 flex flex-wrap gap-3">
+                          {availableRoleOptions.map((role) => (
+                            <button
+                              key={role}
+                              type="button"
+                              title={roleBadgeLabel(role)}
+                              onClick={() => addRole(role)}
+                              disabled={isRolesSaving}
+                              className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border px-4 py-2 text-[11px] font-bold opacity-70 transition hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-40"
+                              style={{ ...roleBadgeTextStyle, borderColor: "#2c2c2c", backgroundColor: "#101010", color: "#9ca3af", boxShadow: "none" }}
+                            >
+                              <span className="mr-2 text-[14px] leading-none">+</span>
+                              <span aria-hidden="true" className="inline-flex items-center">{renderRoleBadgeText(role)}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="mt-5 flex flex-wrap items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={handleRolesSave}
+                          disabled={isRolesSaving || !hasRoleChanges}
+                          className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isRolesSaving ? "Saving..." : "Save Roles"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={resetRoles}
+                          disabled={isRolesSaving || !hasRoleChanges}
+                          className="inline-flex items-center justify-center rounded-full border border-[#2b1b1e] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Reset
+                        </button>
+                      </div>
+                      {rolesError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{rolesError}</p> : null}
+                      {rolesSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{rolesSuccess}</p> : null}
+                    </section>
+
+                    <section className="rounded-[24px] border border-[#1d1d1d] bg-[#0d0d0d] p-5">
+                      <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">Avatar</p>
+                      <p className="mt-3 text-xs leading-relaxed text-gray-400">Upload, replace, or delete the avatar for this account.</p>
+                      <div className="mt-4 flex flex-wrap items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => adminAvatarInputRef.current?.click()}
+                          disabled={isAvatarUploading || isAvatarDeleting}
+                          className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isAvatarUploading ? "Uploading..." : activeProfile.photoURL ? "Replace Avatar" : "Upload Avatar"}
+                        </button>
+                        {activeProfile.photoURL ? (
+                          <button
+                            type="button"
+                            onClick={handleAvatarDelete}
+                            disabled={isAvatarUploading || isAvatarDeleting}
+                            className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {isAvatarDeleting ? "Deleting..." : "Delete Avatar"}
+                          </button>
+                        ) : null}
+                        <input
+                          ref={adminAvatarInputRef}
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp,image/gif"
+                          onChange={handleAvatarChange}
+                          className="hidden"
+                        />
+                      </div>
+                      {avatarError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{avatarError}</p> : null}
+                      {avatarSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{avatarSuccess}</p> : null}
+                    </section>
+                  </div>
+                </div>
+              </aside>
+            </div>
+          ) : null}
+        </>
+      ) : null}
     </main>
   );
 }

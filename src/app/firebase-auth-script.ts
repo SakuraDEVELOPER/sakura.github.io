@@ -81,6 +81,12 @@
 
   const resolvePhotoURL = (details, fallbackPhotoURL = null) =>
     hasOwn(details, "photoURL") ? details.photoURL ?? null : fallbackPhotoURL ?? null;
+  const resolveBannedAt = (details, fallbackBannedAt = null) =>
+    hasOwn(details, "bannedAt")
+      ? typeof details.bannedAt === "string"
+        ? details.bannedAt
+        : null
+      : fallbackBannedAt ?? null;
 
   const withTimeout = (promise, timeoutMs, createTimeoutError) =>
     new Promise((resolve, reject) => {
@@ -668,6 +674,8 @@
         photoURL: user.photoURL ?? null,
         providerIds: getProviderIds(user),
         roles: ["user"],
+        isBanned: false,
+        bannedAt: null,
         loginHistory: buildLoginHistory(
           [],
         user.metadata.creationTime ?? null,
@@ -688,6 +696,8 @@
     photoURL: resolvePhotoURL(details, user.photoURL ?? null),
     providerIds: Array.isArray(details.providerIds) ? details.providerIds : getProviderIds(user),
     roles: normalizeRoles(details.roles),
+    isBanned: Boolean(details.isBanned),
+    bannedAt: resolveBannedAt(details),
     verificationRequired:
       typeof details.verificationRequired === "boolean"
         ? details.verificationRequired
@@ -708,10 +718,12 @@
           emailVerified:
             typeof details.emailVerified === "boolean" ? details.emailVerified : Boolean(user.emailVerified),
           login: details.login ?? null,
-          displayName: user.displayName ?? details.displayName ?? details.login ?? null,
+          displayName: details.displayName ?? user.displayName ?? details.login ?? null,
           profileId: typeof details.profileId === "number" ? details.profileId : null,
           photoURL: resolvePhotoURL(details, user.photoURL ?? null),
           roles: normalizeRoles(details.roles),
+          isBanned: Boolean(details.isBanned),
+          bannedAt: resolveBannedAt(details),
           verificationRequired:
             typeof details.verificationRequired === "boolean"
               ? details.verificationRequired
@@ -743,6 +755,8 @@
     profileId: typeof details.profileId === "number" ? details.profileId : null,
     photoURL: resolvePhotoURL(details, null),
     roles: normalizeRoles(details.roles),
+    isBanned: Boolean(details.isBanned),
+    bannedAt: resolveBannedAt(details),
     verificationRequired:
       typeof details.verificationRequired === "boolean"
         ? details.verificationRequired
@@ -820,6 +834,80 @@
       );
 
       return snapshot;
+    };
+    const syncCurrentUserSnapshotFromStoredSnapshot = (snapshot) => {
+      if (
+        window.sakuraCurrentUserSnapshot &&
+        !window.sakuraCurrentUserSnapshot.isAnonymous &&
+        window.sakuraCurrentUserSnapshot.uid === snapshot?.uid
+      ) {
+        return publishUserSnapshot({
+          ...window.sakuraCurrentUserSnapshot,
+          ...snapshot,
+        });
+      }
+
+      return snapshot;
+    };
+    const ensureRootActorSnapshot = async () => {
+      const user = auth.currentUser;
+
+      if (!user || user.isAnonymous) {
+        throw createFirebaseError("auth/no-current-user", "Sign in again to open the admin panel.");
+      }
+
+      let actorSnapshot = window.sakuraCurrentUserSnapshot;
+
+      if (!actorSnapshot || actorSnapshot.isAnonymous || actorSnapshot.uid !== user.uid) {
+        actorSnapshot = await resolveUserSnapshot(user);
+      }
+
+      if (!canManageRoles(actorSnapshot?.roles ?? [])) {
+        throw createFirebaseError(
+          "admin/forbidden",
+          "Only root accounts can use the admin panel."
+        );
+      }
+
+      return {
+        user,
+        actorSnapshot,
+      };
+    };
+    const refreshStoredUserSnapshot = async (uid, fallbackDetails = {}) => {
+      const refreshedSnapshot = await getDoc(userRefFor(uid));
+      const snapshot = toStoredUserSnapshot(
+        uid,
+        refreshedSnapshot.exists() ? refreshedSnapshot.data() : fallbackDetails
+      );
+
+      syncCurrentUserSnapshotFromStoredSnapshot(snapshot);
+
+      return snapshot;
+    };
+    const enforceActiveSessionNotBanned = async (snapshot, options = {}) => {
+      if (!snapshot?.isBanned) {
+        return snapshot;
+      }
+
+      const message = "This account has been banned by an administrator.";
+
+      stopPresenceTracking();
+      window.sakuraFirebaseAuthError = message;
+      window.dispatchEvent(new CustomEvent(AUTH_ERROR_EVENT));
+
+      try {
+        await signOut(auth);
+      } catch (error) {
+      }
+
+      publishUserSnapshot(null);
+
+      if (options.throwError !== false) {
+        throw createFirebaseError("auth/account-banned", message);
+      }
+
+      return null;
     };
 
     const findUserByLogin = async (loginLower) => {
@@ -1094,14 +1182,16 @@
         loginLower: loginDetails.loginLower,
         displayName:
           preferredDisplayName ??
-          user.displayName ??
           existingData?.displayName ??
+          user.displayName ??
           loginDetails.login ??
           existingData?.email?.split("@")[0] ??
           user.email?.split("@")[0] ??
           "Sakura User",
         photoURL: resolvePhotoURL(existingData, user.photoURL ?? null),
         roles,
+        isBanned: Boolean(existingData?.isBanned),
+        bannedAt: resolveBannedAt(existingData),
         providerIds,
         creationTime: user.metadata.creationTime ?? null,
         lastSignInTime: user.metadata.lastSignInTime ?? null,
@@ -1374,12 +1464,13 @@
       const snapshot = await resolveUserSnapshot(result.user, {
         preferredDisplayName: result.user.displayName?.trim() || null,
       });
+      const allowedSnapshot = await enforceActiveSessionNotBanned(snapshot);
       await syncPresence(result.user, {
         path: window.location.pathname,
         source: "google-login",
         forceVisit: true,
       });
-      return snapshot;
+      return allowedSnapshot;
     };
 
     const getProfileById = async (profileId) => {
@@ -1793,6 +1884,257 @@
         })
       );
     };
+    const adminUpdateProfileDisplayName = async (profileId, nextDisplayName) => {
+      const { user } = await ensureRootActorSnapshot();
+
+      if (!Number.isInteger(profileId) || profileId <= 0) {
+        throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
+      }
+
+      const sanitizedDisplayName = sanitizeDisplayName(nextDisplayName);
+
+      if (!sanitizedDisplayName) {
+        throw createFirebaseError("display-name/empty", "Enter a profile name.");
+      }
+
+      const targetDoc = await findUserByProfileId(profileId);
+
+      if (!targetDoc) {
+        return null;
+      }
+
+      try {
+        await setDoc(
+          userRefFor(targetDoc.id),
+          {
+            displayName: sanitizedDisplayName,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        );
+      } catch (error) {
+        if (!isPermissionDeniedError(error)) {
+          throw error;
+        }
+
+        throw createFirebaseError(
+          "display-name/persist-failed",
+          "Profile name could not be saved. Check Firestore rules for privileged users."
+        );
+      }
+
+      if (targetDoc.id === user.uid) {
+        try {
+          await updateProfile(user, { displayName: sanitizedDisplayName });
+        } catch (error) {
+          console.error("Failed to sync Firebase Auth displayName from admin panel:", error);
+        }
+      }
+
+      return refreshStoredUserSnapshot(targetDoc.id, {
+        ...targetDoc.data(),
+        displayName: sanitizedDisplayName,
+      });
+    };
+    const adminUpdateProfileLogin = async (profileId, nextLogin) => {
+      await ensureRootActorSnapshot();
+
+      if (!Number.isInteger(profileId) || profileId <= 0) {
+        throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
+      }
+
+      const normalizedRequestedLogin = String(nextLogin ?? "").trim().replace(/\s+/g, "");
+
+      if (!normalizedRequestedLogin) {
+        throw createFirebaseError("auth/invalid-login", "Enter a login.");
+      }
+
+      const targetDoc = await findUserByProfileId(profileId);
+
+      if (!targetDoc) {
+        return null;
+      }
+
+      const targetDetails = targetDoc.data();
+      const usernameDetails = await resolveAvailableLogin(normalizedRequestedLogin, targetDoc.id);
+
+      try {
+        await setDoc(
+          userRefFor(targetDoc.id),
+          {
+            login: usernameDetails.login,
+            loginLower: usernameDetails.loginLower,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        );
+      } catch (error) {
+        if (!isPermissionDeniedError(error)) {
+          throw error;
+        }
+
+        throw createFirebaseError(
+          "username/persist-failed",
+          "Login could not be saved. Check Firestore rules for privileged users."
+        );
+      }
+
+      return refreshStoredUserSnapshot(targetDoc.id, {
+        ...targetDetails,
+        login: usernameDetails.login,
+        loginLower: usernameDetails.loginLower,
+      });
+    };
+    const adminUpdateProfileAvatar = async (profileId, file) => {
+      await ensureRootActorSnapshot();
+
+      if (!Number.isInteger(profileId) || profileId <= 0) {
+        throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
+      }
+
+      if (!(file instanceof File)) {
+        throw createFirebaseError("storage/invalid-file", "Choose an image before uploading.");
+      }
+
+      if (!AVATAR_CONTENT_TYPES.has(file.type)) {
+        throw createFirebaseError(
+          "storage/unsupported-file-type",
+          "Avatar must be PNG, JPG, WEBP, or GIF."
+        );
+      }
+
+      if (file.size > MAX_AVATAR_BYTES) {
+        throw createFirebaseError("storage/file-too-large", "Avatar must be 5 MB or smaller.");
+      }
+
+      const targetDoc = await findUserByProfileId(profileId);
+
+      if (!targetDoc) {
+        return null;
+      }
+
+      const photoURL = await createInlineAvatarDataUrl(file);
+
+      try {
+        await setDoc(
+          userRefFor(targetDoc.id),
+          {
+            photoURL,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        );
+      } catch (error) {
+        if (!isPermissionDeniedError(error)) {
+          throw error;
+        }
+
+        throw createFirebaseError(
+          "avatar/persist-failed",
+          "Avatar could not be saved. Check Firestore rules for privileged users."
+        );
+      }
+
+      return refreshStoredUserSnapshot(targetDoc.id, {
+        ...targetDoc.data(),
+        photoURL,
+      });
+    };
+    const adminDeleteProfileAvatar = async (profileId) => {
+      await ensureRootActorSnapshot();
+
+      if (!Number.isInteger(profileId) || profileId <= 0) {
+        throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
+      }
+
+      const targetDoc = await findUserByProfileId(profileId);
+
+      if (!targetDoc) {
+        return null;
+      }
+
+      try {
+        await setDoc(
+          userRefFor(targetDoc.id),
+          {
+            photoURL: null,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        );
+      } catch (error) {
+        if (!isPermissionDeniedError(error)) {
+          throw error;
+        }
+
+        throw createFirebaseError(
+          "avatar/delete-failed",
+          "Avatar could not be deleted. Check Firestore rules for privileged users."
+        );
+      }
+
+      return refreshStoredUserSnapshot(targetDoc.id, {
+        ...targetDoc.data(),
+        photoURL: null,
+      });
+    };
+    const adminSetProfileBan = async (profileId, nextIsBanned) => {
+      const { user } = await ensureRootActorSnapshot();
+
+      if (!Number.isInteger(profileId) || profileId <= 0) {
+        throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
+      }
+
+      const targetDoc = await findUserByProfileId(profileId);
+
+      if (!targetDoc) {
+        return null;
+      }
+
+      const isBanned = Boolean(nextIsBanned);
+      const bannedAt = isBanned ? new Date().toISOString() : null;
+
+      try {
+        await setDoc(
+          userRefFor(targetDoc.id),
+          {
+            isBanned,
+            bannedAt,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        );
+      } catch (error) {
+        if (!isPermissionDeniedError(error)) {
+          throw error;
+        }
+
+        throw createFirebaseError(
+          "ban/persist-failed",
+          "Ban status could not be saved. Check Firestore rules for privileged users."
+        );
+      }
+
+      const snapshot = await refreshStoredUserSnapshot(targetDoc.id, {
+        ...targetDoc.data(),
+        isBanned,
+        bannedAt,
+      });
+
+      if (targetDoc.id === user.uid && isBanned) {
+        await enforceActiveSessionNotBanned(
+          {
+            ...(window.sakuraCurrentUserSnapshot ?? snapshot),
+            ...snapshot,
+            isBanned: true,
+            bannedAt,
+          },
+          { throwError: true }
+        );
+      }
+
+      return snapshot;
+    };
 
     const updateProfileRoles = async (profileId, nextRoles) => {
       const user = auth.currentUser;
@@ -1840,29 +2182,10 @@
         );
       }
 
-      const refreshedSnapshot = await getDoc(userRefFor(targetDoc.id));
-      const snapshot = toStoredUserSnapshot(
-        targetDoc.id,
-        refreshedSnapshot.exists()
-          ? refreshedSnapshot.data()
-          : {
-              ...targetDoc.data(),
-              roles,
-            }
-      );
-
-      if (
-        window.sakuraCurrentUserSnapshot &&
-        !window.sakuraCurrentUserSnapshot.isAnonymous &&
-        window.sakuraCurrentUserSnapshot.uid === snapshot.uid
-      ) {
-        publishUserSnapshot({
-          ...window.sakuraCurrentUserSnapshot,
-          roles: snapshot.roles,
-        });
-      }
-
-      return snapshot;
+      return refreshStoredUserSnapshot(targetDoc.id, {
+        ...targetDoc.data(),
+        roles,
+      });
     };
 
     const resendVerificationEmail = async () => {
@@ -1950,8 +2273,10 @@
             forceVisit: true,
           });
 
+          const allowedSnapshot = await enforceActiveSessionNotBanned(snapshot);
+
           return {
-            ...snapshot,
+            ...allowedSnapshot,
             emailVerified: Boolean(credentials.user.emailVerified),
             verificationEmailSent,
           };
@@ -1973,16 +2298,20 @@
         const email = await resolveEmailForLogin(identifier);
         const credentials = await signInWithEmailAndPassword(auth, email, password);
         const snapshot = await resolveUserSnapshot(credentials.user);
+        const allowedSnapshot = await enforceActiveSessionNotBanned(snapshot);
         await syncPresence(credentials.user, {
           path: window.location.pathname,
           source: "login",
           forceVisit: true,
         });
-        return snapshot;
+        return allowedSnapshot;
       },
       loginWithGoogle,
       updateDisplayName,
       updateUsername,
+      adminUpdateProfileDisplayName,
+      adminUpdateProfileLogin,
+      adminSetProfileBan,
       getProfileById,
       getProfileComments,
       addProfileComment,
@@ -1991,6 +2320,8 @@
       updateProfileRoles,
       updateAvatar,
       deleteAvatar,
+      adminUpdateProfileAvatar,
+      adminDeleteProfileAvatar,
       syncPresence: async (options = {}) => {
         const user = auth.currentUser;
 
@@ -2021,8 +2352,16 @@
           }
 
           const snapshot = await resolveUserSnapshot(user);
+          const allowedSnapshot = await enforceActiveSessionNotBanned(snapshot, {
+            throwError: false,
+          });
 
-          callback(snapshot);
+          if (!allowedSnapshot) {
+            callback(publishUserSnapshot(null));
+            return;
+          }
+
+          callback(allowedSnapshot);
           startPresenceTracking(user);
         })
     };
