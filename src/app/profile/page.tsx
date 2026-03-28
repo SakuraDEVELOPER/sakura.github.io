@@ -10,6 +10,7 @@ type UserProfile = {
   isAnonymous: boolean;
   email: string | null;
   emailVerified?: boolean;
+  verificationRequired?: boolean;
   verificationEmailSent?: boolean;
   login: string | null;
   displayName: string | null;
@@ -25,6 +26,7 @@ type UserProfile = {
 type Bridge = {
   getProfileById: (profileId: number) => Promise<UserProfile | null>;
   resendVerificationEmail: () => Promise<UserProfile | null>;
+  updateUsername: (username: string) => Promise<UserProfile | null>;
   updateProfileRoles: (profileId: number, roles: string[]) => Promise<UserProfile | null>;
   updateAvatar: (file: File) => Promise<UserProfile | null>;
   deleteAvatar: () => Promise<UserProfile | null>;
@@ -47,7 +49,7 @@ const AUTH_STATE_SETTLED_EVENT = "sakura-auth-state-settled";
 const USER_UPDATE_EVENT = "sakura-user-update";
 const PROFILE_PATH_STORAGE_KEY = "sakura-profile-path";
 const CURRENT_PROFILE_ID_STORAGE_KEY = "sakura-current-profile-id";
-const PROFILE_BUILD_MARKER = "role-colors-v13";
+const PROFILE_BUILD_MARKER = "role-colors-v14";
 const repoBasePath = "/sakura.github.io";
 const restoreProfilePathScript = `
   (function () {
@@ -311,9 +313,10 @@ const canManageRoles = (roles: string[]) =>
   normalizeRoleSelection(roles).some((role) => ROLE_MANAGER_NAMES.has(normalizeRoleName(role)));
 const nameOf = (user: UserProfile) =>
   user.displayName?.trim() ||
+  user.login?.trim() ||
   (typeof user.profileId === "number" ? `Profile #${user.profileId}` : "Sakura User");
 const initialsOf = (user: UserProfile) =>
-  (user.displayName || user.email || (typeof user.profileId === "number" ? `Profile ${user.profileId}` : "SA"))
+  (user.displayName || user.login || user.email || (typeof user.profileId === "number" ? `Profile ${user.profileId}` : "SA"))
     .split(/[\s@._-]+/)
     .filter(Boolean)
     .slice(0, 2)
@@ -377,6 +380,10 @@ export default function ProfilePage() {
   const [avatarSuccess, setAvatarSuccess] = useState<string | null>(null);
   const [verificationError, setVerificationError] = useState<string | null>(null);
   const [verificationSuccess, setVerificationSuccess] = useState<string | null>(null);
+  const [usernameInput, setUsernameInput] = useState("");
+  const [isUsernameSaving, setIsUsernameSaving] = useState(false);
+  const [usernameError, setUsernameError] = useState<string | null>(null);
+  const [usernameSuccess, setUsernameSuccess] = useState<string | null>(null);
   const [draftRoles, setDraftRoles] = useState<string[]>([]);
   const [isRolesSaving, setIsRolesSaving] = useState(false);
   const [rolesError, setRolesError] = useState<string | null>(null);
@@ -464,11 +471,16 @@ export default function ProfilePage() {
   const visibleCurrentUser = currentUser && !currentUser.isAnonymous ? currentUser : null;
   const isOwner = Boolean(visibleCurrentUser && profile && visibleCurrentUser.uid === profile.uid);
   const activeProfile = profile;
-  const shouldShowVerificationBanner = Boolean(
-    isOwner && activeProfile?.email && activeProfile.emailVerified === false
-  );
+  const hasUsername = Boolean(activeProfile?.login?.trim());
+  const shouldShowUsernameSetup = Boolean(isOwner && activeProfile && !hasUsername);
   const profileRoles = activeProfile?.roles?.length ? normalizeRoleSelection(activeProfile.roles) : ["user"];
   const normalizedProfileRoles = profileRoles;
+  const shouldShowVerificationBanner = Boolean(
+    isOwner &&
+      activeProfile?.email &&
+      activeProfile.emailVerified === false &&
+      activeProfile.verificationRequired !== false
+  );
   const canManageRoleAssignments = Boolean(visibleCurrentUser && canManageRoles(visibleCurrentUser.roles));
   const shouldShowPendingState =
     !authError &&
@@ -509,6 +521,9 @@ export default function ProfilePage() {
     setRolesSuccess(null);
     setVerificationError(null);
     setVerificationSuccess(null);
+    setUsernameInput(activeProfile.login ?? "");
+    setUsernameError(null);
+    setUsernameSuccess(null);
   }, [activeProfile, activeProfileRoleSignature]);
 
   const normalizedDraftRoles = normalizeRoleSelection(draftRoles);
@@ -656,6 +671,41 @@ export default function ProfilePage() {
     }
   };
 
+  const handleUsernameSave = async () => {
+    const bridge = getWindowState().sakuraFirebaseAuth;
+    const nextUsername = usernameInput.trim().replace(/\s+/g, "");
+
+    if (!bridge || !isOwner) {
+      return;
+    }
+
+    if (!nextUsername) {
+      setUsernameError("Enter a username.");
+      return;
+    }
+
+    setUsernameError(null);
+    setUsernameSuccess(null);
+    setIsUsernameSaving(true);
+
+    try {
+      const snapshot = await bridge.updateUsername(nextUsername);
+
+      if (snapshot) {
+        setCurrentUser(snapshot);
+        if (activeProfile && snapshot.uid === activeProfile.uid) {
+          setProfile(snapshot);
+        }
+      }
+
+      setUsernameSuccess("Username saved.");
+    } catch (error) {
+      setUsernameError(error instanceof Error ? error.message : "Could not save username.");
+    } finally {
+      setIsUsernameSaving(false);
+    }
+  };
+
   return (
     <main
       data-profile-build={PROFILE_BUILD_MARKER}
@@ -688,6 +738,7 @@ export default function ProfilePage() {
                   </div>
                   <div className="min-w-0">
                     <h1 className="min-w-0 truncate text-3xl font-black uppercase tracking-tighter text-white">{primaryName}</h1>
+                    {hasUsername ? <p className="mt-2 text-sm font-medium text-[#c7d4cc]">@{activeProfile.login}</p> : shouldShowUsernameSetup ? <p className="mt-2 text-sm text-gray-500">Username not set yet.</p> : null}
                     <div className="mt-3 flex flex-wrap items-center gap-3">
                       {profileRoles.map((role) => <span key={role} title={roleBadgeLabel(role)} style={{ ...roleBadgeStyle(role), ...roleBadgeTextStyle }} className="inline-flex shrink-0 whitespace-nowrap rounded-full border px-3 py-1 text-[10px] font-bold"><span aria-hidden="true" className="inline-flex items-center">{renderRoleBadgeText(role)}</span></span>)}
                     </div>
@@ -697,12 +748,30 @@ export default function ProfilePage() {
               <div className="grid gap-4 px-8 py-8 sm:grid-cols-2">
                 {[
                   ["Profile ID", String(activeProfile.profileId ?? "Not assigned")],
+                  ...(hasUsername || shouldShowUsernameSetup ? [["Username", hasUsername ? `@${activeProfile.login}` : "Not set yet"]] : []),
                   ["Account Created", formatTime(activeProfile.creationTime)],
                 ].map(([label, value]) => <div key={label} className="rounded-[26px] border border-[#1d1d1d] bg-[#090909] p-5"><p className="font-mono text-[10px] uppercase tracking-[0.32em] text-gray-600">{label}</p><p className="mt-3 break-all text-sm leading-relaxed text-gray-300">{value}</p></div>)}
               </div>
             </div>
 
             <div className="flex flex-col gap-6">
+              {shouldShowUsernameSetup ? <div className="rounded-[32px] border border-[#201517] bg-[#0d0d0d] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
+                <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">Create Username</p>
+                <p className="mt-3 text-sm leading-relaxed text-gray-400">This account does not have a username yet. Create one so it appears on your profile and can be used for sign-in.</p>
+                <div className="mt-5">
+                  <label className="block">
+                    <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">Username</span>
+                    <input type="text" value={usernameInput} minLength={3} maxLength={24} autoComplete="username" onChange={(event) => setUsernameInput(event.target.value)} className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55" placeholder="your_username" />
+                  </label>
+                  <p className="mt-2 text-xs leading-relaxed text-gray-500">Username without spaces. Letters, numbers, `.`, `_`, and `-` are supported.</p>
+                </div>
+                <div className="mt-5 flex flex-wrap items-center gap-3">
+                  <button type="button" onClick={handleUsernameSave} disabled={isUsernameSaving} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">{isUsernameSaving ? "Saving..." : "Save Username"}</button>
+                </div>
+                {usernameError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{usernameError}</p> : null}
+                {usernameSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{usernameSuccess}</p> : null}
+              </div> : null}
+
               {shouldShowVerificationBanner ? <div className="rounded-[32px] border border-[#4d3024] bg-[linear-gradient(180deg,#1a110d_0%,#120d0a_100%)] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
                 <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">Email not verified</p>
                 <p className="mt-3 text-sm leading-relaxed text-[#f3d2c5]">Подтвердите почту, чтобы сохранить доступ к аккаунту и восстановлению входа.</p>

@@ -303,6 +303,8 @@ const firebaseModuleScript = `
   const ROLE_MANAGER_NAMES = new Set(["root"]);
   const canManageRoles = (roles) =>
     normalizeRoles(roles).some((role) => ROLE_MANAGER_NAMES.has(normalizeRoleName(role)));
+  const requiresEmailVerification = (roles) =>
+    !normalizeRoles(roles).some((role) => normalizeRoleName(role) === "root");
 
   const buildLoginHistory = (existingHistory, creationTime, lastSignInTime) => {
     const previousEntries = Array.isArray(existingHistory)
@@ -361,13 +363,18 @@ const firebaseModuleScript = `
     const requestedLogin =
       typeof options.requestedLogin === "string" && options.requestedLogin.trim()
         ? options.requestedLogin.trim()
-        : preferredDisplayName || deriveLoginSeed(user, preferredDisplayName);
+        : null;
     const fallbackLogin = sanitizeLogin(requestedLogin) || null;
 
       return {
         login: fallbackLogin,
         loginLower: fallbackLogin ? normalizeLogin(fallbackLogin) : null,
-        displayName: preferredDisplayName ?? user.displayName ?? fallbackLogin,
+        displayName:
+          preferredDisplayName ??
+          user.displayName ??
+          fallbackLogin ??
+          user.email?.split("@")[0] ??
+          null,
         emailVerified: Boolean(user.emailVerified),
         profileId: null,
         photoURL: user.photoURL ?? null,
@@ -393,6 +400,10 @@ const firebaseModuleScript = `
     photoURL: resolvePhotoURL(details, user.photoURL ?? null),
     providerIds: Array.isArray(details.providerIds) ? details.providerIds : getProviderIds(user),
     roles: normalizeRoles(details.roles),
+    verificationRequired:
+      typeof details.verificationRequired === "boolean"
+        ? details.verificationRequired
+        : requiresEmailVerification(details.roles),
     loginHistory: Array.isArray(details.loginHistory)
       ? details.loginHistory
       : buildLoginHistory([], user.metadata.creationTime ?? null, user.metadata.lastSignInTime ?? null),
@@ -413,6 +424,10 @@ const firebaseModuleScript = `
           profileId: typeof details.profileId === "number" ? details.profileId : null,
           photoURL: resolvePhotoURL(details, user.photoURL ?? null),
           roles: normalizeRoles(details.roles),
+          verificationRequired:
+            typeof details.verificationRequired === "boolean"
+              ? details.verificationRequired
+              : requiresEmailVerification(details.roles),
           providerIds:
             user.providerData.map((provider) => provider?.providerId).filter(Boolean) ??
             details.providerIds ??
@@ -440,6 +455,10 @@ const firebaseModuleScript = `
     profileId: typeof details.profileId === "number" ? details.profileId : null,
     photoURL: resolvePhotoURL(details, null),
     roles: normalizeRoles(details.roles),
+    verificationRequired:
+      typeof details.verificationRequired === "boolean"
+        ? details.verificationRequired
+        : requiresEmailVerification(details.roles),
     providerIds: Array.isArray(details.providerIds)
       ? details.providerIds.filter((providerId) => typeof providerId === "string")
       : [],
@@ -579,7 +598,7 @@ const firebaseModuleScript = `
       ) {
         throw createFirebaseError(
           "auth/invalid-login",
-          "Login must be 3-24 characters and only contain letters, numbers, dots, underscores, or hyphens."
+          "Username must be 3-24 characters and only contain letters, numbers, dots, underscores, or hyphens."
         );
       }
 
@@ -600,14 +619,14 @@ const firebaseModuleScript = `
         if (!automatic) {
           throw createFirebaseError(
             "auth/login-already-in-use",
-            "This login is already taken."
+            "This username is already taken."
           );
         }
       }
 
       throw createFirebaseError(
         "auth/login-already-in-use",
-        "This login is already taken."
+        "This username is already taken."
       );
     };
 
@@ -621,19 +640,19 @@ const firebaseModuleScript = `
       const loginLower = normalizeLogin(trimmedIdentifier);
 
       if (!loginLower) {
-        throw createFirebaseError("auth/invalid-login", "Invalid login.");
+        throw createFirebaseError("auth/invalid-login", "Invalid username.");
       }
 
       const userDoc = await findUserByLogin(loginLower);
 
       if (!userDoc) {
-        throw createFirebaseError("auth/login-not-found", "Login not found.");
+        throw createFirebaseError("auth/login-not-found", "Username not found.");
       }
 
       const userData = userDoc.data();
 
       if (typeof userData?.email !== "string" || !userData.email) {
-        throw createFirebaseError("auth/login-not-found", "Login not found.");
+        throw createFirebaseError("auth/login-not-found", "Username not found.");
       }
 
       return userData.email;
@@ -735,7 +754,10 @@ const firebaseModuleScript = `
             }
           : typeof options.requestedLogin === "string" && options.requestedLogin.trim()
             ? await resolveAvailableLogin(options.requestedLogin, user.uid)
-            : await resolveAvailableLogin(deriveLoginSeed(user, preferredDisplayName), user.uid, true);
+            : {
+                login: null,
+                loginLower: null,
+              };
 
       const loginHistory = buildLoginHistory(
         existingData?.loginHistory,
@@ -754,7 +776,10 @@ const firebaseModuleScript = `
           preferredDisplayName ??
           user.displayName ??
           existingData?.displayName ??
-          loginDetails.login,
+          loginDetails.login ??
+          existingData?.email?.split("@")[0] ??
+          user.email?.split("@")[0] ??
+          "Sakura User",
         photoURL: resolvePhotoURL(existingData, user.photoURL ?? null),
         roles,
         providerIds,
@@ -905,9 +930,59 @@ const firebaseModuleScript = `
       return stopPresenceTracking;
     };
 
+    const updateUsername = async (nextUsername) => {
+      const user = auth.currentUser;
+
+      if (!user || user.isAnonymous) {
+        throw createFirebaseError("auth/no-current-user", "Sign in again to update your username.");
+      }
+
+      const usernameDetails = await resolveAvailableLogin(nextUsername, user.uid);
+      const userRef = userRefFor(user.uid);
+      const existingSnapshot = await getDoc(userRef);
+      const existingData = existingSnapshot.exists() ? existingSnapshot.data() : {};
+
+      try {
+        await setDoc(
+          userRef,
+          {
+            login: usernameDetails.login,
+            loginLower: usernameDetails.loginLower,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        );
+      } catch (error) {
+        if (!isPermissionDeniedError(error)) {
+          throw error;
+        }
+
+        throw createFirebaseError(
+          "username/persist-failed",
+          "Username could not be saved. Check Firestore rules for users/{uid}."
+        );
+      }
+
+      const snapshot = publishUserSnapshot(
+        toUserSnapshot(user, {
+          ...existingData,
+          login: usernameDetails.login,
+          loginLower: usernameDetails.loginLower,
+          displayName:
+            existingData?.displayName ??
+            user.displayName ??
+            usernameDetails.login,
+        })
+      );
+
+      return snapshot;
+    };
+
     const loginWithGoogle = async () => {
       const result = await signInWithPopup(auth, provider);
-      const snapshot = await resolveUserSnapshot(result.user);
+      const snapshot = await resolveUserSnapshot(result.user, {
+        preferredDisplayName: result.user.displayName?.trim() || null,
+      });
       await syncPresence(result.user, {
         path: window.location.pathname,
         source: "google-login",
@@ -1174,6 +1249,24 @@ const firebaseModuleScript = `
         throw createFirebaseError("auth/no-current-user", "Sign in again to verify your email.");
       }
 
+      const currentRoles = normalizeRoles(window.sakuraCurrentUserSnapshot?.roles ?? []);
+
+      if (!requiresEmailVerification(currentRoles)) {
+        const snapshot = publishUserSnapshot(
+          toUserSnapshot(user, {
+            ...(window.sakuraCurrentUserSnapshot ?? {}),
+            roles: currentRoles,
+            verificationRequired: false,
+            verificationEmailSent: false,
+          })
+        );
+
+        return {
+          ...snapshot,
+          verificationEmailSent: false,
+        };
+      }
+
       if (user.emailVerified) {
         const snapshot = publishUserSnapshot(
           toUserSnapshot(user, {
@@ -1265,6 +1358,7 @@ const firebaseModuleScript = `
         return snapshot;
       },
       loginWithGoogle,
+      updateUsername,
       getProfileById,
       resendVerificationEmail,
       updateProfileRoles,

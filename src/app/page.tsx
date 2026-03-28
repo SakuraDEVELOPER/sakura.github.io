@@ -96,6 +96,7 @@ type AuthUserSnapshot = {
   isAnonymous: boolean;
   email: string | null;
   emailVerified?: boolean;
+  verificationRequired?: boolean;
   verificationEmailSent?: boolean;
   login: string | null;
   displayName: string | null;
@@ -152,6 +153,26 @@ function getFirebaseErrorMessage(error: unknown) {
     typeof error === "object" && error !== null && "code" in error
       ? String((error as { code?: unknown }).code)
       : "";
+
+  if (code === "auth/invalid-login") {
+    return "Username must be 3-24 characters with no spaces.";
+  }
+
+  if (code === "auth/login-already-in-use") {
+    return "This username is already taken.";
+  }
+
+  if (code === "auth/login-not-found") {
+    return "Account with this username was not found.";
+  }
+
+  if (
+    code === "auth/user-not-found" ||
+    code === "auth/wrong-password" ||
+    code === "auth/invalid-credential"
+  ) {
+    return "Invalid email, username, or password.";
+  }
 
   if (code === "auth/invalid-login") {
     return "Логин должен содержать минимум 3 символа и быть без пробелов.";
@@ -293,9 +314,16 @@ function SakuraBackground() {
     try {
       let snapshot: AuthUserSnapshot | null;
       const snapshot = await window.sakuraFirebaseAuth.loginWithGoogle();
+      if (!snapshot?.login) {
+        setFlashMessage("Signed in with Google. Create a username on your profile.");
+      }
       setFlashMessage("Вход через Google выполнен.");
       if (mode === "register" && snapshot?.verificationEmailSent) {
         setFlashMessage("Аккаунт создан. Письмо для подтверждения отправлено на почту.");
+      }
+
+      if (mode === "register" && snapshot?.verificationEmailSent) {
+        setFlashMessage("Account created. Verification email sent.");
       }
 
       closeModal();
@@ -508,6 +536,11 @@ function HeaderAuth() {
     }
 
     if (!identifier.trim()) {
+      setSubmitError(mode === "register" ? "Enter your email." : "Enter your email or username.");
+      return;
+    }
+
+    if (!identifier.trim()) {
       setSubmitError(mode === "register" ? "Введите email." : "Введите email или логин.");
       return;
     }
@@ -519,6 +552,11 @@ function HeaderAuth() {
 
     if (mode === "register") {
       const normalizedLogin = loginName.trim().replace(/\s+/g, "");
+
+      if (!normalizedLogin) {
+        setSubmitError("Enter a username.");
+        return;
+      }
 
       if (!normalizedLogin) {
         setSubmitError("Введите логин.");
@@ -555,6 +593,10 @@ function HeaderAuth() {
       } else {
         snapshot = await window.sakuraFirebaseAuth.login(identifier.trim(), password);
         setFlashMessage("Вход выполнен.");
+      }
+
+      if (!snapshot?.login) {
+        setFlashMessage("Signed in. Create a username on your profile.");
       }
 
       closeModal();
@@ -599,6 +641,9 @@ function HeaderAuth() {
 
     try {
       const snapshot = await window.sakuraFirebaseAuth.loginWithGoogle();
+      if (!snapshot?.login) {
+        setFlashMessage("Signed in with Google. Create a username on your profile.");
+      }
       setFlashMessage("Вход через Google выполнен.");
       closeModal();
       navigateToProfile(snapshot);
@@ -653,7 +698,7 @@ function HeaderAuth() {
             onClick={() => openModal("login")}
             className="inline-flex items-center justify-center rounded-full border border-[#2a2a2a] bg-[#101010] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-gray-300 transition hover:border-[#4a4a4a] hover:text-white"
           >
-            Login
+            Sign In
           </button>
           <button
             type="button"
@@ -697,9 +742,14 @@ function HeaderAuth() {
                     Sakura Access
                   </p>
                   <h2 className="text-2xl font-black uppercase tracking-tighter text-white">
-                    {mode === "register" ? "Registration" : "Login"}
+                    {mode === "register" ? "Registration" : "Sign In"}
                   </h2>
                   <p className="mt-2 text-sm text-gray-400">
+                    {mode === "register"
+                      ? "Create a username so it appears on your profile and works for sign-in."
+                      : "You can sign in with your email or username through Firebase Auth."}
+                  </p>
+                  <p className="mt-2 hidden text-sm text-gray-400">
                     {mode === "register"
                       ? "Создайте логин, чтобы он отображался в профиле и подходил для входа."
                       : "Войти можно по email или логину через Firebase Auth."}
@@ -725,7 +775,7 @@ function HeaderAuth() {
                     mode === "login" ? "bg-[#ffb7c5] text-black" : "text-gray-400 hover:text-white"
                   }`}
                 >
-                  Login
+                  Sign In
                 </button>
                 <button
                   type="button"
@@ -779,7 +829,7 @@ function HeaderAuth() {
                 {mode === "register" ? (
                   <label className="block">
                     <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">
-                      Login
+                      Username
                     </span>
                     <input
                       type="text"
@@ -789,9 +839,12 @@ function HeaderAuth() {
                       autoComplete="username"
                       onChange={(event) => setLoginName(event.target.value)}
                       className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55"
-                      placeholder="your_login"
+                      placeholder="your_username"
                     />
                     <span className="mt-2 block text-xs leading-relaxed text-gray-500">
+                      Username without spaces. Letters, numbers, `.`, `_`, and `-` are supported.
+                    </span>
+                    <span className="mt-2 hidden text-xs leading-relaxed text-gray-500">
                       Логин без пробелов. Поддерживаются буквы, цифры, `.`, `_`, `-`.
                     </span>
                   </label>
@@ -799,7 +852,7 @@ function HeaderAuth() {
 
                 <label className="block">
                   <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">
-                    {mode === "register" ? "Email" : "Email or Login"}
+                    {mode === "register" ? "Email" : "Email or Username"}
                   </span>
                   <input
                     type={mode === "register" ? "email" : "text"}
@@ -808,7 +861,7 @@ function HeaderAuth() {
                     onChange={(event) => setIdentifier(event.target.value)}
                     className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55"
                     placeholder={
-                      mode === "register" ? "you@example.com" : "you@example.com or your_login"
+                      mode === "register" ? "you@example.com" : "you@example.com or your_username"
                     }
                   />
                 </label>
@@ -860,7 +913,7 @@ function HeaderAuth() {
                       : "Signing in..."
                     : mode === "register"
                       ? "Create Account"
-                      : "Login"}
+                      : "Sign In"}
                 </button>
               </form>
             </div>
