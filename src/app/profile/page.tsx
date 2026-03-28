@@ -475,8 +475,20 @@ const profileMetaValueStyle = (role: string | null | undefined): CSSProperties =
     color: accentTextColor,
     fontFamily: "var(--font-geist-sans), Arial, Helvetica, sans-serif",
     fontWeight: 700,
-    letterSpacing: "-0.01em",
+    letterSpacing: "0.01em",
     textShadow: `0 0 18px ${withAlpha(accentTextColor, 0.1)}`,
+  };
+};
+const profileMetaValuePillStyle = (role: string | null | undefined): CSSProperties => {
+  const badgeStyle = roleBadgeStyle(role ?? "user");
+  const borderColor =
+    typeof badgeStyle.borderColor === "string" ? badgeStyle.borderColor : "#3a2a31";
+
+  return {
+    borderColor: withAlpha(borderColor, 0.42),
+    backgroundColor: "#140d11",
+    backgroundImage: `linear-gradient(180deg, ${withAlpha(borderColor, 0.14)} 0%, rgba(20,13,17,0.96) 100%)`,
+    boxShadow: `0 0 22px ${withAlpha(borderColor, 0.14)}, inset 0 1px 0 rgba(255,255,255,0.04)`,
   };
 };
 const roleCommentAuthorColor = (role: string | null | undefined) => {
@@ -800,6 +812,7 @@ export default function ProfilePage() {
   const metaCardStyle = profileMetaCardStyle(topProfileRole);
   const metaLabelStyle = profileMetaLabelStyle(topProfileRole);
   const metaValueStyle = profileMetaValueStyle(topProfileRole);
+  const metaValuePillStyle = profileMetaValuePillStyle(topProfileRole);
   const shouldShowVerificationBanner = Boolean(
     isOwner &&
       activeProfile?.email &&
@@ -1362,7 +1375,7 @@ export default function ProfilePage() {
                 {[
                   ["Profile ID", String(activeProfile.profileId ?? "Not assigned")],
                   ["Profile Name", primaryName],
-                  ...(hasUsername || isOwner ? [["Логин", hasUsername ? `@${activeProfile.login}` : "Not set yet"]] : []),
+                  ...(hasUsername || isOwner ? [["Login", hasUsername ? `@${activeProfile.login}` : "Not set yet"]] : []),
                   ["Account Created", formatTime(activeProfile.creationTime)],
                 ].map(([label, value]) => (
                   <div
@@ -1376,12 +1389,19 @@ export default function ProfilePage() {
                     >
                       {label}
                     </p>
-                    <p
-                      style={metaValueStyle}
-                      className="mt-3 break-words text-[18px] leading-relaxed"
-                    >
-                      {value}
-                    </p>
+                    <div className="mt-4">
+                      <span
+                        style={metaValuePillStyle}
+                        className="inline-flex max-w-full items-center rounded-full border px-4 py-2.5"
+                      >
+                        <span
+                          style={metaValueStyle}
+                          className="break-words text-[14px] leading-none sm:text-[15px]"
+                        >
+                          {value}
+                        </span>
+                      </span>
+                    </div>
                   </div>
                 ))}
               </div>
