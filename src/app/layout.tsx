@@ -437,6 +437,7 @@ const firebaseModuleScript = `
     const commentsWithAuthors = [...comments];
     const authorByUid = new Map();
     const authorByProfileId = new Map();
+    const authorByLogin = new Map();
     const authorUids = [...new Set(
       commentsWithAuthors
         .map((comment) => comment.authorUid)
@@ -483,7 +484,39 @@ const firebaseModuleScript = `
       })
     );
 
+    const authorLogins = [...new Set(
+      commentsWithAuthors
+        .filter(
+          (comment) =>
+            !(
+              typeof comment.authorUid === "string" &&
+              comment.authorUid &&
+              authorByUid.has(comment.authorUid)
+            ) &&
+            !(
+              typeof comment.authorProfileId === "number" &&
+              authorByProfileId.has(comment.authorProfileId)
+            )
+        )
+        .map((comment) => normalizeLogin(comment.authorName ?? ""))
+        .filter(Boolean)
+    )];
+
+    await Promise.all(
+      authorLogins.map(async (authorLogin) => {
+        try {
+          const authorDoc = await findUserByLogin(authorLogin);
+
+          if (authorDoc) {
+            authorByLogin.set(authorLogin, authorDoc.data());
+          }
+        } catch (error) {
+        }
+      })
+    );
+
     return commentsWithAuthors.map((comment) => {
+      const authorLogin = normalizeLogin(comment.authorName ?? "");
       const authorDetails =
         (typeof comment.authorUid === "string" && comment.authorUid
           ? authorByUid.get(comment.authorUid)
@@ -491,6 +524,7 @@ const firebaseModuleScript = `
         (typeof comment.authorProfileId === "number"
           ? authorByProfileId.get(comment.authorProfileId)
           : null) ??
+        (authorLogin ? authorByLogin.get(authorLogin) : null) ??
         null;
 
       if (!authorDetails) {
