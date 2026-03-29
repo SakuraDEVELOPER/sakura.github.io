@@ -1732,11 +1732,20 @@ const firebaseModuleScript = `
 
       const inlinePhotoURL = await createInlineAvatarDataUrl(file);
       const photoURL = inlinePhotoURL;
+      const userRef = userRefFor(user.uid);
+      const existingSnapshot = await getDoc(userRef);
+      const existingData = existingSnapshot.exists() ? existingSnapshot.data() : {};
+      const hasStoredProfileRecord =
+        existingSnapshot.exists() && typeof existingData?.profileId === "number";
       let persistedInFirestore = false;
+
+      if (!hasStoredProfileRecord) {
+        await resolveUserSnapshot(user);
+      }
 
       try {
         await setDoc(
-          userRefFor(user.uid),
+          userRef,
           {
             photoURL,
             updatedAt: new Date().toISOString(),
@@ -1747,6 +1756,20 @@ const firebaseModuleScript = `
       } catch (error) {
         if (!isPermissionDeniedError(error)) {
           throw error;
+        }
+
+        if (!hasStoredProfileRecord) {
+          await resolveUserSnapshot(user);
+
+          await setDoc(
+            userRef,
+            {
+              photoURL,
+              updatedAt: new Date().toISOString(),
+            },
+            { merge: true }
+          );
+          persistedInFirestore = true;
         }
       }
 
@@ -1776,9 +1799,19 @@ const firebaseModuleScript = `
         throw createFirebaseError("auth/no-current-user", "Sign in again to update your avatar.");
       }
 
+      const userRef = userRefFor(user.uid);
+      const existingSnapshot = await getDoc(userRef);
+      const existingData = existingSnapshot.exists() ? existingSnapshot.data() : {};
+      const hasStoredProfileRecord =
+        existingSnapshot.exists() && typeof existingData?.profileId === "number";
+
+      if (!hasStoredProfileRecord) {
+        await resolveUserSnapshot(user);
+      }
+
       try {
         await setDoc(
-          userRefFor(user.uid),
+          userRef,
           {
             photoURL: null,
             updatedAt: new Date().toISOString(),
@@ -1790,10 +1823,23 @@ const firebaseModuleScript = `
           throw error;
         }
 
-        throw createFirebaseError(
-          "avatar/delete-failed",
-          "Avatar could not be deleted. Check Firestore rules for users/{uid}."
-        );
+        if (!hasStoredProfileRecord) {
+          await resolveUserSnapshot(user);
+
+          await setDoc(
+            userRef,
+            {
+              photoURL: null,
+              updatedAt: new Date().toISOString(),
+            },
+            { merge: true }
+          );
+        } else {
+          throw createFirebaseError(
+            "avatar/delete-failed",
+            "Avatar could not be deleted. Check Firestore rules for users/{uid}."
+          );
+        }
       }
 
       const currentDetails = window.sakuraCurrentUserSnapshot
