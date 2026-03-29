@@ -1445,21 +1445,26 @@ function HeaderAuth() {
 }
 
 export default function Home() {
-  const handleHeroTrialClick = () => {
+  const handleHeroTrialClick = async () => {
     if (typeof window === "undefined") {
       return;
     }
 
-    const snapshot = window.sakuraCurrentUserSnapshot;
+    let snapshot = window.sakuraCurrentUserSnapshot;
 
     if (snapshot && !snapshot.isAnonymous) {
+      if (isEmailVerificationLocked(snapshot) && window.sakuraFirebaseAuth) {
+        try {
+          snapshot = await window.sakuraFirebaseAuth.refreshVerificationStatus();
+        } catch (error) {}
+      }
+
       if (isEmailVerificationLocked(snapshot)) {
         window.dispatchEvent(new CustomEvent(EMAIL_VERIFICATION_LOCK_EVENT));
-        window.scrollTo({ top: 0, behavior: "smooth" });
         return;
       }
 
-      window.location.assign(profileHref(snapshot.profileId));
+      window.location.assign(profileHref(snapshot?.profileId));
       return;
     }
 
@@ -1514,7 +1519,9 @@ export default function Home() {
             </p>
             <button
               type="button"
-              onClick={handleHeroTrialClick}
+              onClick={() => {
+                void handleHeroTrialClick();
+              }}
               className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/60 bg-[#140f12] px-8 py-3 text-sm font-semibold text-[#ffd8e1] shadow-[0_0_24px_rgba(255,183,197,0.16)] transition-all hover:border-[#ffd1db] hover:bg-[#1c1217] hover:text-white active:scale-95"
             >
               Тестовый период на 7 дней

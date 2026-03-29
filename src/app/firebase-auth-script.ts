@@ -1406,9 +1406,21 @@
       const visitHistory = normalizeVisitHistory(existingData?.visitHistory);
       const presence = normalizePresence(existingData?.presence, window.location.pathname);
       const roles = normalizeRoles(existingData?.roles);
+      const storedEmailVerified =
+        typeof existingData?.emailVerified === "boolean" ? existingData.emailVerified : null;
+      const storedVerificationRequired =
+        typeof existingData?.verificationRequired === "boolean"
+          ? existingData.verificationRequired
+          : null;
+      const storedVerificationEmailSent =
+        typeof existingData?.verificationEmailSent === "boolean"
+          ? existingData.verificationEmailSent
+          : null;
       const profilePayload = {
         uid: user.uid,
         email: user.email ?? null,
+        emailVerified:
+          storedEmailVerified !== null ? storedEmailVerified : Boolean(user.emailVerified),
         login: loginDetails.login,
         loginLower: loginDetails.loginLower,
         displayName:
@@ -1423,6 +1435,12 @@
         roles,
         isBanned: existingData?.isBanned === true,
         bannedAt: resolveBannedAt(existingData),
+        verificationRequired:
+          storedVerificationRequired !== null
+            ? storedVerificationRequired
+            : requiresEmailVerification(roles),
+        verificationEmailSent:
+          storedVerificationEmailSent !== null ? storedVerificationEmailSent : false,
         providerIds,
         creationTime: user.metadata.creationTime ?? null,
         lastSignInTime: user.metadata.lastSignInTime ?? null,
@@ -2927,6 +2945,21 @@
       }
 
       await reload(user);
+
+      if (user.emailVerified) {
+        try {
+          await setDoc(
+            userRefFor(user.uid),
+            {
+              emailVerified: true,
+              verificationRequired: false,
+              verificationEmailSent: false,
+              updatedAt: new Date().toISOString(),
+            },
+            { merge: true }
+          );
+        } catch (error) {}
+      }
 
       const snapshot = await resolveUserSnapshot(user);
       const allowedSnapshot = await enforceActiveSessionNotBanned(snapshot);
