@@ -1871,7 +1871,86 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            <div className="flex w-full flex-col gap-6 self-start">
+            <div className="grid w-full grid-cols-1 gap-6 self-start xl:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)] xl:items-start">
+              <div className="order-1 rounded-[32px] border border-[#201517] bg-[#0d0d0d] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)] xl:self-start">
+                <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">Profile Comments</p>
+                <p className="mt-3 text-sm leading-relaxed text-gray-400">A public wall for this profile. Only signed-in users can leave a message.</p>
+
+                {visibleCurrentUser && !isCurrentAccountBanned ? (
+                  <form onSubmit={handleCommentSubmit} className="mt-5">
+                    <label className="block">
+                      <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">New Comment</span>
+                      <textarea value={commentInput} maxLength={280} rows={4} onChange={(event) => setCommentInput(event.target.value)} className="w-full resize-y rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55" placeholder={`Write something for ${primaryName}...`} />
+                    </label>
+                    <div className="mt-2 flex items-center justify-between gap-3 text-xs text-gray-500">
+                      <span>Posting as @{visibleCurrentUser.login ?? visibleCurrentUser.displayName ?? "member"}</span>
+                      <span>{commentInput.trim().length}/280</span>
+                    </div>
+                    <div className="mt-4 flex flex-wrap items-center gap-3">
+                      <button type="submit" disabled={isCommentSubmitting || !commentInput.trim()} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">{isCommentSubmitting ? "Posting..." : "Post Comment"}</button>
+                    </div>
+                    {commentError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{commentError}</p> : null}
+                    {commentSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{commentSuccess}</p> : null}
+                  </form>
+                ) : visibleCurrentUser && isCurrentAccountBanned ? (
+                  <div className="mt-5 rounded-[24px] border border-red-400/20 bg-red-500/10 px-4 py-4">
+                    <p className="text-sm leading-relaxed text-red-100/85">This account has been banned by an administrator. Posting and profile actions are disabled.</p>
+                  </div>
+                ) : (
+                  <div className="mt-5 rounded-[24px] border border-[#1d1d1d] bg-[#090909] px-4 py-4">
+                    <p className="text-sm leading-relaxed text-gray-400">Sign in to leave a comment on this profile. Guests can read comments, but cannot post.</p>
+                  </div>
+                )}
+
+                <div className="mt-6">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">Recent Messages</p>
+                  {isCommentsLoading ? <p className="mt-4 text-sm text-gray-500">Loading comments...</p> : null}
+                  {!isCommentsLoading && commentsError ? <p className="mt-4 text-sm leading-relaxed text-[#ff9aa9]">{commentsError}</p> : null}
+                  {!isCommentsLoading && !commentsError && !comments.length ? <p className="mt-4 text-sm text-gray-500">No comments yet.</p> : null}
+                  {!isCommentsLoading && !commentsError && comments.length ? <div className="mt-4 flex flex-col gap-3">
+                    {comments.map((comment) => {
+                      const isDeletingComment = deletingCommentId === comment.id;
+                      const isEditingComment = editingCommentId === comment.id;
+                      const isSavingCommentUpdate = isEditingComment && isCommentUpdating;
+                      const showEditAction = canEditComment(comment);
+                      const showDeleteAction = canDeleteComment(comment);
+                      const commentInitials = initialsFromText(comment.authorName);
+                      const resolvedCommentAuthorRole = resolveCommentAuthorRole(comment);
+                      const resolvedCommentAuthorPhotoURL = resolveCommentAuthorPhotoURL(comment);
+                      const commentAuthorStyle = roleCommentAuthorStyle(resolvedCommentAuthorRole);
+
+                      return <div key={comment.id} className="rounded-[24px] border border-[#1d1d1d] bg-[#090909] px-4 py-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex min-w-0 items-start gap-3">
+                            {resolvedCommentAuthorPhotoURL ? <AvatarMedia src={resolvedCommentAuthorPhotoURL} alt={comment.authorName} loading="lazy" decoding="async" className="h-11 w-11 shrink-0 rounded-2xl border border-[#2a2022] object-cover shadow-[0_0_18px_rgba(255,183,197,0.1)]" /> : <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#2a2022] bg-[#1a1012] text-[11px] font-black uppercase text-[#ffb7c5] shadow-[0_0_18px_rgba(255,183,197,0.08)]">{commentInitials}</div>}
+                            <div className="min-w-0">
+                              {comment.authorProfileId ? <a href={profilePath(comment.authorProfileId)} style={commentAuthorStyle} className="block truncate text-sm font-semibold transition hover:text-white">{comment.authorName}</a> : <p style={commentAuthorStyle} className="truncate text-sm font-semibold">{comment.authorName}</p>}
+                              <p className="mt-1 text-xs text-gray-500">{formatTime(comment.createdAt)}</p>
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                            {showEditAction && !isEditingComment ? <button type="button" onClick={() => handleCommentEditStart(comment)} disabled={isDeletingComment || isCommentUpdating} className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60">Edit</button> : null}
+                            {showDeleteAction ? <button type="button" onClick={() => handleCommentDelete(comment.id)} disabled={isDeletingComment || isSavingCommentUpdate} className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60">{isDeletingComment ? "Deleting..." : "Delete"}</button> : null}
+                          </div>
+                        </div>
+                        {isEditingComment ? <div className="mt-3">
+                          <textarea value={editingCommentMessage} maxLength={280} rows={4} onChange={(event) => setEditingCommentMessage(event.target.value)} className="w-full resize-y rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55" placeholder="Update comment..." />
+                          <div className="mt-2 flex items-center justify-between gap-3 text-xs text-gray-500">
+                            <span>{editingCommentMessage.trim().length}/280</span>
+                            <span>{comment.updatedAt ? `Edited ${formatTime(comment.updatedAt)}` : `Posted ${formatTime(comment.createdAt)}`}</span>
+                          </div>
+                          <div className="mt-4 flex flex-wrap items-center gap-3">
+                            <button type="button" onClick={() => handleCommentUpdate(comment.id)} disabled={isSavingCommentUpdate || !editingCommentMessage.trim()} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">{isSavingCommentUpdate ? "Saving..." : "Save"}</button>
+                            <button type="button" onClick={handleCommentEditCancel} disabled={isSavingCommentUpdate} className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60">Cancel</button>
+                          </div>
+                        </div> : <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-relaxed text-gray-300">{comment.message}</p>}
+                      </div>;
+                    })}
+                  </div> : null}
+                </div>
+              </div>
+
+              <div className="order-2 flex flex-col gap-6 xl:self-start">
               {isOwner && activeProfile ? <div className="rounded-[32px] border border-[#201517] bg-[radial-gradient(circle_at_top,rgba(255,183,197,0.14),transparent_72%),linear-gradient(180deg,#0d0d0d_0%,#090909_100%)] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
                 <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">Profile Settings</p>
                 <h2 className="mt-3 text-[22px] font-black uppercase tracking-tight text-white">
@@ -1992,82 +2071,6 @@ export default function ProfilePage() {
                 </div>
               </div> : null}
 
-              <div className="rounded-[32px] border border-[#201517] bg-[#0d0d0d] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
-                <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">Profile Comments</p>
-                <p className="mt-3 text-sm leading-relaxed text-gray-400">A public wall for this profile. Only signed-in users can leave a message.</p>
-
-                {visibleCurrentUser && !isCurrentAccountBanned ? (
-                  <form onSubmit={handleCommentSubmit} className="mt-5">
-                    <label className="block">
-                      <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">New Comment</span>
-                      <textarea value={commentInput} maxLength={280} rows={4} onChange={(event) => setCommentInput(event.target.value)} className="w-full resize-y rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55" placeholder={`Write something for ${primaryName}...`} />
-                    </label>
-                    <div className="mt-2 flex items-center justify-between gap-3 text-xs text-gray-500">
-                      <span>Posting as @{visibleCurrentUser.login ?? visibleCurrentUser.displayName ?? "member"}</span>
-                      <span>{commentInput.trim().length}/280</span>
-                    </div>
-                    <div className="mt-4 flex flex-wrap items-center gap-3">
-                      <button type="submit" disabled={isCommentSubmitting || !commentInput.trim()} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">{isCommentSubmitting ? "Posting..." : "Post Comment"}</button>
-                    </div>
-                    {commentError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{commentError}</p> : null}
-                    {commentSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{commentSuccess}</p> : null}
-                  </form>
-                ) : visibleCurrentUser && isCurrentAccountBanned ? (
-                  <div className="mt-5 rounded-[24px] border border-red-400/20 bg-red-500/10 px-4 py-4">
-                    <p className="text-sm leading-relaxed text-red-100/85">This account has been banned by an administrator. Posting and profile actions are disabled.</p>
-                  </div>
-                ) : (
-                  <div className="mt-5 rounded-[24px] border border-[#1d1d1d] bg-[#090909] px-4 py-4">
-                    <p className="text-sm leading-relaxed text-gray-400">Sign in to leave a comment on this profile. Guests can read comments, but cannot post.</p>
-                  </div>
-                )}
-
-                <div className="mt-6">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">Recent Messages</p>
-                  {isCommentsLoading ? <p className="mt-4 text-sm text-gray-500">Loading comments...</p> : null}
-                  {!isCommentsLoading && commentsError ? <p className="mt-4 text-sm leading-relaxed text-[#ff9aa9]">{commentsError}</p> : null}
-                  {!isCommentsLoading && !commentsError && !comments.length ? <p className="mt-4 text-sm text-gray-500">No comments yet.</p> : null}
-                  {!isCommentsLoading && !commentsError && comments.length ? <div className="mt-4 flex flex-col gap-3">
-                    {comments.map((comment) => {
-                      const isDeletingComment = deletingCommentId === comment.id;
-                      const isEditingComment = editingCommentId === comment.id;
-                      const isSavingCommentUpdate = isEditingComment && isCommentUpdating;
-                      const showEditAction = canEditComment(comment);
-                      const showDeleteAction = canDeleteComment(comment);
-                      const commentInitials = initialsFromText(comment.authorName);
-                      const resolvedCommentAuthorRole = resolveCommentAuthorRole(comment);
-                      const resolvedCommentAuthorPhotoURL = resolveCommentAuthorPhotoURL(comment);
-                      const commentAuthorStyle = roleCommentAuthorStyle(resolvedCommentAuthorRole);
-
-                      return <div key={comment.id} className="rounded-[24px] border border-[#1d1d1d] bg-[#090909] px-4 py-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex min-w-0 items-start gap-3">
-                            {resolvedCommentAuthorPhotoURL ? <AvatarMedia src={resolvedCommentAuthorPhotoURL} alt={comment.authorName} loading="lazy" decoding="async" className="h-11 w-11 shrink-0 rounded-2xl border border-[#2a2022] object-cover shadow-[0_0_18px_rgba(255,183,197,0.1)]" /> : <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#2a2022] bg-[#1a1012] text-[11px] font-black uppercase text-[#ffb7c5] shadow-[0_0_18px_rgba(255,183,197,0.08)]">{commentInitials}</div>}
-                            <div className="min-w-0">
-                              {comment.authorProfileId ? <a href={profilePath(comment.authorProfileId)} style={commentAuthorStyle} className="block truncate text-sm font-semibold transition hover:text-white">{comment.authorName}</a> : <p style={commentAuthorStyle} className="truncate text-sm font-semibold">{comment.authorName}</p>}
-                              <p className="mt-1 text-xs text-gray-500">{formatTime(comment.createdAt)}</p>
-                            </div>
-                          </div>
-                          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-                            {showEditAction && !isEditingComment ? <button type="button" onClick={() => handleCommentEditStart(comment)} disabled={isDeletingComment || isCommentUpdating} className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60">Edit</button> : null}
-                            {showDeleteAction ? <button type="button" onClick={() => handleCommentDelete(comment.id)} disabled={isDeletingComment || isSavingCommentUpdate} className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60">{isDeletingComment ? "Deleting..." : "Delete"}</button> : null}
-                          </div>
-                        </div>
-                        {isEditingComment ? <div className="mt-3">
-                          <textarea value={editingCommentMessage} maxLength={280} rows={4} onChange={(event) => setEditingCommentMessage(event.target.value)} className="w-full resize-y rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55" placeholder="Update comment..." />
-                          <div className="mt-2 flex items-center justify-between gap-3 text-xs text-gray-500">
-                            <span>{editingCommentMessage.trim().length}/280</span>
-                            <span>{comment.updatedAt ? `Edited ${formatTime(comment.updatedAt)}` : `Posted ${formatTime(comment.createdAt)}`}</span>
-                          </div>
-                          <div className="mt-4 flex flex-wrap items-center gap-3">
-                            <button type="button" onClick={() => handleCommentUpdate(comment.id)} disabled={isSavingCommentUpdate || !editingCommentMessage.trim()} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">{isSavingCommentUpdate ? "Saving..." : "Save"}</button>
-                            <button type="button" onClick={handleCommentEditCancel} disabled={isSavingCommentUpdate} className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60">Cancel</button>
-                          </div>
-                        </div> : <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-relaxed text-gray-300">{comment.message}</p>}
-                      </div>;
-                    })}
-                  </div> : null}
-                </div>
               </div>
 
             </div>
