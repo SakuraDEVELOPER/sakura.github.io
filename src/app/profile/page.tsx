@@ -958,16 +958,16 @@ export default function ProfilePage() {
     return userKeys.some((value) => normalizeCommentAuthorKey(value) === authorKey);
   };
   const resolveCommentAuthorRole = (comment: ProfileComment) => {
-    if (comment.authorAccentRole) {
-      return comment.authorAccentRole;
-    }
-
     if (activeProfile && commentMatchesUser(comment, activeProfile)) {
       return pickCommentAuthorAccentRole(activeProfile.roles) ?? null;
     }
 
     if (visibleCurrentUser && commentMatchesUser(comment, visibleCurrentUser)) {
       return pickCommentAuthorAccentRole(visibleCurrentUser.roles) ?? null;
+    }
+
+    if (comment.authorAccentRole) {
+      return normalizeRoleName(comment.authorAccentRole) || null;
     }
 
     return null;
