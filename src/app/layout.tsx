@@ -87,15 +87,16 @@ const firebaseModuleScript = `
   const LOGIN_MAX_LENGTH = 24;
   const LOGIN_MIN_LENGTH = 3;
   const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
+  const MAX_PASSTHROUGH_AVATAR_BYTES = 512 * 1024;
   const AVATAR_INLINE_SIZE = 160;
   const AVATAR_EXPORT_QUALITY = 0.72;
-  const PASSTHROUGH_AVATAR_CONTENT_TYPES = new Set(["image/gif", "image/webp"]);
+  const PASSTHROUGH_AVATAR_CONTENT_TYPES = new Set(["image/gif", "image/webp", "video/mp4", "video/webm"]);
   const PROFILE_COMMENT_MAX_LENGTH = 280;
   const PROFILE_LOOKUP_TIMEOUT_MS = 5000;
   const USER_UPDATE_EVENT = "sakura-user-update";
   const AUTH_STATE_SETTLED_EVENT = "sakura-auth-state-settled";
   const CURRENT_PROFILE_ID_STORAGE_KEY = "sakura-current-profile-id";
-  const AVATAR_CONTENT_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+  const AVATAR_CONTENT_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4", "video/webm"]);
   const LOGIN_PATTERN = /^[A-Za-zА-Яа-яЁё0-9._-]+$/;
 
   const createFirebaseError = (code, message) => {
@@ -1689,12 +1690,19 @@ const firebaseModuleScript = `
       if (!AVATAR_CONTENT_TYPES.has(file.type)) {
         throw createFirebaseError(
           "storage/unsupported-file-type",
-          "Avatar must be PNG, JPG, WEBP, or GIF."
+          "Avatar must be PNG, JPG, WEBP, GIF, MP4, or WEBM."
         );
       }
 
       if (file.size > MAX_AVATAR_BYTES) {
         throw createFirebaseError("storage/file-too-large", "Avatar must be 5 MB or smaller.");
+      }
+
+      if (PASSTHROUGH_AVATAR_CONTENT_TYPES.has(file.type) && file.size > MAX_PASSTHROUGH_AVATAR_BYTES) {
+        throw createFirebaseError(
+          "storage/file-too-large",
+          "GIF, WEBP, MP4, and WEBM avatars must be 512 KB or smaller."
+        );
       }
 
       const inlinePhotoURL = await createInlineAvatarDataUrl(file);

@@ -5,6 +5,7 @@
 import Link from "next/link";
 import { LazyMotion, domAnimation, m } from "framer-motion";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { AvatarMedia } from "./avatar-media";
 
 type ShowcaseSlide = {
   id: string;
@@ -870,7 +871,7 @@ function HeaderAuth() {
             className="group inline-flex max-w-full items-center gap-3 rounded-full border py-1.5 pr-4 pl-1.5 transition hover:opacity-90"
           >
             {visibleUser.photoURL ? (
-              <img
+              <AvatarMedia
                 src={visibleUser.photoURL}
                 alt={userLabel}
                 decoding="async"

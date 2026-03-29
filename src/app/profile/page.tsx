@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type FormEvent } from "react";
+import { AvatarMedia, AVATAR_FILE_ACCEPT } from "../avatar-media";
 
 type UserProfile = {
   uid: string;
@@ -1386,7 +1387,7 @@ export default function ProfilePage() {
               <div className="border-b border-[#1b1b1b] bg-[radial-gradient(circle_at_top,rgba(255,183,197,0.16),transparent_55%)] px-8 py-8">
                 <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
                   <div className="flex shrink-0 flex-col items-center gap-3">
-                    {activeProfile.photoURL ? <img src={activeProfile.photoURL} alt={primaryName} decoding="async" className="h-24 w-24 rounded-[28px] border border-[#2c2023] object-cover shadow-[0_0_30px_rgba(255,183,197,0.14)]" /> : <div className="flex h-24 w-24 items-center justify-center rounded-[28px] border border-[#2c2023] bg-[#1a1012] text-2xl font-black uppercase text-[#ffb7c5] shadow-[0_0_30px_rgba(255,183,197,0.14)]">{initials}</div>}
+                    {activeProfile.photoURL ? <AvatarMedia src={activeProfile.photoURL} alt={primaryName} decoding="async" className="h-24 w-24 rounded-[28px] border border-[#2c2023] object-cover shadow-[0_0_30px_rgba(255,183,197,0.14)]" /> : <div className="flex h-24 w-24 items-center justify-center rounded-[28px] border border-[#2c2023] bg-[#1a1012] text-2xl font-black uppercase text-[#ffb7c5] shadow-[0_0_30px_rgba(255,183,197,0.14)]">{initials}</div>}
                     <span className={`inline-flex min-w-[104px] shrink-0 justify-center rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${activeProfile.presence?.isOnline ? "border-[#1f3b2f] bg-[#0d1713] text-[#8ce5b2]" : "border-[#312228] bg-[#140d11] text-[#ffb7c5]"}`}>{activeProfile.presence?.isOnline ? "Online" : "Offline"}</span>
                   </div>
                   <div className="min-w-0">
@@ -1548,8 +1549,8 @@ export default function ProfilePage() {
                 <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">Avatar</p>
                 <div className="mt-5 rounded-[24px] border border-[#1d1d1d] bg-[#090909] p-4">
                   <p className="text-sm font-semibold text-white">{activeProfile.photoURL ? "Custom Avatar" : "Generated Avatar"}</p>
-                  <p className="mt-2 text-xs leading-relaxed text-gray-400">{isOwner ? "Upload, replace, or delete your avatar here. GIF and WEBP animation are supported." : "Only the owner can change this avatar."}</p>
-                  {isOwner ? <div className="mt-4 flex flex-wrap items-center gap-3"><button type="button" onClick={() => avatarInputRef.current?.click()} disabled={isAvatarUploading || isAvatarDeleting} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">{isAvatarUploading ? "Uploading..." : activeProfile.photoURL ? "Replace Avatar" : "Upload Avatar"}</button>{activeProfile.photoURL ? <button type="button" onClick={handleAvatarDelete} disabled={isAvatarUploading || isAvatarDeleting} className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60">{isAvatarDeleting ? "Deleting..." : "Delete Avatar"}</button> : null}<input ref={avatarInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif,.png,.jpg,.jpeg,.webp,.gif" onChange={handleAvatarChange} className="hidden" /></div> : null}
+                  <p className="mt-2 text-xs leading-relaxed text-gray-400">{isOwner ? "Upload, replace, or delete your avatar here. GIF, WEBP, MP4, and WEBM are supported. Video avatars play muted." : "Only the owner can change this avatar."}</p>
+                  {isOwner ? <div className="mt-4 flex flex-wrap items-center gap-3"><button type="button" onClick={() => avatarInputRef.current?.click()} disabled={isAvatarUploading || isAvatarDeleting} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">{isAvatarUploading ? "Uploading..." : activeProfile.photoURL ? "Replace Avatar" : "Upload Avatar"}</button>{activeProfile.photoURL ? <button type="button" onClick={handleAvatarDelete} disabled={isAvatarUploading || isAvatarDeleting} className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60">{isAvatarDeleting ? "Deleting..." : "Delete Avatar"}</button> : null}<input ref={avatarInputRef} type="file" accept={AVATAR_FILE_ACCEPT} onChange={handleAvatarChange} className="hidden" /></div> : null}
                   {avatarError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{avatarError}</p> : null}
                   {avatarSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{avatarSuccess}</p> : null}
                 </div>
@@ -1598,7 +1599,7 @@ export default function ProfilePage() {
                       return <div key={comment.id} className="rounded-[24px] border border-[#1d1d1d] bg-[#090909] px-4 py-4">
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex min-w-0 items-start gap-3">
-                            {resolvedCommentAuthorPhotoURL ? <img src={resolvedCommentAuthorPhotoURL} alt={comment.authorName} loading="lazy" decoding="async" className="h-11 w-11 shrink-0 rounded-2xl border border-[#2a2022] object-cover shadow-[0_0_18px_rgba(255,183,197,0.1)]" /> : <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#2a2022] bg-[#1a1012] text-[11px] font-black uppercase text-[#ffb7c5] shadow-[0_0_18px_rgba(255,183,197,0.08)]">{commentInitials}</div>}
+                            {resolvedCommentAuthorPhotoURL ? <AvatarMedia src={resolvedCommentAuthorPhotoURL} alt={comment.authorName} loading="lazy" decoding="async" className="h-11 w-11 shrink-0 rounded-2xl border border-[#2a2022] object-cover shadow-[0_0_18px_rgba(255,183,197,0.1)]" /> : <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#2a2022] bg-[#1a1012] text-[11px] font-black uppercase text-[#ffb7c5] shadow-[0_0_18px_rgba(255,183,197,0.08)]">{commentInitials}</div>}
                             <div className="min-w-0">
                               {comment.authorProfileId ? <a href={profilePath(comment.authorProfileId)} style={commentAuthorStyle} className="block truncate text-sm font-semibold transition hover:text-white">{comment.authorName}</a> : <p style={commentAuthorStyle} className="truncate text-sm font-semibold">{comment.authorName}</p>}
                               <p className="mt-1 text-xs text-gray-500">{formatTime(comment.createdAt)}</p>
@@ -1841,7 +1842,7 @@ export default function ProfilePage() {
 
                     <section className="rounded-[24px] border border-[#1d1d1d] bg-[#0d0d0d] p-5">
                       <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">Avatar</p>
-                      <p className="mt-3 text-xs leading-relaxed text-gray-400">Upload, replace, or delete the avatar for this account. GIF and WEBP animation are supported.</p>
+                      <p className="mt-3 text-xs leading-relaxed text-gray-400">Upload, replace, or delete the avatar for this account. GIF, WEBP, MP4, and WEBM are supported. Video avatars play muted.</p>
                       <div className="mt-4 flex flex-wrap items-center gap-3">
                         <button
                           type="button"
@@ -1864,7 +1865,7 @@ export default function ProfilePage() {
                         <input
                           ref={adminAvatarInputRef}
                           type="file"
-                          accept="image/png,image/jpeg,image/webp,image/gif,.png,.jpg,.jpeg,.webp,.gif"
+                          accept={AVATAR_FILE_ACCEPT}
                           onChange={handleAvatarChange}
                           className="hidden"
                         />
