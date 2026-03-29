@@ -5,7 +5,7 @@
 import { useEffect, useState, type CSSProperties } from "react";
 
 export const AVATAR_FILE_ACCEPT =
-  "image/png,image/jpeg,.png,.jpg,.jpeg";
+  "image/png,image/jpeg,image/gif,.png,.jpg,.jpeg,.gif";
 
 export const AVATAR_CONTENT_TYPES = new Set([
   "image/jpeg",

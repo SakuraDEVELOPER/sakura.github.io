@@ -2111,17 +2111,25 @@
         );
       }
 
-      if (!STORAGE_AVATAR_UPLOADS_ENABLED && PASSTHROUGH_AVATAR_CONTENT_TYPES.has(file.type)) {
+      if (
+        !STORAGE_AVATAR_UPLOADS_ENABLED &&
+        PASSTHROUGH_AVATAR_CONTENT_TYPES.has(file.type) &&
+        file.type !== "image/gif"
+      ) {
         throw createFirebaseError(
           "avatar/external-url-required",
-          "Use Avatar URL for GIF, WEBP, MP4, and WEBM in this project."
+          "Use Avatar URL for WEBP, MP4, and WEBM in this project."
         );
       }
 
-      if (!STORAGE_AVATAR_UPLOADS_ENABLED && PASSTHROUGH_AVATAR_CONTENT_TYPES.has(file.type)) {
+      if (
+        !STORAGE_AVATAR_UPLOADS_ENABLED &&
+        PASSTHROUGH_AVATAR_CONTENT_TYPES.has(file.type) &&
+        file.type !== "image/gif"
+      ) {
         throw createFirebaseError(
           "avatar/external-url-required",
-          "Use Avatar URL for GIF, WEBP, MP4, and WEBM in this project."
+          "Use Avatar URL for WEBP, MP4, and WEBM in this project."
         );
       }
 
