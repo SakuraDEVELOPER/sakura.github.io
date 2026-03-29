@@ -1872,6 +1872,18 @@ export default function ProfilePage() {
             </div>
 
             <div className="flex w-full flex-col gap-6 self-start">
+              {isOwner && activeProfile && (!isProfileControlsOpen || activeProfile.isBanned) ? <div className="rounded-[32px] border border-[#201517] bg-[radial-gradient(circle_at_top,rgba(255,183,197,0.14),transparent_72%),linear-gradient(180deg,#0d0d0d_0%,#090909_100%)] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">Profile Settings</p>
+                  {!activeProfile.isBanned ? <button type="button" onClick={() => setIsProfileControlsOpen(true)} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/45 hover:text-white">
+                    Manage Account
+                  </button> : null}
+                </div>
+                {activeProfile.isBanned ? <p className="mt-3 text-sm leading-relaxed text-gray-400">
+                  This account is banned. Profile changes and new actions stay locked until a root account removes the ban.
+                </p> : null}
+              </div> : null}
+
               {(!isOwner || !isProfileControlsOpen || activeProfile?.isBanned) ? <div className="rounded-[32px] border border-[#201517] bg-[#0d0d0d] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
                 <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">Profile Comments</p>
                 <p className="mt-3 text-sm leading-relaxed text-gray-400">A public wall for this profile. Only signed-in users can leave a message.</p>
@@ -1951,23 +1963,13 @@ export default function ProfilePage() {
               </div> : null}
 
               <div className="flex flex-col gap-6">
-              {isOwner && activeProfile ? <div className="rounded-[32px] border border-[#201517] bg-[radial-gradient(circle_at_top,rgba(255,183,197,0.14),transparent_72%),linear-gradient(180deg,#0d0d0d_0%,#090909_100%)] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
-                <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">Profile Settings</p>
-                <h2 className="mt-3 text-[22px] font-black uppercase tracking-tight text-white">
-                  {activeProfile.isBanned ? "Account Access Restricted" : "Manage Your Identity"}
-                </h2>
-                {activeProfile.isBanned ? <p className="mt-3 text-sm leading-relaxed text-gray-400">
-                  This account is banned. Profile changes and new actions stay locked until a root account removes the ban.
-                </p> : null}
-                {!activeProfile.isBanned ? <div className="mt-5 flex flex-wrap items-center gap-3">
-                  <button type="button" onClick={() => setIsProfileControlsOpen((currentValue) => !currentValue)} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/45 hover:text-white">
-                    {isProfileControlsOpen ? "Hide Controls" : "Open Controls"}
-                  </button>
-                </div> : null}
-              </div> : null}
-
               {isOwner && activeProfile && isProfileControlsOpen && !activeProfile.isBanned ? <div className="rounded-[32px] border border-[#201517] bg-[#0d0d0d] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
-                <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">Profile Name</p>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">Profile Name</p>
+                  <button type="button" onClick={() => setIsProfileControlsOpen(false)} className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white">
+                    Back
+                  </button>
+                </div>
                 <p className="mt-3 text-sm leading-relaxed text-gray-400">This name is shown at the top of your profile. It is separate from your login.</p>
                 <div className="mt-5">
                   <label className="block">
