@@ -1290,6 +1290,8 @@ const firebaseModuleScript = `
       const userRef = userRefFor(user.uid);
       const existingSnapshot = await getDoc(userRef);
       const existingData = existingSnapshot.exists() ? existingSnapshot.data() : {};
+      const hasStoredProfileRecord =
+        existingSnapshot.exists() && typeof existingData?.profileId === "number";
       const previousLogin =
         typeof existingData?.login === "string" ? existingData.login.trim() : null;
       const existingDisplayName =
@@ -1303,6 +1305,25 @@ const firebaseModuleScript = `
       const nextDisplayName = shouldSyncDisplayName
         ? usernameDetails.login
         : existingDisplayName ?? authDisplayName ?? usernameDetails.login;
+      const syncAuthDisplayNameIfNeeded = async () => {
+        if (shouldSyncDisplayName && authDisplayName !== nextDisplayName) {
+          try {
+            await updateProfile(user, { displayName: nextDisplayName });
+          } catch (error) {
+            console.error("Failed to sync Firebase Auth displayName after username change:", error);
+          }
+        }
+      };
+
+      if (!hasStoredProfileRecord) {
+        const recoveredSnapshot = await resolveUserSnapshot(user, {
+          requestedLogin: usernameDetails.login,
+          preferredDisplayName: nextDisplayName,
+        });
+
+        await syncAuthDisplayNameIfNeeded();
+        return recoveredSnapshot;
+      }
 
       try {
         await setDoc(
@@ -1320,19 +1341,23 @@ const firebaseModuleScript = `
           throw error;
         }
 
+        if (!hasStoredProfileRecord) {
+          const recoveredSnapshot = await resolveUserSnapshot(user, {
+            requestedLogin: usernameDetails.login,
+            preferredDisplayName: nextDisplayName,
+          });
+
+          await syncAuthDisplayNameIfNeeded();
+          return recoveredSnapshot;
+        }
+
         throw createFirebaseError(
           "username/persist-failed",
           "Username could not be saved. Check Firestore rules for users/{uid}."
         );
       }
 
-      if (shouldSyncDisplayName && authDisplayName !== nextDisplayName) {
-        try {
-          await updateProfile(user, { displayName: nextDisplayName });
-        } catch (error) {
-          console.error("Failed to sync Firebase Auth displayName after username change:", error);
-        }
-      }
+      await syncAuthDisplayNameIfNeeded();
 
       const snapshot = publishUserSnapshot(
         toUserSnapshot(user, {
