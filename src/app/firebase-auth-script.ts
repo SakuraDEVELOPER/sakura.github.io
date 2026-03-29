@@ -2369,7 +2369,7 @@
       return comment.id;
     };
 
-    const updateProfileComment = async (commentId, message) => {
+    const updateProfileComment = async (commentId, message, mediaFile = null, removeMedia = false) => {
       const normalizedCommentId = typeof commentId === "string" ? commentId.trim() : "";
 
       if (!normalizedCommentId) {
@@ -2377,13 +2377,6 @@
       }
 
       const normalizedMessage = normalizeProfileCommentMessage(message);
-
-      if (!normalizedMessage) {
-        throw createFirebaseError(
-          "comments/empty-message",
-          "Write a comment before saving."
-        );
-      }
 
       const user = auth.currentUser;
 
@@ -2423,6 +2416,23 @@
         );
       }
 
+      const commentMedia = mediaFile instanceof File
+        ? await createInlineCommentMedia(mediaFile)
+        : null;
+      const finalMediaURL = commentMedia
+        ? commentMedia.mediaURL
+        : (removeMedia ? null : (comment.mediaURL ?? null));
+      const finalMediaType = commentMedia
+        ? commentMedia.mediaType
+        : (removeMedia ? null : (comment.mediaType ?? null));
+
+      if (!normalizedMessage && !finalMediaURL) {
+        throw createFirebaseError(
+          "comments/empty-message",
+          "Write a comment or attach media before saving."
+        );
+      }
+
       const updatedAt = new Date().toISOString();
 
       try {
@@ -2430,6 +2440,8 @@
           commentRef,
           {
             message: normalizedMessage,
+            mediaURL: finalMediaURL,
+            mediaType: finalMediaType,
             updatedAt,
           },
           { merge: true }
@@ -2448,6 +2460,8 @@
       return toStoredProfileComment(comment.id, {
         ...comment,
         message: normalizedMessage,
+        mediaURL: finalMediaURL,
+        mediaType: finalMediaType,
         updatedAt,
       });
     };

@@ -47,7 +47,12 @@ type Bridge = {
   getProfileByAuthorName: (authorName: string) => Promise<UserProfile | null>;
   getProfileComments: (profileId: number) => Promise<ProfileComment[]>;
   addProfileComment: (profileId: number, message: string, mediaFile?: File | null) => Promise<ProfileComment>;
-  updateProfileComment: (commentId: string, message: string) => Promise<ProfileComment | null>;
+  updateProfileComment: (
+    commentId: string,
+    message: string,
+    mediaFile?: File | null,
+    removeMedia?: boolean
+  ) => Promise<ProfileComment | null>;
   deleteProfileComment: (commentId: string) => Promise<string | null>;
   resendVerificationEmail: () => Promise<UserProfile | null>;
   refreshVerificationStatus: () => Promise<UserProfile | null>;
@@ -842,11 +847,15 @@ export default function ProfilePage() {
   const [isCommentSubmitting, setIsCommentSubmitting] = useState(false);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentMessage, setEditingCommentMessage] = useState("");
+  const [editingCommentMediaFile, setEditingCommentMediaFile] = useState<File | null>(null);
+  const [editingCommentMediaPreviewUrl, setEditingCommentMediaPreviewUrl] = useState<string | null>(null);
+  const [isEditingCommentMediaRemoved, setIsEditingCommentMediaRemoved] = useState(false);
   const [isCommentUpdating, setIsCommentUpdating] = useState(false);
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
   const commentTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const editingCommentTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const commentMediaInputRef = useRef<HTMLInputElement | null>(null);
+  const editingCommentMediaInputRef = useRef<HTMLInputElement | null>(null);
 
   const syncTextareaHeight = (element: HTMLTextAreaElement | null) => {
     if (!element) return;
@@ -879,6 +888,20 @@ export default function ProfilePage() {
   useEffect(() => {
     syncTextareaHeight(editingCommentTextareaRef.current);
   }, [editingCommentId, editingCommentMessage]);
+
+  useEffect(() => {
+    if (!editingCommentMediaFile) {
+      setEditingCommentMediaPreviewUrl(null);
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(editingCommentMediaFile);
+    setEditingCommentMediaPreviewUrl(objectUrl);
+
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [editingCommentMediaFile]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1277,6 +1300,9 @@ export default function ProfilePage() {
       setCommentSuccess(null);
       setEditingCommentId(null);
       setEditingCommentMessage("");
+      setEditingCommentMediaFile(null);
+      setEditingCommentMediaPreviewUrl(null);
+      setIsEditingCommentMediaRemoved(false);
       setIsCommentUpdating(false);
       setDeletingCommentId(null);
       return;
@@ -1302,6 +1328,9 @@ export default function ProfilePage() {
     setCommentSuccess(null);
     setEditingCommentId(null);
     setEditingCommentMessage("");
+    setEditingCommentMediaFile(null);
+    setEditingCommentMediaPreviewUrl(null);
+    setIsEditingCommentMediaRemoved(false);
     setIsCommentUpdating(false);
     setDeletingCommentId(null);
   }, [activeProfile, activeProfileRoleSignature]);
@@ -1900,6 +1929,9 @@ export default function ProfilePage() {
       if (editingCommentId === resolvedCommentId) {
         setEditingCommentId(null);
         setEditingCommentMessage("");
+        setEditingCommentMediaFile(null);
+        setEditingCommentMediaPreviewUrl(null);
+        setIsEditingCommentMediaRemoved(false);
       }
 
       setCommentSuccess("Comment deleted.");
@@ -1915,23 +1947,67 @@ export default function ProfilePage() {
     setCommentSuccess(null);
     setEditingCommentId(comment.id);
     setEditingCommentMessage(comment.message);
+    setEditingCommentMediaFile(null);
+    setEditingCommentMediaPreviewUrl(null);
+    setIsEditingCommentMediaRemoved(false);
+    if (editingCommentMediaInputRef.current) {
+      editingCommentMediaInputRef.current.value = "";
+    }
   };
 
   const handleCommentEditCancel = () => {
     setEditingCommentId(null);
     setEditingCommentMessage("");
+    setEditingCommentMediaFile(null);
+    setEditingCommentMediaPreviewUrl(null);
+    setIsEditingCommentMediaRemoved(false);
+    if (editingCommentMediaInputRef.current) {
+      editingCommentMediaInputRef.current.value = "";
+    }
+  };
+
+  const handleEditingCommentMediaChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const nextFile = event.target.files?.[0] ?? null;
+    setCommentError(null);
+    setCommentSuccess(null);
+    setEditingCommentMediaFile(nextFile);
+    if (nextFile) {
+      setIsEditingCommentMediaRemoved(false);
+    }
+  };
+
+  const clearEditingCommentMediaSelection = () => {
+    setEditingCommentMediaFile(null);
+    if (editingCommentMediaInputRef.current) {
+      editingCommentMediaInputRef.current.value = "";
+    }
+  };
+
+  const removeEditingCommentMedia = () => {
+    setEditingCommentMediaFile(null);
+    setEditingCommentMediaPreviewUrl(null);
+    setIsEditingCommentMediaRemoved(true);
+    if (editingCommentMediaInputRef.current) {
+      editingCommentMediaInputRef.current.value = "";
+    }
   };
 
   const handleCommentUpdate = async (commentId: string) => {
     const bridge = getWindowState().sakuraFirebaseAuth;
     const nextMessage = editingCommentMessage.trim();
+    const currentComment = comments.find((comment) => comment.id === commentId) ?? null;
+    const willKeepExistingMedia =
+      Boolean(currentComment?.mediaURL) &&
+      !editingCommentMediaFile &&
+      !isEditingCommentMediaRemoved;
+    const willHaveMedia = Boolean(editingCommentMediaFile) || willKeepExistingMedia;
 
     if (!bridge || !commentId) {
       return;
     }
 
-    if (!nextMessage) {
-      setCommentError("Write a comment before saving.");
+    if (!nextMessage && !willHaveMedia) {
+      setCommentError("Write a comment or attach media before saving.");
       return;
     }
 
@@ -1940,7 +2016,12 @@ export default function ProfilePage() {
     setIsCommentUpdating(true);
 
     try {
-      const updatedComment = await bridge.updateProfileComment(commentId, nextMessage);
+      const updatedComment = await bridge.updateProfileComment(
+        commentId,
+        nextMessage,
+        editingCommentMediaFile,
+        isEditingCommentMediaRemoved
+      );
 
       if (updatedComment) {
         setComments((currentComments) =>
@@ -1952,6 +2033,12 @@ export default function ProfilePage() {
 
       setEditingCommentId(null);
       setEditingCommentMessage("");
+      setEditingCommentMediaFile(null);
+      setEditingCommentMediaPreviewUrl(null);
+      setIsEditingCommentMediaRemoved(false);
+      if (editingCommentMediaInputRef.current) {
+        editingCommentMediaInputRef.current.value = "";
+      }
       setCommentSuccess("Comment updated.");
     } catch (error) {
       setCommentError(getProfileActionErrorMessage(error, "Could not update this comment."));
@@ -2081,9 +2168,6 @@ export default function ProfilePage() {
                     </label>
                     <input ref={commentMediaInputRef} type="file" accept={COMMENT_MEDIA_FILE_ACCEPT} onChange={handleCommentMediaChange} className="hidden" />
                     <div className="mt-3 flex flex-wrap items-center gap-3">
-                      <button type="button" onClick={() => commentMediaInputRef.current?.click()} className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white">
-                        Attach Photo / GIF
-                      </button>
                       {commentMediaFile ? <span className="min-w-0 truncate text-xs text-gray-400">{commentMediaFile.name}</span> : null}
                       {commentMediaFile ? <button type="button" onClick={clearCommentMediaSelection} className="inline-flex items-center justify-center rounded-full border border-[#2a2a2a] bg-[#101010] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-gray-300 transition hover:border-[#4a4a4a] hover:text-white">Remove</button> : null}
                     </div>
@@ -2091,7 +2175,12 @@ export default function ProfilePage() {
                       <img src={commentMediaPreviewUrl} alt="Selected comment media preview" className="block max-h-[320px] w-full object-contain" />
                     </div> : null}
                     <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                      <button type="submit" disabled={isCommentSubmitting || (!commentInput.trim() && !commentMediaFile)} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">{isCommentSubmitting ? "Posting..." : "Post Comment"}</button>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <button type="submit" disabled={isCommentSubmitting || (!commentInput.trim() && !commentMediaFile)} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">{isCommentSubmitting ? "Posting..." : "Post"}</button>
+                        <button type="button" onClick={() => commentMediaInputRef.current?.click()} className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white">
+                          Media
+                        </button>
+                      </div>
                       <span className="text-xs text-gray-500">{commentInput.trim().length}/280</span>
                     </div>
                     {commentError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{commentError}</p> : null}
@@ -2148,21 +2237,30 @@ export default function ProfilePage() {
                         </div>
                         {isEditingComment ? <div className="mt-3">
                           <textarea ref={editingCommentTextareaRef} value={editingCommentMessage} maxLength={280} rows={3} onChange={(event) => setEditingCommentMessage(event.target.value)} onInput={(event) => syncTextareaHeight(event.currentTarget)} className="w-full resize-none overflow-hidden rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55" placeholder="Update comment..." />
-                          <div className="mt-2 text-xs text-gray-500">
-                            {comment.updatedAt ? `Edited ${formatTime(comment.updatedAt)}` : `Posted ${formatTime(comment.createdAt)}`}
+                          <input ref={editingCommentMediaInputRef} type="file" accept={COMMENT_MEDIA_FILE_ACCEPT} onChange={handleEditingCommentMediaChange} className="hidden" />
+                          <div className="mt-3 flex flex-wrap items-center gap-3">
+                            {editingCommentMediaFile ? <span className="min-w-0 truncate text-xs text-gray-400">{editingCommentMediaFile.name}</span> : null}
+                            {editingCommentMediaFile ? <button type="button" onClick={clearEditingCommentMediaSelection} className="inline-flex items-center justify-center rounded-full border border-[#2a2a2a] bg-[#101010] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-gray-300 transition hover:border-[#4a4a4a] hover:text-white">Remove file</button> : null}
+                            {!editingCommentMediaFile && comment.mediaURL && !isEditingCommentMediaRemoved ? <button type="button" onClick={removeEditingCommentMedia} className="inline-flex items-center justify-center rounded-full border border-[#2a2a2a] bg-[#101010] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-gray-300 transition hover:border-[#4a4a4a] hover:text-white">Remove media</button> : null}
                           </div>
+                          {editingCommentMediaPreviewUrl ? <div className="mt-3 overflow-hidden rounded-[22px] border border-[#232323] bg-[#050505]">
+                            <img src={editingCommentMediaPreviewUrl} alt="Updated comment media preview" className="block max-h-[320px] w-full object-contain" />
+                          </div> : (!isEditingCommentMediaRemoved && comment.mediaURL ? <div className="mt-3 overflow-hidden rounded-[22px] border border-[#232323] bg-[#050505]">
+                            <img src={comment.mediaURL} alt={`${comment.authorName} comment attachment`} loading="lazy" className="block max-h-[320px] w-full object-contain" />
+                          </div> : null)}
                           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                             <div className="flex flex-wrap items-center gap-3">
-                              <button type="button" onClick={() => handleCommentUpdate(comment.id)} disabled={isSavingCommentUpdate || !editingCommentMessage.trim()} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">{isSavingCommentUpdate ? "Saving..." : "Save"}</button>
+                              <button type="button" onClick={() => handleCommentUpdate(comment.id)} disabled={isSavingCommentUpdate || (!editingCommentMessage.trim() && !editingCommentMediaFile && !(comment.mediaURL && !isEditingCommentMediaRemoved))} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">{isSavingCommentUpdate ? "Saving..." : "Save"}</button>
+                              <button type="button" onClick={() => editingCommentMediaInputRef.current?.click()} disabled={isSavingCommentUpdate} className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60">Media</button>
                               <button type="button" onClick={handleCommentEditCancel} disabled={isSavingCommentUpdate} className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60">Cancel</button>
                             </div>
                             <span className="text-xs text-gray-500">{editingCommentMessage.trim().length}/280</span>
                           </div>
                         </div> : <div className="mt-3 space-y-3">
+                          {comment.message ? <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-gray-300">{comment.message}</p> : null}
                           {comment.mediaURL ? <div className="overflow-hidden rounded-[22px] border border-[#232323] bg-[#050505]">
                             <img src={comment.mediaURL} alt={`${comment.authorName} comment attachment`} loading="lazy" className="block max-h-[360px] w-full object-contain" />
                           </div> : null}
-                          {comment.message ? <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-gray-300">{comment.message}</p> : null}
                         </div>}
                       </div>;
                     })}
