@@ -167,11 +167,12 @@ const ROLE_CHIP_ORDER = new Map([
   ["banned", 0],
   ["root", 0],
   ["co-owner", 1],
-  ["super administrator", 2],
-  ["administrator", 3],
-  ["sponsor", 4],
-  ["moderator", 5],
-  ["user", 6],
+  ["support", 2],
+  ["super administrator", 3],
+  ["administrator", 4],
+  ["sponsor", 5],
+  ["moderator", 6],
+  ["user", 7],
 ]);
 const REMOVED_ROLE_NAMES = new Set([
   "super administrator",
@@ -231,6 +232,10 @@ function normalizeRoleName(role: string) {
     return "moderator";
   }
 
+  if (compactRole === "support" || compactRole === "supp0rt") {
+    return "support";
+  }
+
   if (
     compactRole === "banned" ||
     compactRole === "ban"
@@ -287,6 +292,15 @@ function roleChipStyle(role: string | null | undefined): CSSProperties {
       backgroundColor: "#081222",
       color: "#d6e7ff",
       boxShadow: "0 0 18px rgba(59,130,246,0.24)",
+    };
+  }
+
+  if (normalizedRole === "support") {
+    return {
+      borderColor: "#22d3ee",
+      backgroundColor: "#07181d",
+      color: "#cffafe",
+      boxShadow: "0 0 18px rgba(34,211,238,0.22)",
     };
   }
 

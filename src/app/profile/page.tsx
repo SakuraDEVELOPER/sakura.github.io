@@ -76,7 +76,7 @@ const AUTH_STATE_SETTLED_EVENT = "sakura-auth-state-settled";
 const USER_UPDATE_EVENT = "sakura-user-update";
 const PROFILE_PATH_STORAGE_KEY = "sakura-profile-path";
 const CURRENT_PROFILE_ID_STORAGE_KEY = "sakura-current-profile-id";
-const PROFILE_BUILD_MARKER = "role-colors-v38";
+const PROFILE_BUILD_MARKER = "role-colors-v39";
 const repoBasePath = "/sakura.github.io";
 const restoreProfilePathScript = `
   (function () {
@@ -248,6 +248,10 @@ const normalizeRoleName = (role: string) => {
     return "moderator";
   }
 
+  if (compactRole === "support" || compactRole === "supp0rt") {
+    return "support";
+  }
+
   if (
     compactRole === "sponsor" ||
     compactRole === "ponsor" ||
@@ -323,6 +327,10 @@ const roleDisplayLabel = (role: string) => {
     return "Moderator";
   }
 
+  if (normalizedRole === "support") {
+    return "Support";
+  }
+
   if (normalizedRole === "sponsor") {
     return "Sponsor";
   }
@@ -392,6 +400,15 @@ const roleBadgeStyle = (role: string): CSSProperties => {
       backgroundColor: "#081222",
       color: "#d6e7ff",
       boxShadow: "0 0 18px rgba(59,130,246,0.28)",
+    };
+  }
+
+  if (normalizedRole === "support") {
+    return {
+      borderColor: "#22d3ee",
+      backgroundColor: "#07181d",
+      color: "#cffafe",
+      boxShadow: "0 0 18px rgba(34,211,238,0.24)",
     };
   }
 
@@ -549,6 +566,10 @@ const roleCommentAuthorColor = (role: string | null | undefined) => {
     return "#60a5fa";
   }
 
+  if (normalizedRole === "support") {
+    return "#67e8f9";
+  }
+
   if (normalizedRole === "moderator") {
     return "#7c9cff";
   }
@@ -581,6 +602,7 @@ const REMOVED_ROLE_NAMES = new Set([
 const EDITABLE_ROLE_OPTIONS = [
   "root",
   "co-owner",
+  "support",
   "sponsor",
   "moderator",
   "user",
@@ -592,13 +614,14 @@ const COMMENT_AUTHOR_ROLE_ORDER = new Map([
   ["banned", 0],
   ["root", 0],
   ["co-owner", 1],
-  ["super administrator", 2],
-  ["administrator", 3],
-  ["sponsor", 4],
-  ["moderator", 5],
-  ["tester", 6],
-  ["subscriber", 7],
-  ["user", 8],
+  ["support", 2],
+  ["super administrator", 3],
+  ["administrator", 4],
+  ["sponsor", 5],
+  ["moderator", 6],
+  ["tester", 7],
+  ["subscriber", 8],
+  ["user", 9],
 ]);
 const sortRolesForDisplay = (roles: string[]) =>
   [...roles].sort((left, right) => {
@@ -895,6 +918,13 @@ export default function ProfilePage() {
           status: "Priority",
           description: "Co-owner access is active. Shared management and elevated profile controls are available.",
         }
+      : normalizedProfileRoleSet.has("support")
+        ? {
+            title: "Support Access",
+            badgeRole: "support",
+            status: "Available",
+            description: "Support access is active. Staff-facing assistance tools and profile support workflows are available here.",
+          }
       : normalizedProfileRoleSet.has("sponsor")
         ? {
             title: "Sponsor Access",

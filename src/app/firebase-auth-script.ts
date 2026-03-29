@@ -332,6 +332,10 @@
       return "moderator";
     }
 
+    if (compactRole === "support" || compactRole === "supp0rt") {
+      return "support";
+    }
+
     if (
       compactRole === "sponsor" ||
       compactRole === "ponsor" ||
@@ -378,20 +382,22 @@
   const ROLE_SORT_ORDER = new Map([
     ["root", 0],
     ["co-owner", 1],
-    ["sponsor", 2],
-    ["moderator", 3],
-    ["user", 4],
+    ["support", 2],
+    ["sponsor", 3],
+    ["moderator", 4],
+    ["user", 5],
   ]);
   const COMMENT_ACCENT_ROLE_ORDER = new Map([
     ["root", 0],
     ["co-owner", 1],
-    ["super administrator", 2],
-    ["administrator", 3],
-    ["sponsor", 4],
-    ["moderator", 5],
-    ["tester", 6],
-    ["subscriber", 7],
-    ["user", 8],
+    ["support", 2],
+    ["super administrator", 3],
+    ["administrator", 4],
+    ["sponsor", 5],
+    ["moderator", 6],
+    ["tester", 7],
+    ["subscriber", 8],
+    ["user", 9],
   ]);
   const sortRoles = (roles) =>
     [...roles].sort((left, right) => {
