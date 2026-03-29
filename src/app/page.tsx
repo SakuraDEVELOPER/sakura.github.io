@@ -1207,11 +1207,7 @@ export default function Home() {
               Sa<span className="text-[#ffb7c5]">kura</span>
             </h1>
             </Link>
-            <div className="flex items-center gap-2 rounded-full border border-[#2b1b1e] bg-[#1a1012] px-3 py-1">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-[#ffb7c5] shadow-[0_0_10px_#ffb7c5]"></span>
-              <span className="text-[10px] font-mono text-[#ffb7c5]">STATUS: UNDETECTED</span>
-            </div>
-            <HeaderSocialLinks />
+            <HeaderSocialLinks showLabel />
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-3 text-sm font-medium text-gray-400">
