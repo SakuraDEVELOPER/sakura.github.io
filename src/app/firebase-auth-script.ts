@@ -69,6 +69,7 @@
   const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
   const MAX_PASSTHROUGH_AVATAR_BYTES = 512 * 1024;
   const AVATAR_STORAGE_UPLOAD_TIMEOUT_MS = 2500;
+  const STORAGE_AVATAR_UPLOADS_ENABLED = false;
   const AVATAR_INLINE_SIZE = 160;
   const AVATAR_EXPORT_QUALITY = 0.72;
   const PASSTHROUGH_AVATAR_CONTENT_TYPES = new Set(["image/gif", "image/webp", "video/mp4", "video/webm"]);
@@ -1053,7 +1054,7 @@
       return \`\${downloadURL}\${downloadURL.includes("?") ? "&" : "?"}v=\${Date.now()}\`;
     };
     const resolvePersistedAvatarUrl = async (uid, file) => {
-      if (STORAGE_AVATAR_CONTENT_TYPES.has(file.type)) {
+      if (STORAGE_AVATAR_UPLOADS_ENABLED && STORAGE_AVATAR_CONTENT_TYPES.has(file.type)) {
         try {
           const storageUploadPromise = uploadAvatarToStorage(uid, file);
           const storagePhotoURL = await Promise.race([
