@@ -51,8 +51,10 @@ type Bridge = {
   adminSetProfileBan: (profileId: number, isBanned: boolean) => Promise<UserProfile | null>;
   updateProfileRoles: (profileId: number, roles: string[]) => Promise<UserProfile | null>;
   updateAvatar: (file: File) => Promise<UserProfile | null>;
+  updateAvatarFromUrl: (url: string) => Promise<UserProfile | null>;
   deleteAvatar: () => Promise<UserProfile | null>;
   adminUpdateProfileAvatar: (profileId: number, file: File) => Promise<UserProfile | null>;
+  adminUpdateProfileAvatarUrl: (profileId: number, url: string) => Promise<UserProfile | null>;
   adminDeleteProfileAvatar: (profileId: number) => Promise<UserProfile | null>;
   syncPresence: (options?: { path?: string; source?: string; forceVisit?: boolean }) => Promise<UserProfile | null>;
   logout: () => Promise<void>;
@@ -74,7 +76,7 @@ const AUTH_STATE_SETTLED_EVENT = "sakura-auth-state-settled";
 const USER_UPDATE_EVENT = "sakura-user-update";
 const PROFILE_PATH_STORAGE_KEY = "sakura-profile-path";
 const CURRENT_PROFILE_ID_STORAGE_KEY = "sakura-current-profile-id";
-const PROFILE_BUILD_MARKER = "role-colors-v28";
+const PROFILE_BUILD_MARKER = "role-colors-v29";
 const repoBasePath = "/sakura.github.io";
 const restoreProfilePathScript = `
   (function () {
@@ -146,6 +148,8 @@ const withAvatarActionTimeout = <T,>(promise: Promise<T>) =>
       }, AVATAR_ACTION_TIMEOUT_MS);
     }),
   ]);
+const editableAvatarUrlOf = (photoURL: string | null | undefined) =>
+  typeof photoURL === "string" && /^https?:\/\//i.test(photoURL.trim()) ? photoURL.trim() : "";
 const parseProfileId = (path: string | null) => {
   if (!path || !path.startsWith(`${repoBasePath}/profile/`)) return null;
   const raw = path.slice(`${repoBasePath}/profile/`.length);
@@ -689,6 +693,7 @@ export default function ProfilePage() {
   const [isVerificationSending, setIsVerificationSending] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [avatarSuccess, setAvatarSuccess] = useState<string | null>(null);
+  const [avatarUrlInput, setAvatarUrlInput] = useState("");
   const [verificationError, setVerificationError] = useState<string | null>(null);
   const [verificationSuccess, setVerificationSuccess] = useState<string | null>(null);
   const [displayNameInput, setDisplayNameInput] = useState("");
@@ -1011,6 +1016,7 @@ export default function ProfilePage() {
     setUsernameInput(activeProfile.login ?? "");
     setUsernameError(null);
     setUsernameSuccess(null);
+    setAvatarUrlInput(editableAvatarUrlOf(activeProfile.photoURL));
     setCommentInput("");
     setCommentError(null);
     setCommentSuccess(null);
@@ -1130,11 +1136,48 @@ export default function ProfilePage() {
       }
 
       applyUpdatedProfileSnapshot(snapshot);
+      setAvatarUrlInput("");
       setAvatarSuccess("Avatar deleted.");
     } catch (error) {
       setAvatarError(avatarErrorMessage(error));
     } finally {
       setIsAvatarDeleting(false);
+    }
+  };
+
+  const handleAvatarUrlSave = async () => {
+    const bridge = getWindowState().sakuraFirebaseAuth;
+    const nextAvatarUrl = avatarUrlInput.trim();
+
+    if (!bridge) return;
+
+    if (!nextAvatarUrl) {
+      setAvatarError("Enter an avatar URL.");
+      return;
+    }
+
+    setAvatarError(null);
+    setAvatarSuccess(null);
+    setIsAvatarUploading(true);
+
+    try {
+      let snapshot: UserProfile | null = null;
+
+      if (isOwner) {
+        snapshot = await withAvatarActionTimeout(bridge.updateAvatarFromUrl(nextAvatarUrl));
+      } else if (canOpenAdminPanel && activeProfile?.profileId) {
+        snapshot = await withAvatarActionTimeout(
+          bridge.adminUpdateProfileAvatarUrl(activeProfile.profileId, nextAvatarUrl)
+        );
+      }
+
+      applyUpdatedProfileSnapshot(snapshot);
+      setAvatarUrlInput(editableAvatarUrlOf(snapshot?.photoURL ?? nextAvatarUrl));
+      setAvatarSuccess(isOwner ? "Avatar URL saved." : "Avatar URL updated.");
+    } catch (error) {
+      setAvatarError(avatarErrorMessage(error));
+    } finally {
+      setIsAvatarUploading(false);
     }
   };
 
@@ -1569,8 +1612,32 @@ export default function ProfilePage() {
                 <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">Avatar</p>
                 <div className="mt-5 rounded-[24px] border border-[#1d1d1d] bg-[#090909] p-4">
                   <p className="text-sm font-semibold text-white">{activeProfile.photoURL ? "Custom Avatar" : "Generated Avatar"}</p>
-                  <p className="mt-2 text-xs leading-relaxed text-gray-400">{isOwner ? "Upload, replace, or delete your avatar here. GIF, WEBP, MP4, and WEBM are supported. Video avatars play muted." : "Only the owner can change this avatar."}</p>
-                  {isOwner ? <div className="mt-4 flex flex-wrap items-center gap-3"><button type="button" onClick={() => avatarInputRef.current?.click()} disabled={isAvatarUploading || isAvatarDeleting} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">{isAvatarUploading ? "Uploading..." : activeProfile.photoURL ? "Replace Avatar" : "Upload Avatar"}</button>{activeProfile.photoURL ? <button type="button" onClick={handleAvatarDelete} disabled={isAvatarUploading || isAvatarDeleting} className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60">{isAvatarDeleting ? "Deleting..." : "Delete Avatar"}</button> : null}<input ref={avatarInputRef} type="file" accept={AVATAR_FILE_ACCEPT} onChange={handleAvatarChange} className="hidden" /></div> : null}
+                  <p className="mt-2 text-xs leading-relaxed text-gray-400">{isOwner ? "Upload PNG or JPG directly, or paste a public GIF, WEBP, MP4, or WEBM URL below. Video avatars play muted." : "Only the owner can change this avatar."}</p>
+                  {isOwner ? (
+                    <>
+                      <div className="mt-4 flex flex-wrap items-center gap-3">
+                        <button type="button" onClick={() => avatarInputRef.current?.click()} disabled={isAvatarUploading || isAvatarDeleting} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">
+                          {isAvatarUploading ? "Uploading..." : activeProfile.photoURL ? "Upload PNG/JPG" : "Upload PNG/JPG"}
+                        </button>
+                        {activeProfile.photoURL ? <button type="button" onClick={handleAvatarDelete} disabled={isAvatarUploading || isAvatarDeleting} className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60">{isAvatarDeleting ? "Deleting..." : "Delete Avatar"}</button> : null}
+                        <input ref={avatarInputRef} type="file" accept={AVATAR_FILE_ACCEPT} onChange={handleAvatarChange} className="hidden" />
+                      </div>
+                      <label className="mt-4 block">
+                        <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">Avatar URL</span>
+                        <input type="url" value={avatarUrlInput} onChange={(event) => {
+                          setAvatarUrlInput(event.target.value);
+                          setAvatarError(null);
+                          setAvatarSuccess(null);
+                        }} className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55" placeholder="https://example.com/avatar.gif" />
+                      </label>
+                      <p className="mt-2 text-xs leading-relaxed text-gray-500">Use a direct public GIF, WEBP, MP4, or WEBM link if you want animation without Storage.</p>
+                      <div className="mt-4 flex flex-wrap items-center gap-3">
+                        <button type="button" onClick={handleAvatarUrlSave} disabled={isAvatarUploading || isAvatarDeleting || !avatarUrlInput.trim()} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">
+                          {isAvatarUploading ? "Saving..." : "Save Avatar URL"}
+                        </button>
+                      </div>
+                    </>
+                  ) : null}
                   {avatarError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{avatarError}</p> : null}
                   {avatarSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{avatarSuccess}</p> : null}
                 </div>
@@ -1862,7 +1929,7 @@ export default function ProfilePage() {
 
                     <section className="rounded-[24px] border border-[#1d1d1d] bg-[#0d0d0d] p-5">
                       <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">Avatar</p>
-                      <p className="mt-3 text-xs leading-relaxed text-gray-400">Upload, replace, or delete the avatar for this account. GIF, WEBP, MP4, and WEBM are supported. Video avatars play muted.</p>
+                      <p className="mt-3 text-xs leading-relaxed text-gray-400">Upload PNG or JPG directly, or save a public GIF, WEBP, MP4, or WEBM URL for this account. Video avatars play muted.</p>
                       <div className="mt-4 flex flex-wrap items-center gap-3">
                         <button
                           type="button"
@@ -1870,7 +1937,7 @@ export default function ProfilePage() {
                           disabled={isAvatarUploading || isAvatarDeleting}
                           className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          {isAvatarUploading ? "Uploading..." : activeProfile.photoURL ? "Replace Avatar" : "Upload Avatar"}
+                          {isAvatarUploading ? "Uploading..." : activeProfile.photoURL ? "Upload PNG/JPG" : "Upload PNG/JPG"}
                         </button>
                         {activeProfile.photoURL ? (
                           <button
@@ -1889,6 +1956,31 @@ export default function ProfilePage() {
                           onChange={handleAvatarChange}
                           className="hidden"
                         />
+                      </div>
+                      <label className="mt-4 block">
+                        <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">Avatar URL</span>
+                        <input
+                          type="url"
+                          value={avatarUrlInput}
+                          onChange={(event) => {
+                            setAvatarUrlInput(event.target.value);
+                            setAvatarError(null);
+                            setAvatarSuccess(null);
+                          }}
+                          className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55"
+                          placeholder="https://example.com/avatar.gif"
+                        />
+                      </label>
+                      <p className="mt-2 text-xs leading-relaxed text-gray-500">Use a direct public GIF, WEBP, MP4, or WEBM link if you want animation without Storage.</p>
+                      <div className="mt-4 flex flex-wrap items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={handleAvatarUrlSave}
+                          disabled={isAvatarUploading || isAvatarDeleting || !avatarUrlInput.trim()}
+                          className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isAvatarUploading ? "Saving..." : "Save Avatar URL"}
+                        </button>
                       </div>
                       {avatarError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{avatarError}</p> : null}
                       {avatarSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{avatarSuccess}</p> : null}
