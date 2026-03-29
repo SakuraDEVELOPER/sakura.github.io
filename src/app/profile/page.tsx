@@ -1877,11 +1877,9 @@ export default function ProfilePage() {
                 <h2 className="mt-3 text-[22px] font-black uppercase tracking-tight text-white">
                   {activeProfile.isBanned ? "Account Access Restricted" : "Manage Your Identity"}
                 </h2>
-                <p className="mt-3 text-sm leading-relaxed text-gray-400">
-                  {activeProfile.isBanned
-                    ? "This account is banned. Profile changes and new actions stay locked until a root account removes the ban."
-                    : "Use this column to update your public profile name, login, avatar, and account-related settings."}
-                </p>
+                {activeProfile.isBanned ? <p className="mt-3 text-sm leading-relaxed text-gray-400">
+                  This account is banned. Profile changes and new actions stay locked until a root account removes the ban.
+                </p> : null}
                 {!activeProfile.isBanned ? <div className="mt-5 flex flex-wrap items-center gap-3">
                   <button type="button" onClick={() => setIsProfileControlsOpen((currentValue) => !currentValue)} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/45 hover:text-white">
                     {isProfileControlsOpen ? "Hide Controls" : "Open Controls"}
