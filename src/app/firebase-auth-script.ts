@@ -21,6 +21,7 @@
           getAuth,
           onAuthStateChanged,
           reauthenticateWithCredential,
+          reload,
           sendEmailVerification,
           signInAnonymously,
           signInWithPopup,
@@ -1014,6 +1015,38 @@
 
       return null;
     };
+    const isEmailVerificationLocked = (snapshot) =>
+      Boolean(
+        snapshot &&
+          !snapshot.isAnonymous &&
+          snapshot.email &&
+          snapshot.emailVerified === false &&
+          snapshot.verificationRequired !== false
+      );
+    const ensureVerifiedSessionAccess = async (user, message) => {
+      let actorSnapshot = window.sakuraCurrentUserSnapshot;
+
+      if (!actorSnapshot || actorSnapshot.isAnonymous || actorSnapshot.uid !== user.uid) {
+        actorSnapshot = await resolveUserSnapshot(user);
+      }
+
+      if (isEmailVerificationLocked(actorSnapshot)) {
+        try {
+          await reload(user);
+        } catch (error) {}
+
+        actorSnapshot = await resolveUserSnapshot(user);
+      }
+
+      if (isEmailVerificationLocked(actorSnapshot)) {
+        throw createFirebaseError(
+          "auth/email-not-verified",
+          message || "Verify your email before using profile actions."
+        );
+      }
+
+      return actorSnapshot;
+    };
 
     const findUserByLogin = async (loginLower) => {
       const snapshot = await getDocs(
@@ -1602,6 +1635,8 @@
         throw createFirebaseError("auth/no-current-user", "Sign in again to update your username.");
       }
 
+      await ensureVerifiedSessionAccess(user, "Verify your email before changing the login.");
+
       const providerIds = getProviderIds(user);
 
       if (providerIds.includes("password")) {
@@ -1699,6 +1734,8 @@
       if (!user || user.isAnonymous) {
         throw createFirebaseError("auth/no-current-user", "Sign in again to update your profile name.");
       }
+
+      await ensureVerifiedSessionAccess(user, "Verify your email before changing the profile name.");
 
       const sanitizedDisplayName = sanitizeDisplayName(nextDisplayName);
 
@@ -2033,6 +2070,11 @@
         );
       }
 
+      await ensureVerifiedSessionAccess(
+        user,
+        "Verify your email before posting comments."
+      );
+
       let authorSnapshot = window.sakuraCurrentUserSnapshot;
       if (
         !authorSnapshot ||
@@ -2139,6 +2181,11 @@
         );
       }
 
+      await ensureVerifiedSessionAccess(
+        user,
+        "Verify your email before managing comments."
+      );
+
       const commentRef = doc(profileCommentsCollection, normalizedCommentId);
       const commentSnapshot = await getDoc(commentRef);
 
@@ -2208,6 +2255,11 @@
         );
       }
 
+      await ensureVerifiedSessionAccess(
+        user,
+        "Verify your email before editing comments."
+      );
+
       const commentRef = doc(profileCommentsCollection, normalizedCommentId);
       const commentSnapshot = await getDoc(commentRef);
 
@@ -2267,6 +2319,8 @@
       if (!user) {
         throw createFirebaseError("auth/no-current-user", "Sign in again to update your avatar.");
       }
+
+      await ensureVerifiedSessionAccess(user, "Verify your email before updating the avatar.");
 
       if (!(file instanceof File)) {
         throw createFirebaseError("storage/invalid-file", "Choose an image before uploading.");
@@ -2357,6 +2411,8 @@
       if (!user) {
         throw createFirebaseError("auth/no-current-user", "Sign in again to update your avatar.");
       }
+
+      await ensureVerifiedSessionAccess(user, "Verify your email before updating the avatar.");
 
       const userRef = userRefFor(user.uid);
       const existingSnapshot = await getDoc(userRef);
@@ -2809,6 +2865,26 @@
         verificationEmailSent: true,
       };
     };
+    const refreshVerificationStatus = async () => {
+      const user = auth.currentUser;
+
+      if (!user || user.isAnonymous) {
+        throw createFirebaseError(
+          "auth/no-current-user",
+          "Sign in again to refresh email verification."
+        );
+      }
+
+      await reload(user);
+
+      const snapshot = await resolveUserSnapshot(user);
+      const allowedSnapshot = await enforceActiveSessionNotBanned(snapshot);
+
+      return {
+        ...allowedSnapshot,
+        verificationEmailSent: false,
+      };
+    };
 
     window.sakuraFirebaseAuth = {
       register: async ({ login, displayName, email, password }) => {
@@ -2915,6 +2991,7 @@
       updateProfileComment,
       deleteProfileComment,
       resendVerificationEmail,
+      refreshVerificationStatus,
       updateProfileRoles,
       updateAvatar,
       deleteAvatar,

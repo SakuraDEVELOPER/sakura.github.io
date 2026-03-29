@@ -125,6 +125,7 @@ type FirebaseAuthBridge = {
     password: string;
   }) => Promise<AuthUserSnapshot | null>;
   resendVerificationEmail: () => Promise<AuthUserSnapshot | null>;
+  refreshVerificationStatus: () => Promise<AuthUserSnapshot | null>;
   getProfileById: (profileId: number) => Promise<AuthUserSnapshot | null>;
   updateAvatar: (file: File) => Promise<AuthUserSnapshot | null>;
   deleteAvatar: () => Promise<AuthUserSnapshot | null>;
@@ -161,6 +162,7 @@ const AUTH_READY_EVENT = "sakura-auth-ready";
 const AUTH_ERROR_EVENT = "sakura-auth-error";
 const USER_UPDATE_EVENT = "sakura-user-update";
 const OPEN_AUTH_MODAL_EVENT = "sakura-open-auth-modal";
+const EMAIL_VERIFICATION_LOCK_EVENT = "sakura-email-verification-lock";
 const LOGIN_PATTERN = /^[A-Za-zА-Яа-яЁё0-9._-]+$/;
 
 const ROLE_CHIP_ORDER = new Map([
@@ -391,6 +393,10 @@ function getFirebaseErrorMessage(error: unknown) {
     return "Firestore blocked access. Проверьте rules для users и meta/counters в Firebase Console.";
   }
 
+  if (code === "auth/email-not-verified") {
+    return "Подтвердите почту, прежде чем открывать профиль и использовать аккаунт.";
+  }
+
   switch (code) {
     case "auth/email-already-in-use":
       return "Этот email уже зарегистрирован.";
@@ -428,6 +434,16 @@ function getFirebaseErrorMessage(error: unknown) {
 
       return "Не удалось выполнить запрос к Firebase Auth. Попробуйте еще раз.";
   }
+}
+
+function isEmailVerificationLocked(user: AuthUserSnapshot | null | undefined) {
+  return Boolean(
+    user &&
+      !user.isAnonymous &&
+      user.email &&
+      user.emailVerified === false &&
+      user.verificationRequired !== false
+  );
 }
 
 function buildUserLabel(user: AuthUserSnapshot) {
@@ -595,7 +611,12 @@ function HeaderAuth() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [verificationError, setVerificationError] = useState<string | null>(null);
+  const [verificationSuccess, setVerificationSuccess] = useState<string | null>(null);
+  const [isVerificationSending, setIsVerificationSending] = useState(false);
+  const [isVerificationRefreshing, setIsVerificationRefreshing] = useState(false);
   const visibleUser = currentUser && !currentUser.isAnonymous ? currentUser : null;
+  const isVerificationLockedUser = isEmailVerificationLocked(visibleUser);
   const currentUserId = visibleUser?.uid ?? null;
 
   useEffect(() => {
@@ -641,6 +662,9 @@ function HeaderAuth() {
       setIsModalOpen(true);
       setSubmitError(null);
     };
+    const handleVerificationLock = () => {
+      setFlashMessage("Подтвердите почту, чтобы открыть профиль и использовать аккаунт.");
+    };
 
     const handleError = () => {
       setAuthLoadError(
@@ -666,6 +690,7 @@ function HeaderAuth() {
     window.addEventListener(AUTH_ERROR_EVENT, handleError);
     window.addEventListener(USER_UPDATE_EVENT, handleUserUpdate);
     window.addEventListener(OPEN_AUTH_MODAL_EVENT, handleOpenAuthModal);
+    window.addEventListener(EMAIL_VERIFICATION_LOCK_EVENT, handleVerificationLock);
 
     return () => {
       window.clearTimeout(timeoutId);
@@ -673,6 +698,7 @@ function HeaderAuth() {
       window.removeEventListener(AUTH_ERROR_EVENT, handleError);
       window.removeEventListener(USER_UPDATE_EVENT, handleUserUpdate);
       window.removeEventListener(OPEN_AUTH_MODAL_EVENT, handleOpenAuthModal);
+      window.removeEventListener(EMAIL_VERIFICATION_LOCK_EVENT, handleVerificationLock);
       unsubscribe();
     };
   }, []);
@@ -729,6 +755,11 @@ function HeaderAuth() {
     };
   }, [flashMessage]);
 
+  useEffect(() => {
+    setVerificationError(null);
+    setVerificationSuccess(null);
+  }, [visibleUser?.uid, visibleUser?.emailVerified, visibleUser?.verificationRequired]);
+
   const openModal = (nextMode: AuthMode) => {
     requestFirebaseAuthBoot();
     setMode(nextMode);
@@ -754,7 +785,73 @@ function HeaderAuth() {
     setConfirmPassword("");
   };
 
+  const handleResendVerification = async () => {
+    requestFirebaseAuthBoot();
+
+    if (!window.sakuraFirebaseAuth) {
+      setVerificationError(
+        authLoadError ?? "Firebase Auth еще не готов. Подождите пару секунд и попробуйте снова."
+      );
+      return;
+    }
+
+    setVerificationError(null);
+    setVerificationSuccess(null);
+    setIsVerificationSending(true);
+
+    try {
+      const snapshot = await window.sakuraFirebaseAuth.resendVerificationEmail();
+      setCurrentUser(snapshot);
+      setVerificationSuccess(
+        snapshot?.verificationEmailSent
+          ? "Письмо с подтверждением отправлено повторно."
+          : "Почта уже подтверждена."
+      );
+    } catch (error) {
+      setVerificationError(getFirebaseErrorMessage(error));
+    } finally {
+      setIsVerificationSending(false);
+    }
+  };
+
+  const handleRefreshVerification = async () => {
+    requestFirebaseAuthBoot();
+
+    if (!window.sakuraFirebaseAuth) {
+      setVerificationError(
+        authLoadError ?? "Firebase Auth еще не готов. Подождите пару секунд и попробуйте снова."
+      );
+      return;
+    }
+
+    setVerificationError(null);
+    setVerificationSuccess(null);
+    setIsVerificationRefreshing(true);
+
+    try {
+      const snapshot = await window.sakuraFirebaseAuth.refreshVerificationStatus();
+      setCurrentUser(snapshot);
+
+      if (isEmailVerificationLocked(snapshot)) {
+        setVerificationSuccess("Подтверждение еще не найдено. Проверьте письмо и нажмите снова.");
+        return;
+      }
+
+      setFlashMessage("Почта подтверждена. Доступ к профилю открыт.");
+      setVerificationSuccess("Почта подтверждена. Теперь можно открыть профиль.");
+    } catch (error) {
+      setVerificationError(getFirebaseErrorMessage(error));
+    } finally {
+      setIsVerificationRefreshing(false);
+    }
+  };
+
   const navigateToProfile = (user: AuthUserSnapshot | null) => {
+    if (isEmailVerificationLocked(user ?? window.sakuraCurrentUserSnapshot ?? null)) {
+      window.dispatchEvent(new CustomEvent(EMAIL_VERIFICATION_LOCK_EVENT));
+      return;
+    }
+
     window.location.assign(profileHref(user?.profileId ?? window.sakuraCurrentUserSnapshot?.profileId));
   };
 
@@ -824,10 +921,18 @@ function HeaderAuth() {
           email: identifier.trim(),
           password,
         });
-        setFlashMessage("Аккаунт создан. Вход выполнен автоматически.");
+        setFlashMessage(
+          isEmailVerificationLocked(snapshot)
+            ? "Аккаунт создан. Подтвердите почту, чтобы открыть профиль и использовать аккаунт."
+            : "Аккаунт создан. Вход выполнен автоматически."
+        );
       } else {
         snapshot = await window.sakuraFirebaseAuth.login(identifier.trim(), password);
-        setFlashMessage("Вход выполнен.");
+        setFlashMessage(
+          isEmailVerificationLocked(snapshot)
+            ? "Почта не подтверждена. Подтвердите email, чтобы открыть профиль."
+            : "Вход выполнен."
+        );
       }
 
       if (!snapshot?.login) {
@@ -835,6 +940,9 @@ function HeaderAuth() {
       }
 
       closeModal();
+      if (isEmailVerificationLocked(snapshot)) {
+        return;
+      }
       navigateToProfile(snapshot);
     } catch (error) {
       setSubmitError(getFirebaseErrorMessage(error));
@@ -881,8 +989,15 @@ function HeaderAuth() {
       if (!snapshot?.login) {
         setFlashMessage("Signed in with Google. Create a login on your profile.");
       }
-      setFlashMessage("Вход через Google выполнен.");
+      setFlashMessage(
+        isEmailVerificationLocked(snapshot)
+          ? "Почта не подтверждена. Подтвердите email, чтобы открыть профиль."
+          : "Вход через Google выполнен."
+      );
       closeModal();
+      if (isEmailVerificationLocked(snapshot)) {
+        return;
+      }
       navigateToProfile(snapshot);
     } catch (error) {
       setSubmitError(getFirebaseErrorMessage(error));
@@ -990,6 +1105,44 @@ function HeaderAuth() {
 
       {authLoadError && !isModalOpen ? (
         <p className="basis-full text-right text-[11px] text-red-200/80">{authLoadError}</p>
+      ) : null}
+
+      {isVerificationLockedUser ? (
+        <div
+          id="email-verification"
+          className="basis-full rounded-[26px] border border-[#4d3024] bg-[linear-gradient(180deg,#1a110d_0%,#120d0a_100%)] px-5 py-4 text-left shadow-[0_0_35px_rgba(255,183,197,0.08)]"
+        >
+          <p className="font-mono text-[10px] uppercase tracking-[0.32em] text-[#ffb7c5]">
+            Email Not Verified
+          </p>
+          <p className="mt-3 text-sm leading-relaxed text-[#f3d2c5]">
+            Подтвердите почту, чтобы открыть профиль, менять аккаунт и пользоваться комментариями.
+          </p>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={handleResendVerification}
+              disabled={isVerificationSending || isVerificationRefreshing}
+              className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isVerificationSending ? "Sending..." : "Resend Email"}
+            </button>
+            <button
+              type="button"
+              onClick={handleRefreshVerification}
+              disabled={isVerificationRefreshing || isVerificationSending}
+              className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isVerificationRefreshing ? "Checking..." : "I Verified My Email"}
+            </button>
+          </div>
+          {verificationError ? (
+            <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{verificationError}</p>
+          ) : null}
+          {verificationSuccess ? (
+            <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{verificationSuccess}</p>
+          ) : null}
+        </div>
       ) : null}
 
       {isModalOpen ? (
@@ -1225,6 +1378,12 @@ export default function Home() {
     const snapshot = window.sakuraCurrentUserSnapshot;
 
     if (snapshot && !snapshot.isAnonymous) {
+      if (isEmailVerificationLocked(snapshot)) {
+        window.dispatchEvent(new CustomEvent(EMAIL_VERIFICATION_LOCK_EVENT));
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
+
       window.location.assign(profileHref(snapshot.profileId));
       return;
     }

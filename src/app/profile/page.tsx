@@ -48,6 +48,7 @@ type Bridge = {
   updateProfileComment: (commentId: string, message: string) => Promise<ProfileComment | null>;
   deleteProfileComment: (commentId: string) => Promise<string | null>;
   resendVerificationEmail: () => Promise<UserProfile | null>;
+  refreshVerificationStatus: () => Promise<UserProfile | null>;
   updateDisplayName: (displayName: string) => Promise<UserProfile | null>;
   updateUsername: (username: string, currentPassword?: string) => Promise<UserProfile | null>;
   adminUpdateProfileDisplayName: (profileId: number, displayName: string) => Promise<UserProfile | null>;
@@ -78,7 +79,7 @@ const AUTH_STATE_SETTLED_EVENT = "sakura-auth-state-settled";
 const USER_UPDATE_EVENT = "sakura-user-update";
 const PROFILE_PATH_STORAGE_KEY = "sakura-profile-path";
 const CURRENT_PROFILE_ID_STORAGE_KEY = "sakura-current-profile-id";
-const PROFILE_BUILD_MARKER = "role-colors-v40";
+const PROFILE_BUILD_MARKER = "role-colors-v41";
 const repoBasePath = "/sakura.github.io";
 const restoreProfilePathScript = `
   (function () {
@@ -136,6 +137,10 @@ const getProfileActionErrorMessage = (error: unknown, fallback: string) => {
     return "This account has been banned by an administrator.";
   }
 
+  if (code === "auth/email-not-verified") {
+    return "Подтвердите почту, прежде чем пользоваться профилем и комментариями.";
+  }
+
   if (code === "avatar/action-timeout") {
     return "Avatar action took too long. Try a smaller file.";
   }
@@ -150,6 +155,14 @@ const getProfileActionErrorMessage = (error: unknown, fallback: string) => {
 
   return error instanceof Error ? error.message : fallback;
 };
+const isEmailVerificationLockedForProfile = (user: UserProfile | null | undefined) =>
+  Boolean(
+    user &&
+      !user.isAnonymous &&
+      user.email &&
+      user.emailVerified === false &&
+      user.verificationRequired !== false
+  );
 const AVATAR_ACTION_TIMEOUT_MS = 12000;
 const withAvatarActionTimeout = <T,>(promise: Promise<T>) =>
   Promise.race<T>([
@@ -861,6 +874,12 @@ export default function ProfilePage() {
     const runtime = getWindowState();
     const requestedId = requestedProfileId;
     const visibleCurrentUser = currentUser && !currentUser.isAnonymous ? currentUser : null;
+    if (isEmailVerificationLockedForProfile(visibleCurrentUser)) {
+      setProfile(null);
+      setProfileError(null);
+      setIsProfileLoading(false);
+      return;
+    }
     if (requestedId === null || visibleCurrentUser?.profileId === requestedId) {
       setProfile(visibleCurrentUser);
       setProfileError(null);
@@ -892,11 +911,17 @@ export default function ProfilePage() {
   }, [authReady, authStateSettled, authError, currentUser, requestedProfileId]);
 
   useEffect(() => {
-    if (!currentUser?.uid || currentUser.isAnonymous || !getWindowState().sakuraFirebaseAuth) return;
+    if (
+      !currentUser?.uid ||
+      currentUser.isAnonymous ||
+      isEmailVerificationLockedForProfile(currentUser) ||
+      !getWindowState().sakuraFirebaseAuth
+    ) return;
     getWindowState().sakuraFirebaseAuth?.syncPresence({ path: window.location.pathname, source: "profile-view", forceVisit: true }).catch(() => {});
   }, [currentUser?.uid, currentUser?.isAnonymous]);
 
   const visibleCurrentUser = currentUser && !currentUser.isAnonymous ? currentUser : null;
+  const isCurrentAccountVerificationLocked = isEmailVerificationLockedForProfile(visibleCurrentUser);
   const isOwner = Boolean(visibleCurrentUser && profile && visibleCurrentUser.uid === profile.uid);
   const activeProfile = profile;
   const hasUsername = Boolean(activeProfile?.login?.trim());
@@ -982,6 +1007,14 @@ export default function ProfilePage() {
     setIsProfileControlsOpen(false);
     setUsernamePasswordInput("");
   }, [activeProfile?.profileId, isOwner]);
+
+  useEffect(() => {
+    if (!authReady || !authStateSettled || !isCurrentAccountVerificationLocked) {
+      return;
+    }
+
+    router.replace("/");
+  }, [authReady, authStateSettled, isCurrentAccountVerificationLocked, router]);
 
   useEffect(() => {
     if (!hasHydrated || !shouldShowPendingState) {
@@ -1109,6 +1142,7 @@ export default function ProfilePage() {
   const canDeleteComment = (comment: ProfileComment) =>
     Boolean(
       visibleCurrentUser &&
+        !isCurrentAccountVerificationLocked &&
         (comment.authorUid === visibleCurrentUser.uid ||
           canModerateComments(visibleCurrentUser.roles) ||
           (isOwner &&
@@ -1118,6 +1152,7 @@ export default function ProfilePage() {
   const canEditComment = (comment: ProfileComment) =>
     Boolean(
       visibleCurrentUser &&
+        !isCurrentAccountVerificationLocked &&
         (comment.authorUid === visibleCurrentUser.uid ||
           canManageRoles(visibleCurrentUser.roles))
     );
@@ -1888,7 +1923,7 @@ export default function ProfilePage() {
                 <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">Profile Comments</p>
                 <p className="mt-3 text-sm leading-relaxed text-gray-400">A public wall for this profile. Only signed-in users can leave a message.</p>
 
-                {visibleCurrentUser && !isCurrentAccountBanned ? (
+                {visibleCurrentUser && !isCurrentAccountBanned && !isCurrentAccountVerificationLocked ? (
                   <form onSubmit={handleCommentSubmit} className="mt-5">
                     <label className="block">
                       <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">New Comment</span>
@@ -1907,6 +1942,10 @@ export default function ProfilePage() {
                 ) : visibleCurrentUser && isCurrentAccountBanned ? (
                   <div className="mt-5 rounded-[24px] border border-red-400/20 bg-red-500/10 px-4 py-4">
                     <p className="text-sm leading-relaxed text-red-100/85">This account has been banned by an administrator. Posting and profile actions are disabled.</p>
+                  </div>
+                ) : visibleCurrentUser && isCurrentAccountVerificationLocked ? (
+                  <div className="mt-5 rounded-[24px] border border-[#4d3024] bg-[linear-gradient(180deg,#1a110d_0%,#120d0a_100%)] px-4 py-4">
+                    <p className="text-sm leading-relaxed text-[#f3d2c5]">Подтвердите почту, чтобы открыть профиль и пользоваться комментариями.</p>
                   </div>
                 ) : (
                   <div className="mt-5 rounded-[24px] border border-[#1d1d1d] bg-[#090909] px-4 py-4">
