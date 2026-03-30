@@ -1,8 +1,4 @@
 ﻿const firebaseModuleScript = `
-  const SUPABASE_PROJECT_URL = ${JSON.stringify(process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? "")};
-  const SUPABASE_ANON_KEY = ${JSON.stringify(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ?? "")};
-  const SUPABASE_STORAGE_BUCKET = ${JSON.stringify(process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET?.trim() ?? "comment-media")};
-
   (() => {
     let loadPromise;
     const startFirebaseAuth = () => {
@@ -55,16 +51,12 @@
           getStorage,
           ref: storageRef,
           uploadBytes
-        },
-        {
-          createClient
         }
       ] = await Promise.all([
         import("https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js"),
         import("https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js"),
         import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js"),
-        import("https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js"),
-        import("https://esm.sh/@supabase/supabase-js@2?target=es2022")
+        import("https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js")
       ]);
 
       const firebaseConfig = {
@@ -76,14 +68,6 @@
     appId: "1:145336250722:web:d31610ae8258c398e47c3b",
     measurementId: "G-1V07L6BRL0"
       };
-
-  const isSupabaseCommentMediaEnabled = Boolean(
-    SUPABASE_PROJECT_URL &&
-    SUPABASE_ANON_KEY &&
-    SUPABASE_STORAGE_BUCKET
-  );
-  const getSupabaseFunctionUrl = (name) =>
-    SUPABASE_PROJECT_URL ? \`\${SUPABASE_PROJECT_URL}/functions/v1/\${name}\` : "";
 
   const LOGIN_MAX_LENGTH = 24;
   const LOGIN_MIN_LENGTH = 3;
@@ -364,122 +348,6 @@
       mediaURL,
       mediaType,
     };
-  };
-
-  const createSupabaseCommentMedia = async (user, file, profileId = null) => {
-    if (!(file instanceof File)) {
-      return null;
-    }
-
-    if (!supabaseClient || !isSupabaseCommentMediaEnabled) {
-      return createInlineCommentMedia(file);
-    }
-
-    if (!PROFILE_COMMENT_MEDIA_CONTENT_TYPES.has(file.type)) {
-      throw createFirebaseError(
-        "comments/media-unsupported",
-        "Only PNG, JPG, WEBP, and GIF files are supported in comments."
-      );
-    }
-
-    if (file.size > 50 * 1024 * 1024) {
-      throw createFirebaseError(
-        "comments/media-too-large",
-        "The selected media is larger than the 50 MB upload limit."
-      );
-    }
-
-    const idToken = await user.getIdToken();
-    const prepareResponse = await fetch(getSupabaseFunctionUrl("comment-media-upload"), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: \`Bearer \${idToken}\`,
-      },
-      body: JSON.stringify({
-        fileName: file.name,
-        contentType: file.type,
-        fileSize: file.size,
-        profileId,
-      }),
-    });
-    const preparePayload = await prepareResponse.json().catch(() => null);
-
-    if (!prepareResponse.ok) {
-      throw createFirebaseError(
-        "comments/media-upload-failed",
-        typeof preparePayload?.error === "string"
-          ? preparePayload.error
-          : "Could not prepare comment media upload."
-      );
-    }
-
-    const bucket =
-      typeof preparePayload?.bucket === "string" && preparePayload.bucket
-        ? preparePayload.bucket
-        : SUPABASE_STORAGE_BUCKET;
-    const path =
-      typeof preparePayload?.path === "string" && preparePayload.path
-        ? preparePayload.path
-        : "";
-    const token =
-      typeof preparePayload?.token === "string" && preparePayload.token
-        ? preparePayload.token
-        : "";
-    const publicUrl =
-      typeof preparePayload?.publicUrl === "string" && preparePayload.publicUrl
-        ? preparePayload.publicUrl
-        : "";
-
-    if (!bucket || !path || !token || !publicUrl) {
-      throw createFirebaseError(
-        "comments/media-upload-failed",
-        "Supabase upload metadata is incomplete."
-      );
-    }
-
-    const { error } = await supabaseClient.storage
-      .from(bucket)
-      .uploadToSignedUrl(path, token, file, {
-        cacheControl: "3600",
-        contentType: file.type,
-        upsert: false,
-      });
-
-    if (error) {
-      throw createFirebaseError(
-        "comments/media-upload-failed",
-        error.message || "Comment media upload failed."
-      );
-    }
-
-    return {
-      mediaURL: publicUrl,
-      mediaType: file.type,
-      mediaPath: path,
-      mediaSize: file.size,
-    };
-  };
-
-  const removeSupabaseCommentMedia = async (user, mediaPath) => {
-    if (!supabaseClient || !isSupabaseCommentMediaEnabled || !mediaPath) {
-      return;
-    }
-
-    try {
-      const idToken = await user.getIdToken();
-
-      await fetch(getSupabaseFunctionUrl("comment-media-delete"), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: \`Bearer \${idToken}\`,
-        },
-        body: JSON.stringify({ path: mediaPath }),
-      });
-    } catch (error) {
-      console.error("Failed to remove comment media from Supabase:", error);
-    }
   };
 
   const getAvatarStorageExtension = (file) => {
@@ -821,12 +689,6 @@
     typeof value === "string" && PROFILE_COMMENT_MEDIA_CONTENT_TYPES.has(value)
       ? value
       : null;
-  const normalizeProfileCommentMediaPath = (value) =>
-    typeof value === "string" && value ? value : null;
-  const normalizeProfileCommentMediaSize = (value) =>
-    typeof value === "number" && Number.isFinite(value) && value > 0
-      ? Math.round(value)
-      : null;
   const normalizeProfileCommentCreatedAt = (value) => {
     if (typeof value === "string" && value) {
       return value;
@@ -872,8 +734,6 @@
     message: normalizeProfileCommentMessage(details.message),
     mediaURL: normalizeProfileCommentMediaURL(details.mediaURL),
     mediaType: normalizeProfileCommentMediaType(details.mediaType),
-    mediaPath: normalizeProfileCommentMediaPath(details.mediaPath),
-    mediaSize: normalizeProfileCommentMediaSize(details.mediaSize),
     createdAt: normalizeProfileCommentCreatedAt(details.createdAt),
     updatedAt: normalizeProfileCommentCreatedAt(details.updatedAt),
   });
@@ -1147,14 +1007,6 @@
     const db = getFirestore(app);
     const storage = getStorage(app);
     const provider = new GoogleAuthProvider();
-    const supabaseClient = isSupabaseCommentMediaEnabled
-      ? createClient(SUPABASE_PROJECT_URL, SUPABASE_ANON_KEY, {
-          auth: {
-            persistSession: false,
-            autoRefreshToken: false,
-          },
-        })
-      : null;
 
     const userRefFor = (uid) => doc(db, "users", uid);
     const avatarStorageRefFor = (uid, extension) =>
@@ -2423,7 +2275,7 @@
       }
 
       const commentMedia = mediaFile instanceof File
-        ? await createSupabaseCommentMedia(user, mediaFile, profileId)
+        ? await createInlineCommentMedia(mediaFile)
         : null;
 
       if (!normalizedMessage && !commentMedia) {
@@ -2452,8 +2304,6 @@
         message: normalizedMessage,
         mediaURL: commentMedia?.mediaURL ?? null,
         mediaType: commentMedia?.mediaType ?? null,
-        mediaPath: commentMedia?.mediaPath ?? null,
-        mediaSize: commentMedia?.mediaSize ?? null,
         createdAt,
       });
       const displayCommentPayload = {
@@ -2475,8 +2325,6 @@
           message: normalizedMessage,
           mediaURL: commentMedia?.mediaURL ?? null,
           mediaType: commentMedia?.mediaType ?? null,
-          mediaPath: commentMedia?.mediaPath ?? null,
-          mediaSize: commentMedia?.mediaSize ?? null,
         }),
         createdAt: serverTimestamp(),
       };
@@ -2611,10 +2459,6 @@
         throw error;
       }
 
-      if (comment.mediaPath) {
-        await removeSupabaseCommentMedia(user, comment.mediaPath);
-      }
-
       return comment.id;
     };
 
@@ -2666,7 +2510,7 @@
       }
 
       const commentMedia = mediaFile instanceof File
-        ? await createSupabaseCommentMedia(user, mediaFile, comment.profileId ?? null)
+        ? await createInlineCommentMedia(mediaFile)
         : null;
       const finalMediaURL = commentMedia
         ? commentMedia.mediaURL
@@ -2674,12 +2518,6 @@
       const finalMediaType = commentMedia
         ? commentMedia.mediaType
         : (removeMedia ? null : (comment.mediaType ?? null));
-      const finalMediaPath = commentMedia
-        ? commentMedia.mediaPath ?? null
-        : (removeMedia ? null : (comment.mediaPath ?? null));
-      const finalMediaSize = commentMedia
-        ? commentMedia.mediaSize ?? null
-        : (removeMedia ? null : (comment.mediaSize ?? null));
 
       if (!normalizedMessage && !finalMediaURL) {
         throw createFirebaseError(
@@ -2697,8 +2535,6 @@
             message: normalizedMessage,
             mediaURL: finalMediaURL,
             mediaType: finalMediaType,
-            mediaPath: finalMediaPath,
-            mediaSize: finalMediaSize,
             updatedAt,
           },
           { merge: true }
@@ -2721,17 +2557,11 @@
         throw error;
       }
 
-      if ((removeMedia || commentMedia) && comment.mediaPath && comment.mediaPath !== finalMediaPath) {
-        await removeSupabaseCommentMedia(user, comment.mediaPath);
-      }
-
       return toStoredProfileComment(comment.id, {
         ...comment,
         message: normalizedMessage,
         mediaURL: finalMediaURL,
         mediaType: finalMediaType,
-        mediaPath: finalMediaPath,
-        mediaSize: finalMediaSize,
         updatedAt,
       });
     };
