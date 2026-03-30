@@ -99,7 +99,7 @@ const AUTH_STATE_SETTLED_EVENT = "sakura-auth-state-settled";
 const USER_UPDATE_EVENT = "sakura-user-update";
 const PROFILE_PATH_STORAGE_KEY = "sakura-profile-path";
 const CURRENT_PROFILE_ID_STORAGE_KEY = "sakura-current-profile-id";
-const PROFILE_BUILD_MARKER = "role-colors-v46";
+const PROFILE_BUILD_MARKER = "role-colors-v47";
 const repoBasePath = "/sakura.github.io";
 const COMMENT_MEDIA_FILE_ACCEPT = ".png,.jpg,.jpeg,.webp,.gif";
 const PRESENCE_ACTIVE_WINDOW_MS = 5 * 60 * 1000;
@@ -2150,7 +2150,7 @@ export default function ProfilePage() {
       />
       <div className="mx-auto max-w-6xl">
         <div className="mb-8 flex flex-col gap-4">
-          <div className="relative lg:pr-[190px]">
+          <div className="relative">
             <nav className="flex flex-col gap-4 rounded-[28px] border border-[#1b1b1b] bg-black/40 px-6 py-5 backdrop-blur-sm md:flex-row md:items-center md:justify-between">
               <div className="flex flex-wrap items-center gap-3">
                 <HeaderSocialLinks showLabel />
@@ -2165,7 +2165,7 @@ export default function ProfilePage() {
               </div>
             </nav>
 
-            <div className="absolute right-0 top-1/2 hidden -translate-y-1/2 lg:flex">
+            <div className="fixed right-8 top-[42px] z-40 hidden lg:flex">
               <SiteOnlineBadge
                 count={siteOnlineCount}
                 profileHrefBuilder={profilePath}
