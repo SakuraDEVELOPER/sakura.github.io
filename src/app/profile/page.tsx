@@ -7,7 +7,12 @@ import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type
 import { AvatarMedia, AVATAR_FILE_ACCEPT } from "../avatar-media";
 import { HeaderSocialLinks } from "../header-social-links";
 import { SiteOnlineBadge } from "../site-online-badge";
-import { uploadSupabaseCommentMediaTest } from "@/lib/supabase-storage";
+import {
+  deleteSupabaseCommentMedia,
+  uploadSupabaseCommentMedia,
+  uploadSupabaseCommentMediaTest,
+  type SupabaseCommentMediaUploadResult,
+} from "@/lib/supabase-storage";
 import { isSupabaseConfigured } from "@/lib/supabase";
 
 type UserProfile = {
@@ -41,27 +46,34 @@ type ProfileComment = {
   message: string;
   mediaURL?: string | null;
   mediaType?: string | null;
+  mediaPath?: string | null;
+  mediaSize?: number | null;
   createdAt: string | null;
   updatedAt?: string | null;
 };
 
-type SupabaseUploadTestResult = {
-  bucket: string;
-  path: string;
-  publicUrl: string;
-  contentType: string;
-  size: number;
+type CommentMediaPayload = {
+  mediaURL: string;
+  mediaType: string;
+  mediaPath: string;
+  mediaSize: number;
 };
+
+type SupabaseUploadTestResult = SupabaseCommentMediaUploadResult;
 
 type Bridge = {
   getProfileById: (profileId: number) => Promise<UserProfile | null>;
   getProfileByAuthorName: (authorName: string) => Promise<UserProfile | null>;
   getProfileComments: (profileId: number) => Promise<ProfileComment[]>;
-  addProfileComment: (profileId: number, message: string, mediaFile?: File | null) => Promise<ProfileComment>;
+  addProfileComment: (
+    profileId: number,
+    message: string,
+    media?: File | CommentMediaPayload | null
+  ) => Promise<ProfileComment>;
   updateProfileComment: (
     commentId: string,
     message: string,
-    mediaFile?: File | null,
+    media?: File | CommentMediaPayload | null,
     removeMedia?: boolean
   ) => Promise<ProfileComment | null>;
   deleteProfileComment: (commentId: string) => Promise<string | null>;
@@ -175,7 +187,7 @@ const getProfileActionErrorMessage = (error: unknown, fallback: string) => {
   }
 
   if (code === "comments/media-too-large") {
-    return "The selected media is too large for a Firestore comment. Use a smaller image or GIF.";
+    return "The selected media is too large. Use a smaller image or GIF.";
   }
 
   if (code === "comments/media-invalid") {
@@ -218,8 +230,16 @@ const getProfileActionErrorMessage = (error: unknown, fallback: string) => {
 };
 const getCommentWriteDeniedMessage = (hasMedia: boolean) =>
   hasMedia
-    ? "Comment media could not be saved. If attachments are enabled, allow mediaURL and mediaType in profileComments rules."
+    ? "Comment media could not be saved. If attachments are enabled, allow mediaURL, mediaType, mediaPath, and mediaSize in profileComments rules."
     : "Comment could not be saved. Check Firestore rules for profileComments.";
+const toCommentMediaPayload = (
+  uploadResult: SupabaseCommentMediaUploadResult
+): CommentMediaPayload => ({
+  mediaURL: uploadResult.publicUrl,
+  mediaType: uploadResult.contentType,
+  mediaPath: uploadResult.path,
+  mediaSize: uploadResult.size,
+});
 const normalizeUsernameDraft = (value: string | null | undefined) =>
   String(value ?? "")
     .normalize("NFKC")
@@ -1970,8 +1990,24 @@ export default function ProfilePage() {
     setCommentSuccess(null);
     setIsCommentSubmitting(true);
 
+    let uploadedMedia: SupabaseCommentMediaUploadResult | null = null;
+
     try {
-      const savedComment = await bridge.addProfileComment(activeProfile.profileId, nextComment, commentMediaFile);
+      let nextMedia: File | CommentMediaPayload | null = commentMediaFile;
+
+      if (commentMediaFile && isSupabaseConfigured && visibleCurrentUser?.uid) {
+        uploadedMedia = await uploadSupabaseCommentMedia(
+          commentMediaFile,
+          visibleCurrentUser.uid
+        );
+        nextMedia = toCommentMediaPayload(uploadedMedia);
+      }
+
+      const savedComment = await bridge.addProfileComment(
+        activeProfile.profileId,
+        nextComment,
+        nextMedia
+      );
       setComments((currentComments) => [savedComment, ...currentComments.filter((comment) => comment.id !== savedComment.id)]);
       setCommentInput("");
       setCommentMediaFile(null);
@@ -1980,6 +2016,12 @@ export default function ProfilePage() {
       }
       setCommentSuccess("Comment posted.");
     } catch (error) {
+      if (uploadedMedia?.path) {
+        void deleteSupabaseCommentMedia(uploadedMedia.path).catch((cleanupError) => {
+          console.error("Failed to cleanup uploaded comment media:", cleanupError);
+        });
+      }
+
       setCommentError(
         getErrorCode(error) === "comments/write-denied"
           ? getCommentWriteDeniedMessage(Boolean(commentMediaFile))
@@ -2032,6 +2074,7 @@ export default function ProfilePage() {
 
   const handleCommentDelete = async (commentId: string) => {
     const bridge = getWindowState().sakuraFirebaseAuth;
+    const currentComment = comments.find((comment) => comment.id === commentId) ?? null;
 
     if (!bridge || !commentId || !visibleCurrentUser) {
       return;
@@ -2057,6 +2100,12 @@ export default function ProfilePage() {
       }
 
       setCommentSuccess("Comment deleted.");
+
+      if (currentComment?.mediaPath) {
+        void deleteSupabaseCommentMedia(currentComment.mediaPath).catch((cleanupError) => {
+          console.error("Failed to remove deleted comment media:", cleanupError);
+        });
+      }
     } catch (error) {
       setCommentError(getProfileActionErrorMessage(error, "Could not delete this comment."));
     } finally {
@@ -2137,21 +2186,42 @@ export default function ProfilePage() {
     setCommentSuccess(null);
     setIsCommentUpdating(true);
 
+    let uploadedMedia: SupabaseCommentMediaUploadResult | null = null;
+
     try {
+      let nextMedia: File | CommentMediaPayload | null = editingCommentMediaFile;
+
+      if (editingCommentMediaFile && isSupabaseConfigured && visibleCurrentUser?.uid) {
+        uploadedMedia = await uploadSupabaseCommentMedia(
+          editingCommentMediaFile,
+          visibleCurrentUser.uid
+        );
+        nextMedia = toCommentMediaPayload(uploadedMedia);
+      }
+
       const updatedComment = await bridge.updateProfileComment(
         commentId,
         nextMessage,
-        editingCommentMediaFile,
+        nextMedia,
         isEditingCommentMediaRemoved
       );
 
-      if (updatedComment) {
-        setComments((currentComments) =>
-          currentComments.map((comment) =>
-            comment.id === updatedComment.id ? updatedComment : comment
-          )
-        );
+      if (!updatedComment) {
+        if (uploadedMedia?.path) {
+          void deleteSupabaseCommentMedia(uploadedMedia.path).catch((cleanupError) => {
+            console.error("Failed to cleanup uploaded comment media:", cleanupError);
+          });
+        }
+
+        setCommentError("This comment no longer exists.");
+        return;
       }
+
+      setComments((currentComments) =>
+        currentComments.map((comment) =>
+          comment.id === updatedComment.id ? updatedComment : comment
+        )
+      );
 
       setEditingCommentId(null);
       setEditingCommentMessage("");
@@ -2162,7 +2232,19 @@ export default function ProfilePage() {
         editingCommentMediaInputRef.current.value = "";
       }
       setCommentSuccess("Comment updated.");
+
+      if (currentComment?.mediaPath && (Boolean(uploadedMedia?.path) || isEditingCommentMediaRemoved)) {
+        void deleteSupabaseCommentMedia(currentComment.mediaPath).catch((cleanupError) => {
+          console.error("Failed to remove replaced comment media:", cleanupError);
+        });
+      }
     } catch (error) {
+      if (uploadedMedia?.path) {
+        void deleteSupabaseCommentMedia(uploadedMedia.path).catch((cleanupError) => {
+          console.error("Failed to cleanup uploaded comment media:", cleanupError);
+        });
+      }
+
       setCommentError(
         getErrorCode(error) === "comments/write-denied"
           ? getCommentWriteDeniedMessage(

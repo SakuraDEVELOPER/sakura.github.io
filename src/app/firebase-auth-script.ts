@@ -350,6 +350,50 @@
     };
   };
 
+  const normalizeProfileCommentMediaPath = (value) =>
+    typeof value === "string" && value ? value : null;
+  const normalizeProfileCommentMediaSize = (value) =>
+    typeof value === "number" && Number.isFinite(value) && value > 0
+      ? Math.round(value)
+      : null;
+  const toPreparedProfileCommentMedia = (value) => {
+    if (!value || typeof value !== "object" || value instanceof File) {
+      return null;
+    }
+
+    const mediaURL = typeof value.mediaURL === "string" && value.mediaURL ? value.mediaURL : null;
+    const mediaType =
+      typeof value.mediaType === "string" && PROFILE_COMMENT_MEDIA_CONTENT_TYPES.has(value.mediaType)
+        ? value.mediaType
+        : null;
+
+    if (!mediaURL || !mediaType) {
+      return null;
+    }
+
+    return {
+      mediaURL,
+      mediaType,
+      mediaPath: normalizeProfileCommentMediaPath(value.mediaPath),
+      mediaSize: normalizeProfileCommentMediaSize(value.mediaSize),
+    };
+  };
+  const prepareProfileCommentMedia = async (value) => {
+    if (value instanceof File) {
+      const inlineMedia = await createInlineCommentMedia(value);
+
+      return inlineMedia
+        ? {
+            ...inlineMedia,
+            mediaPath: null,
+            mediaSize: null,
+          }
+        : null;
+    }
+
+    return toPreparedProfileCommentMedia(value);
+  };
+
   const getAvatarStorageExtension = (file) => {
     switch (file?.type) {
       case "image/gif":
@@ -734,6 +778,8 @@
     message: normalizeProfileCommentMessage(details.message),
     mediaURL: normalizeProfileCommentMediaURL(details.mediaURL),
     mediaType: normalizeProfileCommentMediaType(details.mediaType),
+    mediaPath: normalizeProfileCommentMediaPath(details.mediaPath),
+    mediaSize: normalizeProfileCommentMediaSize(details.mediaSize),
     createdAt: normalizeProfileCommentCreatedAt(details.createdAt),
     updatedAt: normalizeProfileCommentCreatedAt(details.updatedAt),
   });
@@ -2274,9 +2320,7 @@
         authorSnapshot = await resolveUserSnapshot(user);
       }
 
-      const commentMedia = mediaFile instanceof File
-        ? await createInlineCommentMedia(mediaFile)
-        : null;
+      const commentMedia = await prepareProfileCommentMedia(mediaFile);
 
       if (!normalizedMessage && !commentMedia) {
         throw createFirebaseError(
@@ -2304,6 +2348,8 @@
         message: normalizedMessage,
         mediaURL: commentMedia?.mediaURL ?? null,
         mediaType: commentMedia?.mediaType ?? null,
+        mediaPath: commentMedia?.mediaPath ?? null,
+        mediaSize: commentMedia?.mediaSize ?? null,
         createdAt,
       });
       const displayCommentPayload = {
@@ -2325,6 +2371,8 @@
           message: normalizedMessage,
           mediaURL: commentMedia?.mediaURL ?? null,
           mediaType: commentMedia?.mediaType ?? null,
+          mediaPath: commentMedia?.mediaPath ?? null,
+          mediaSize: commentMedia?.mediaSize ?? null,
         }),
         createdAt: serverTimestamp(),
       };
@@ -2509,15 +2557,19 @@
         );
       }
 
-      const commentMedia = mediaFile instanceof File
-        ? await createInlineCommentMedia(mediaFile)
-        : null;
+      const commentMedia = await prepareProfileCommentMedia(mediaFile);
       const finalMediaURL = commentMedia
         ? commentMedia.mediaURL
         : (removeMedia ? null : (comment.mediaURL ?? null));
       const finalMediaType = commentMedia
         ? commentMedia.mediaType
         : (removeMedia ? null : (comment.mediaType ?? null));
+      const finalMediaPath = commentMedia
+        ? commentMedia.mediaPath ?? null
+        : (removeMedia ? null : (comment.mediaPath ?? null));
+      const finalMediaSize = commentMedia
+        ? commentMedia.mediaSize ?? null
+        : (removeMedia ? null : (comment.mediaSize ?? null));
 
       if (!normalizedMessage && !finalMediaURL) {
         throw createFirebaseError(
@@ -2535,6 +2587,8 @@
             message: normalizedMessage,
             mediaURL: finalMediaURL,
             mediaType: finalMediaType,
+            mediaPath: finalMediaPath,
+            mediaSize: finalMediaSize,
             updatedAt,
           },
           { merge: true }
@@ -2562,6 +2616,8 @@
         message: normalizedMessage,
         mediaURL: finalMediaURL,
         mediaType: finalMediaType,
+        mediaPath: finalMediaPath,
+        mediaSize: finalMediaSize,
         updatedAt,
       });
     };
