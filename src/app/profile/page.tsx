@@ -144,10 +144,12 @@ const USER_UPDATE_EVENT = "sakura-user-update";
 const PROFILE_PATH_STORAGE_KEY = "sakura-profile-path";
 const CURRENT_PROFILE_ID_STORAGE_KEY = "sakura-current-profile-id";
 const PROFILE_BUILD_MARKER = "role-colors-v61";
+const PROFILE_THEME_SONG_PROFILE_IDS = new Set([1, 4, 6]);
 const COMMENT_MENTION_PATTERN = /@([A-Za-z\u0400-\u04FF0-9._-]{3,24})/g;
 const COMMENT_MENTION_DRAFT_PATTERN = /(^|[\s([{"'`])@([A-Za-z\u0400-\u04FF0-9._-]{2,24})$/;
 const COMMENT_MENTION_TOKEN_CHARACTER_PATTERN = /[A-Za-z\u0400-\u04FF0-9._-]/;
 const repoBasePath = "/sakura.github.io";
+const PROFILE_THEME_SONG_SRC = `${repoBasePath}/music/where-is-my-mind.mp3`;
 const COMMENT_MEDIA_FILE_ACCEPT = ".png,.jpg,.jpeg,.webp,.gif,.mp4,.webm";
 const PRESENCE_ACTIVE_WINDOW_MS = 90 * 1000;
 const restoreProfilePathScript = `
@@ -1036,6 +1038,7 @@ export default function ProfilePage() {
   const [confirmingCommentDeleteId, setConfirmingCommentDeleteId] = useState<string | null>(null);
   const [siteOnlineCount, setSiteOnlineCount] = useState<number | null>(null);
   const commentTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const profileThemeAudioRef = useRef<HTMLAudioElement | null>(null);
   const editingCommentTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const commentMediaInputRef = useRef<HTMLInputElement | null>(null);
   const editingCommentMediaInputRef = useRef<HTMLInputElement | null>(null);
@@ -1229,6 +1232,54 @@ export default function ProfilePage() {
     isOwner && visibleCurrentUser?.uid === activeProfile?.uid
       ? visibleCurrentUser?.presence ?? activeProfile?.presence ?? null
       : activeProfile?.presence ?? null;
+  const shouldPlayProfileThemeSong =
+    typeof activeProfile?.profileId === "number" &&
+    PROFILE_THEME_SONG_PROFILE_IDS.has(activeProfile.profileId);
+
+  useEffect(() => {
+    const audio = profileThemeAudioRef.current;
+
+    if (!audio) {
+      return;
+    }
+
+    audio.loop = true;
+    audio.volume = 0.34;
+
+    if (!shouldPlayProfileThemeSong) {
+      audio.pause();
+      audio.currentTime = 0;
+      return;
+    }
+
+    let disposed = false;
+
+    const attemptPlay = () => {
+      if (disposed) {
+        return;
+      }
+
+      void audio.play().catch(() => {
+      });
+    };
+
+    const handleUserActivation = () => {
+      attemptPlay();
+    };
+
+    attemptPlay();
+    window.addEventListener("pointerdown", handleUserActivation);
+    window.addEventListener("keydown", handleUserActivation);
+
+    return () => {
+      disposed = true;
+      window.removeEventListener("pointerdown", handleUserActivation);
+      window.removeEventListener("keydown", handleUserActivation);
+      audio.pause();
+      audio.currentTime = 0;
+    };
+  }, [shouldPlayProfileThemeSong]);
+
   const isActiveProfileOnline = isPresenceOnlineNow(activePresence);
   const hasUsername = Boolean(activeProfile?.login?.trim());
   const requiresUsernamePasswordConfirmation = Boolean(
@@ -3362,6 +3413,13 @@ export default function ProfilePage() {
         dangerouslySetInnerHTML={{
           __html: restoreProfilePathScript,
         }}
+      />
+      <audio
+        ref={profileThemeAudioRef}
+        src={PROFILE_THEME_SONG_SRC}
+        preload="auto"
+        aria-hidden="true"
+        className="hidden"
       />
       <div className="mx-auto max-w-6xl">
         <div className="mb-8 flex flex-col gap-4">
