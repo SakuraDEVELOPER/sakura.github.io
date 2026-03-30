@@ -11,6 +11,9 @@ type FirebaseBootWindow = Window & {
 const getWindowState = () => window as FirebaseBootWindow;
 const CHUNK_RELOAD_STORAGE_KEY = "sakura-chunk-reload-at";
 const CHUNK_RELOAD_COOLDOWN_MS = 20_000;
+const FIREBASE_AUTH_STORAGE_KEY_PREFIX = "firebase:authUser:";
+const AUTH_IDLE_PRELOAD_TIMEOUT_MS = 700;
+const AUTH_FALLBACK_PRELOAD_TIMEOUT_MS = 450;
 
 const isChunkLoadFailure = (error: unknown) => {
   if (!(error instanceof Error)) {
@@ -40,6 +43,37 @@ const reloadOnChunkFailure = () => {
   } catch {
     window.location.reload();
   }
+};
+
+const hasPersistedFirebaseSession = () => {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  try {
+    for (let index = 0; index < window.localStorage.length; index += 1) {
+      const storageKey = window.localStorage.key(index);
+
+      if (storageKey?.startsWith(FIREBASE_AUTH_STORAGE_KEY_PREFIX)) {
+        return true;
+      }
+    }
+  } catch {
+    return false;
+  }
+
+  return false;
+};
+
+const shouldBootImmediately = () => {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return (
+    /(?:^|\/)profile(?:\/|$)/.test(window.location.pathname) ||
+    hasPersistedFirebaseSession()
+  );
 };
 
 export default function FirebaseAuthBoot() {
@@ -106,7 +140,7 @@ export default function FirebaseAuthBoot() {
 
     runtime.sakuraStartFirebaseAuth = bootNow;
 
-    if (/(?:^|\/)profile(?:\/|$)/.test(window.location.pathname)) {
+    if (shouldBootImmediately()) {
       void bootNow();
       return;
     }
@@ -118,11 +152,11 @@ export default function FirebaseAuthBoot() {
     if ("requestIdleCallback" in window && typeof window.requestIdleCallback === "function") {
       idleCallbackId = window.requestIdleCallback(() => {
         void loadRuntime();
-      }, { timeout: 1500 });
+      }, { timeout: AUTH_IDLE_PRELOAD_TIMEOUT_MS });
     } else {
       idleTimerId = window.setTimeout(() => {
         void loadRuntime();
-      }, 1200);
+      }, AUTH_FALLBACK_PRELOAD_TIMEOUT_MS);
     }
 
     const handleWindowError = (event: ErrorEvent) => {
