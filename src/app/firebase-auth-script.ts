@@ -3124,6 +3124,7 @@
           query(collection(db, "users"), where("presence.status", "==", "online"))
         );
         let count = 0;
+        const countedUserIds = new Set();
 
         usersSnapshot.forEach((userDoc) => {
           const details = userDoc.data();
@@ -3133,9 +3134,32 @@
           }
 
           if (isPresenceFreshOnline(details?.presence)) {
+            countedUserIds.add(userDoc.id);
             count += 1;
           }
         });
+
+        const currentUser = auth.currentUser;
+        const currentSnapshot = window.sakuraCurrentUserSnapshot;
+        const localCurrentUid =
+          currentUser && !currentUser.isAnonymous
+            ? currentUser.uid
+            : currentSnapshot?.uid ?? null;
+        const localSessionLooksOnline =
+          Boolean(localCurrentUid) &&
+          Boolean(navigator.onLine) &&
+          (typeof document === "undefined" || document.visibilityState !== "hidden");
+        const localPresenceLooksOnline =
+          isPresenceFreshOnline(currentSnapshot?.presence) || localSessionLooksOnline;
+
+        if (
+          localCurrentUid &&
+          localPresenceLooksOnline &&
+          currentSnapshot?.isBanned !== true &&
+          !countedUserIds.has(localCurrentUid)
+        ) {
+          count += 1;
+        }
 
         return count;
       } catch (error) {
