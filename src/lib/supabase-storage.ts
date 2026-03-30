@@ -6,6 +6,8 @@ const ALLOWED_COMMENT_MEDIA_TYPES = new Set([
   "image/png",
   "image/webp",
   "image/gif",
+  "video/mp4",
+  "video/webm",
 ]);
 const ALLOWED_AVATAR_MEDIA_TYPES = new Set([
   "image/jpeg",
@@ -44,7 +46,7 @@ function buildObjectPath(file: File, folder: string, userId = "guest") {
 
 export function validateSupabaseCommentMediaFile(file: File) {
   if (!ALLOWED_COMMENT_MEDIA_TYPES.has(file.type)) {
-    throw new Error("Only PNG, JPG, WEBP, and GIF files are supported.");
+    throw new Error("Only PNG, JPG, WEBP, GIF, MP4, and WEBM files are supported.");
   }
 
   if (file.size <= 0 || file.size > MAX_COMMENT_MEDIA_BYTES) {

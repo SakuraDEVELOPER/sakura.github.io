@@ -135,7 +135,7 @@ const PROFILE_PATH_STORAGE_KEY = "sakura-profile-path";
 const CURRENT_PROFILE_ID_STORAGE_KEY = "sakura-current-profile-id";
 const PROFILE_BUILD_MARKER = "role-colors-v53";
 const repoBasePath = "/sakura.github.io";
-const COMMENT_MEDIA_FILE_ACCEPT = ".png,.jpg,.jpeg,.webp,.gif";
+const COMMENT_MEDIA_FILE_ACCEPT = ".png,.jpg,.jpeg,.webp,.gif,.mp4,.webm";
 const PRESENCE_ACTIVE_WINDOW_MS = 5 * 60 * 1000;
 const restoreProfilePathScript = `
   (function () {
@@ -195,7 +195,7 @@ const getProfileActionErrorMessage = (error: unknown, fallback: string) => {
   }
 
   if (code === "comments/media-unsupported") {
-    return "Only PNG, JPG, WEBP, and GIF files are supported in comments.";
+    return "Only PNG, JPG, WEBP, GIF, MP4, and WEBM files are supported in comments.";
   }
 
   if (code === "comments/media-too-large") {
@@ -264,6 +264,41 @@ const toAvatarUploadPayload = (
   avatarPath: uploadResult.path,
   avatarSize: uploadResult.size,
 });
+const isCommentVideoMediaType = (value: string | null | undefined) =>
+  value === "video/mp4" || value === "video/webm";
+
+function CommentMediaFrame({
+  src,
+  mediaType,
+  alt,
+  className,
+  controls = false,
+}: {
+  src: string;
+  mediaType?: string | null;
+  alt: string;
+  className: string;
+  controls?: boolean;
+}) {
+  if (isCommentVideoMediaType(mediaType)) {
+    return (
+      <video
+        src={src}
+        aria-label={alt}
+        title={alt}
+        controls={controls}
+        autoPlay={!controls}
+        loop={!controls}
+        muted
+        playsInline
+        preload="metadata"
+        className={className}
+      />
+    );
+  }
+
+  return <img src={src} alt={alt} loading="lazy" className={className} />;
+}
 const normalizeUsernameDraft = (value: string | null | undefined) =>
   String(value ?? "")
     .normalize("NFKC")
@@ -2437,7 +2472,7 @@ export default function ProfilePage() {
                       {commentMediaFile ? <button type="button" onClick={clearCommentMediaSelection} className="inline-flex items-center justify-center rounded-full border border-[#2a2a2a] bg-[#101010] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-gray-300 transition hover:border-[#4a4a4a] hover:text-white">Remove</button> : null}
                     </div>
                     {commentMediaPreviewUrl ? <div className="mt-3 overflow-hidden rounded-[22px] border border-[#232323] bg-[#050505]">
-                      <img src={commentMediaPreviewUrl} alt="Selected comment media preview" className="block max-h-[320px] w-full object-contain" />
+                      <CommentMediaFrame src={commentMediaPreviewUrl} mediaType={commentMediaFile?.type ?? null} alt="Selected comment media preview" className="block max-h-[320px] w-full object-contain" />
                     </div> : null}
                     <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                       <div className="flex flex-wrap items-center gap-3">
@@ -2509,9 +2544,9 @@ export default function ProfilePage() {
                             {!editingCommentMediaFile && comment.mediaURL && !isEditingCommentMediaRemoved ? <button type="button" onClick={removeEditingCommentMedia} className="inline-flex items-center justify-center rounded-full border border-[#2a2a2a] bg-[#101010] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-gray-300 transition hover:border-[#4a4a4a] hover:text-white">Remove media</button> : null}
                           </div>
                           {editingCommentMediaPreviewUrl ? <div className="mt-3 overflow-hidden rounded-[22px] border border-[#232323] bg-[#050505]">
-                            <img src={editingCommentMediaPreviewUrl} alt="Updated comment media preview" className="block max-h-[320px] w-full object-contain" />
+                            <CommentMediaFrame src={editingCommentMediaPreviewUrl} mediaType={editingCommentMediaFile?.type ?? null} alt="Updated comment media preview" className="block max-h-[320px] w-full object-contain" />
                           </div> : (!isEditingCommentMediaRemoved && comment.mediaURL ? <div className="mt-3 overflow-hidden rounded-[22px] border border-[#232323] bg-[#050505]">
-                            <img src={comment.mediaURL} alt={`${comment.authorName} comment attachment`} loading="lazy" className="block max-h-[320px] w-full object-contain" />
+                            <CommentMediaFrame src={comment.mediaURL} mediaType={comment.mediaType} alt={`${comment.authorName} comment attachment`} className="block max-h-[320px] w-full object-contain" controls={isCommentVideoMediaType(comment.mediaType)} />
                           </div> : null)}
                           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                             <div className="flex flex-wrap items-center gap-3">
@@ -2524,7 +2559,7 @@ export default function ProfilePage() {
                         </div> : <div className="mt-3 space-y-3">
                           {comment.message ? <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-gray-300">{comment.message}</p> : null}
                           {comment.mediaURL ? <div className="overflow-hidden rounded-[22px] border border-[#232323] bg-[#050505]">
-                            <img src={comment.mediaURL} alt={`${comment.authorName} comment attachment`} loading="lazy" className="block max-h-[360px] w-full object-contain" />
+                            <CommentMediaFrame src={comment.mediaURL} mediaType={comment.mediaType} alt={`${comment.authorName} comment attachment`} className="block max-h-[360px] w-full object-contain" controls={isCommentVideoMediaType(comment.mediaType)} />
                           </div> : null}
                         </div>}
                       </div>;

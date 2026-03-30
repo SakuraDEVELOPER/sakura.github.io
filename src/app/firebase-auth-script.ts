@@ -80,7 +80,14 @@
   const PASSTHROUGH_AVATAR_CONTENT_TYPES = new Set(["image/gif", "image/webp", "video/mp4", "video/webm"]);
   const STORAGE_AVATAR_CONTENT_TYPES = new Set(["image/gif", "image/webp", "video/mp4", "video/webm"]);
   const PROFILE_COMMENT_MAX_LENGTH = 280;
-  const PROFILE_COMMENT_MEDIA_CONTENT_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+  const PROFILE_COMMENT_MEDIA_CONTENT_TYPES = new Set([
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+    "video/mp4",
+    "video/webm",
+  ]);
   const PROFILE_COMMENT_MEDIA_MAX_BYTES = 5 * 1024 * 1024;
   const PROFILE_COMMENT_GIF_MAX_BYTES = 700 * 1024;
   const PROFILE_COMMENT_MEDIA_MAX_DIMENSION = 820;
@@ -286,7 +293,14 @@
     if (!PROFILE_COMMENT_MEDIA_CONTENT_TYPES.has(file.type)) {
       throw createFirebaseError(
         "comments/media-unsupported",
-        "Only PNG, JPG, WEBP, and GIF files are supported in comments."
+        "Only PNG, JPG, WEBP, GIF, MP4, and WEBM files are supported in comments."
+      );
+    }
+
+    if (file.type === "video/mp4" || file.type === "video/webm") {
+      throw createFirebaseError(
+        "comments/media-upload-required",
+        "Video attachments require Supabase media upload."
       );
     }
 
