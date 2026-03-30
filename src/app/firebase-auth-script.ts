@@ -25,6 +25,7 @@
           reload,
           sendEmailVerification,
           signInAnonymously,
+          signInWithPopup,
           signInWithRedirect,
           signInWithEmailAndPassword,
           signOut,
@@ -345,6 +346,15 @@
     typeof error === "object" && error !== null && "code" in error
       ? String(error.code)
       : "";
+
+  const shouldFallbackGooglePopupToRedirect = (error) => {
+    const code = getErrorCode(error);
+
+    return (
+      code === "auth/popup-blocked" ||
+      code === "auth/operation-not-supported-in-this-environment"
+    );
+  };
 
   const isPermissionDeniedError = (error) =>
     getErrorCode(error) === "permission-denied" ||
@@ -1977,8 +1987,17 @@
     };
 
     const loginWithGoogle = async () => {
-      await signInWithRedirect(auth, provider);
-      return null;
+      try {
+        const result = await signInWithPopup(auth, provider);
+        return await finalizeGoogleSignIn(result.user);
+      } catch (error) {
+        if (shouldFallbackGooglePopupToRedirect(error)) {
+          await signInWithRedirect(auth, provider);
+          return null;
+        }
+
+        throw error;
+      }
     };
 
     const getProfileById = async (profileId) => {
