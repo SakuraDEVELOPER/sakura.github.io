@@ -987,10 +987,13 @@ export default function ProfilePage() {
   const [commentSuccess, setCommentSuccess] = useState<string | null>(null);
   const [isCommentSubmitting, setIsCommentSubmitting] = useState(false);
   const [activeMentionComposer, setActiveMentionComposer] = useState<MentionComposerMode | null>(null);
+  const [mentionComposerActivityTick, setMentionComposerActivityTick] = useState(0);
   const [commentMentionCaret, setCommentMentionCaret] = useState(0);
   const [editingCommentMentionCaret, setEditingCommentMentionCaret] = useState(0);
   const [mentionSuggestions, setMentionSuggestions] = useState<UserProfile[]>([]);
   const [isMentionSuggestionsLoading, setIsMentionSuggestionsLoading] = useState(false);
+  const [commentDraftMentionProfilesByKey, setCommentDraftMentionProfilesByKey] = useState<Record<string, UserProfile>>({});
+  const [editingDraftMentionProfilesByKey, setEditingDraftMentionProfilesByKey] = useState<Record<string, UserProfile>>({});
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentMessage, setEditingCommentMessage] = useState("");
   const [editingCommentMediaFile, setEditingCommentMediaFile] = useState<File | null>(null);
@@ -1486,6 +1489,82 @@ export default function ProfilePage() {
       </span>
     );
   };
+  const resolveComposerMentionProfiles = (
+    value: string,
+    profilesByKey: Record<string, UserProfile>
+  ) =>
+    extractCommentMentionKeys(value)
+      .map((mentionKey) => profilesByKey[mentionKey])
+      .filter((profile): profile is UserProfile => Boolean(profile))
+      .filter(
+        (profile, index, profiles) =>
+          index === profiles.findIndex((candidate) => candidate.uid === profile.uid)
+      );
+  const renderComposerMentionAttachments = (
+    mode: MentionComposerMode,
+    value: string,
+    profilesByKey: Record<string, UserProfile>
+  ) => {
+    const mentionProfiles = resolveComposerMentionProfiles(value, profilesByKey);
+
+    if (!mentionProfiles.length) {
+      return null;
+    }
+
+    return (
+      <div className="mt-3 rounded-[20px] border border-[#232323] bg-[#090909] px-4 py-3">
+        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-gray-500">
+          Attached Accounts
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {mentionProfiles.map((profile) => {
+            const profileRole = resolveMentionProfileRole(profile);
+            const profileBadgeRole = deriveVisibleProfileRoles(profile)[0] ?? "user";
+            const profilePreviewName = profileNameOf(profile);
+            const profilePreviewInitials = initialsOf(profile);
+
+            return (
+              <a
+                key={`${mode}:${profile.uid}`}
+                href={typeof profile.profileId === "number" ? profilePath(profile.profileId) : "#"}
+                className="inline-flex min-w-0 max-w-full items-center gap-3 rounded-full border border-[#2a2022] bg-[#120d11] px-3 py-2 transition hover:border-[#ffb7c5]/40 hover:bg-[#171014]"
+              >
+                {profile.photoURL ? (
+                  <AvatarMedia
+                    src={profile.photoURL}
+                    alt={profilePreviewName}
+                    loading="lazy"
+                    decoding="async"
+                    className="h-9 w-9 shrink-0 rounded-full border border-[#2a2022] object-cover"
+                  />
+                ) : (
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#2a2022] bg-[#171012] text-[10px] font-black uppercase text-[#ffb7c5]">
+                    {profilePreviewInitials}
+                  </span>
+                )}
+                <span className="min-w-0">
+                  <span
+                    style={roleCommentAuthorStyle(profileRole)}
+                    className="block truncate text-xs font-semibold"
+                  >
+                    {profilePreviewName}
+                  </span>
+                  <span
+                    style={{ ...roleBadgeStyle(profileBadgeRole), ...roleBadgeTextStyle }}
+                    className="mt-1 inline-flex max-w-full items-center truncate whitespace-nowrap rounded-full border px-2.5 py-1 text-[9px] font-bold"
+                  >
+                    <span aria-hidden="true" className="inline-flex items-center truncate">
+                      {renderRoleBadgeText(profileBadgeRole)}
+                    </span>
+                  </span>
+                </span>
+              </a>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
   const renderCommentMessageWithMentions = (value: string) => {
     const parts: ReactNode[] = [];
     COMMENT_MENTION_PATTERN.lastIndex = 0;
@@ -1511,6 +1590,7 @@ export default function ProfilePage() {
       const mentionProfile = mentionKey ? commentMentionProfilesByKey[mentionKey] : null;
       const mentionText = `@${mentionLogin}`;
       const mentionRole = resolveMentionProfileRole(mentionProfile);
+      const mentionDisplayText = mentionProfile ? profileNameOf(mentionProfile) : mentionText;
 
       if (mentionProfile?.profileId) {
         parts.push(
@@ -1523,7 +1603,7 @@ export default function ProfilePage() {
               style={roleCommentAuthorStyle(mentionRole)}
               className="inline-flex max-w-full items-baseline truncate font-semibold underline decoration-transparent transition duration-150 hover:brightness-125 hover:decoration-current focus-visible:decoration-current"
             >
-              {mentionText}
+              {mentionDisplayText}
             </a>
             {renderMentionProfilePreview(mentionProfile, mentionText)}
           </span>
@@ -1837,6 +1917,8 @@ export default function ProfilePage() {
       setCommentAuthorProfiles({});
       setCommentAuthorProfilesByCommentId({});
       setCommentMentionProfilesByKey({});
+      setCommentDraftMentionProfilesByKey({});
+      setEditingDraftMentionProfilesByKey({});
       setCommentsError(null);
       setIsAdminPanelOpen(false);
       setBanError(null);
@@ -1880,6 +1962,8 @@ export default function ProfilePage() {
     setCommentMentionCaret(0);
     setEditingCommentMentionCaret(0);
     clearMentionSuggestions();
+    setCommentDraftMentionProfilesByKey({});
+    setEditingDraftMentionProfilesByKey({});
     setEditingCommentId(null);
     setEditingCommentMessage("");
     setEditingCommentMediaFile(null);
@@ -2227,6 +2311,87 @@ export default function ProfilePage() {
     editingCommentMentionCaret,
   ]);
 
+  useEffect(() => {
+    const bridge = getWindowState().sakuraFirebaseAuth;
+    const syncMentionProfiles = async (
+      value: string,
+      setProfilesByKey: (value: Record<string, UserProfile>) => void
+    ) => {
+      const mentionKeys = extractCommentMentionKeys(value);
+
+      if (!mentionKeys.length || !bridge) {
+        setProfilesByKey({});
+        return;
+      }
+
+      const nextProfilesByKey: Record<string, UserProfile> = {};
+      const knownProfiles = [
+        activeProfile,
+        visibleCurrentUser,
+        ...Object.values(commentAuthorProfiles),
+        ...Object.values(commentMentionProfilesByKey),
+      ].filter((profile): profile is UserProfile => Boolean(profile));
+
+      knownProfiles.forEach((profile) => {
+        const loginKey = normalizeCommentAuthorKey(profile.login);
+
+        if (loginKey) {
+          nextProfilesByKey[loginKey] = profile;
+        }
+      });
+
+      const unresolvedMentionKeys = mentionKeys.filter((mentionKey) => !nextProfilesByKey[mentionKey]);
+
+      if (unresolvedMentionKeys.length) {
+        await Promise.all(
+          unresolvedMentionKeys.map(async (mentionKey) => {
+            try {
+              const resolvedProfile = await bridge.getProfileByAuthorName(`@${mentionKey}`);
+
+              if (resolvedProfile) {
+                nextProfilesByKey[mentionKey] = resolvedProfile;
+              }
+            } catch (error) {
+            }
+          })
+        );
+      }
+
+      setProfilesByKey(nextProfilesByKey);
+    };
+
+    void syncMentionProfiles(commentInput, setCommentDraftMentionProfilesByKey);
+    void syncMentionProfiles(editingCommentMessage, setEditingDraftMentionProfilesByKey);
+  }, [
+    commentInput,
+    editingCommentMessage,
+    activeProfile,
+    visibleCurrentUser,
+    commentAuthorProfiles,
+    commentMentionProfilesByKey,
+  ]);
+
+  useEffect(() => {
+    if (!activeMentionComposer) {
+      return;
+    }
+
+    const idleTimeout = window.setTimeout(() => {
+      const activeTextarea =
+        activeMentionComposer === "new"
+          ? commentTextareaRef.current
+          : editingCommentTextareaRef.current;
+
+      activeTextarea?.blur();
+      setActiveMentionComposer(null);
+      clearMentionSuggestions();
+    }, 60 * 1000);
+
+    return () => {
+      window.clearTimeout(idleTimeout);
+    };
+  }, [activeMentionComposer, mentionComposerActivityTick]);
+
   const normalizedDraftRoles = normalizeRoleSelection(draftRoles);
   const availableRoleOptions = EDITABLE_ROLE_OPTIONS.filter(
     (role) =>
@@ -2256,6 +2421,7 @@ export default function ProfilePage() {
     element: HTMLTextAreaElement
   ) => {
     updateMentionComposerCaret(mode, element);
+    setMentionComposerActivityTick(Date.now());
   };
   const handleMentionComposerBlur = () => {
     window.requestAnimationFrame(() => {
@@ -3047,6 +3213,7 @@ export default function ProfilePage() {
                       />
                     </label>
                     {renderMentionSuggestions("new")}
+                    {renderComposerMentionAttachments("new", commentInput, commentDraftMentionProfilesByKey)}
                     <input ref={commentMediaInputRef} type="file" accept={COMMENT_MEDIA_FILE_ACCEPT} onChange={handleCommentMediaChange} className="hidden" />
                     <div className="mt-3 flex flex-wrap items-center gap-3">
                       {commentMediaFile ? <span className="min-w-0 truncate text-xs text-gray-400">{commentMediaFile.name}</span> : null}
@@ -3135,6 +3302,7 @@ export default function ProfilePage() {
                             placeholder="Update comment..."
                           />
                           {renderMentionSuggestions("edit")}
+                          {renderComposerMentionAttachments("edit", editingCommentMessage, editingDraftMentionProfilesByKey)}
                           <input ref={editingCommentMediaInputRef} type="file" accept={COMMENT_MEDIA_FILE_ACCEPT} onChange={handleEditingCommentMediaChange} className="hidden" />
                           <div className="mt-3 flex flex-wrap items-center gap-3">
                             {editingCommentMediaFile ? <span className="min-w-0 truncate text-xs text-gray-400">{editingCommentMediaFile.name}</span> : null}
