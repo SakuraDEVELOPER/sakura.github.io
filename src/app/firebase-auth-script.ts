@@ -1353,6 +1353,32 @@
 
       return snapshot.empty ? null : snapshot.docs[0];
     };
+    const findUsersByLoginPrefix = async (loginPrefix) => {
+      const normalizedPrefix = normalizeLogin(loginPrefix);
+
+      if (!normalizedPrefix || normalizedPrefix.length < 2) {
+        return [];
+      }
+
+      const snapshot = await getDocs(
+        query(
+          usersCollection,
+          where("loginLower", ">=", normalizedPrefix),
+          where("loginLower", "<=", normalizedPrefix + "\uf8ff"),
+          limit(8)
+        )
+      );
+
+      return snapshot.docs.filter((userDoc) => {
+        const userDetails = userDoc.data();
+        const userLoginLower =
+          typeof userDetails?.loginLower === "string"
+            ? userDetails.loginLower
+            : normalizeLogin(typeof userDetails?.login === "string" ? userDetails.login : "");
+
+        return Boolean(userLoginLower) && userLoginLower.startsWith(normalizedPrefix);
+      });
+    };
     const findUserByAuthorName = async (authorName) => {
       const normalizedAuthorName = normalizeProfileCommentAuthorName(authorName);
 
@@ -2309,6 +2335,32 @@
       }
 
       return profileDoc ? toStoredUserSnapshot(profileDoc.id, profileDoc.data()) : null;
+    };
+    const getProfilesByLoginPrefix = async (loginPrefix) => {
+      const normalizedPrefix = normalizeLogin(loginPrefix);
+
+      if (!normalizedPrefix || normalizedPrefix.length < 2) {
+        return [];
+      }
+
+      const snapshot = await withTimeout(
+        findUsersByLoginPrefix(normalizedPrefix),
+        PROFILE_LOOKUP_TIMEOUT_MS,
+        () =>
+          createFirebaseError(
+            "profile/load-timeout",
+            "Profile search took too long. Refresh the page and try again."
+          )
+      );
+
+      return snapshot
+        .map((profileDoc) => toStoredUserSnapshot(profileDoc.id, profileDoc.data()))
+        .filter(
+          (profile, index, profiles) =>
+            typeof profile.login === "string" &&
+            normalizeLogin(profile.login)?.startsWith(normalizedPrefix) &&
+            index === profiles.findIndex((candidate) => candidate.uid === profile.uid)
+        );
     };
 
     const getProfileComments = async (profileId) => {
@@ -3664,6 +3716,7 @@
       adminSetProfileEmailVerification,
       getProfileById,
       getProfileByAuthorName,
+      getProfilesByLoginPrefix,
       getProfileComments,
       isCommentMediaPathReferenced,
       addProfileComment,

@@ -70,9 +70,18 @@ type AvatarUploadPayload = {
   avatarSize: number;
 };
 
+type MentionComposerMode = "new" | "edit";
+
+type MentionDraft = {
+  start: number;
+  end: number;
+  query: string;
+};
+
 type Bridge = {
   getProfileById: (profileId: number) => Promise<UserProfile | null>;
   getProfileByAuthorName: (authorName: string) => Promise<UserProfile | null>;
+  getProfilesByLoginPrefix: (loginPrefix: string) => Promise<UserProfile[]>;
   getProfileComments: (profileId: number) => Promise<ProfileComment[]>;
   isCommentMediaPathReferenced: (mediaPath: string) => Promise<boolean>;
   addProfileComment: (
@@ -134,8 +143,10 @@ const AUTH_STATE_SETTLED_EVENT = "sakura-auth-state-settled";
 const USER_UPDATE_EVENT = "sakura-user-update";
 const PROFILE_PATH_STORAGE_KEY = "sakura-profile-path";
 const CURRENT_PROFILE_ID_STORAGE_KEY = "sakura-current-profile-id";
-const PROFILE_BUILD_MARKER = "role-colors-v53";
+const PROFILE_BUILD_MARKER = "role-colors-v54";
 const COMMENT_MENTION_PATTERN = /@([A-Za-z\u0400-\u04FF0-9._-]{3,24})/g;
+const COMMENT_MENTION_DRAFT_PATTERN = /(^|[\s([{"'`])@([A-Za-z\u0400-\u04FF0-9._-]{2,24})$/;
+const COMMENT_MENTION_TOKEN_CHARACTER_PATTERN = /[A-Za-z\u0400-\u04FF0-9._-]/;
 const repoBasePath = "/sakura.github.io";
 const COMMENT_MEDIA_FILE_ACCEPT = ".png,.jpg,.jpeg,.webp,.gif,.mp4,.webm";
 const PRESENCE_ACTIVE_WINDOW_MS = 5 * 60 * 1000;
@@ -975,6 +986,11 @@ export default function ProfilePage() {
   const [commentError, setCommentError] = useState<string | null>(null);
   const [commentSuccess, setCommentSuccess] = useState<string | null>(null);
   const [isCommentSubmitting, setIsCommentSubmitting] = useState(false);
+  const [activeMentionComposer, setActiveMentionComposer] = useState<MentionComposerMode | null>(null);
+  const [commentMentionCaret, setCommentMentionCaret] = useState(0);
+  const [editingCommentMentionCaret, setEditingCommentMentionCaret] = useState(0);
+  const [mentionSuggestions, setMentionSuggestions] = useState<UserProfile[]>([]);
+  const [isMentionSuggestionsLoading, setIsMentionSuggestionsLoading] = useState(false);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentMessage, setEditingCommentMessage] = useState("");
   const [editingCommentMediaFile, setEditingCommentMediaFile] = useState<File | null>(null);
@@ -1375,6 +1391,38 @@ export default function ProfilePage() {
 
     return mentionKeys;
   };
+  const isCommentMentionTokenCharacter = (value: string | null | undefined) =>
+    Boolean(value) && COMMENT_MENTION_TOKEN_CHARACTER_PATTERN.test(value ?? "");
+  const getCommentMentionDraft = (value: string, caret: number): MentionDraft | null => {
+    if (!value || caret < 0 || caret > value.length) {
+      return null;
+    }
+
+    const beforeCaret = value.slice(0, caret);
+    const match = beforeCaret.match(COMMENT_MENTION_DRAFT_PATTERN);
+
+    if (!match) {
+      return null;
+    }
+
+    const query = normalizeCommentAuthorKey(match[2]);
+
+    if (!query || query.length < 2) {
+      return null;
+    }
+
+    let mentionEnd = beforeCaret.length;
+
+    while (mentionEnd < value.length && isCommentMentionTokenCharacter(value[mentionEnd])) {
+      mentionEnd += 1;
+    }
+
+    return {
+      start: beforeCaret.length - match[2].length - 1,
+      end: mentionEnd,
+      query,
+    };
+  };
   const resolveMentionProfileRole = (profile: UserProfile | null | undefined) => {
     if (!profile) {
       return null;
@@ -1388,14 +1436,10 @@ export default function ProfilePage() {
   };
   const renderMentionProfilePreview = (mentionProfile: UserProfile, mentionText: string) => {
     const mentionProfileRole = resolveMentionProfileRole(mentionProfile);
-    const mentionPreviewNickname = mentionProfile.login ? `@${mentionProfile.login}` : mentionText;
+    const mentionPreviewName = profileNameOf(mentionProfile);
     const mentionPreviewInitials = initialsOf(mentionProfile);
     const mentionPreviewBadgeRole = deriveVisibleProfileRoles(mentionProfile)[0] ?? "user";
-    const mentionPreviewDisplayName = mentionProfile.displayName?.trim() ?? "";
-    const showMentionPreviewDisplayName =
-      Boolean(mentionPreviewDisplayName) &&
-      normalizeCommentAuthorKey(mentionPreviewDisplayName) !==
-        normalizeCommentAuthorKey(mentionProfile.login ?? "");
+    const mentionPreviewAlt = mentionPreviewName || mentionText;
 
     return (
       <span className="absolute left-1/2 top-full z-30 mt-3 w-[260px] -translate-x-1/2 translate-y-2 rounded-[22px] border border-[#2a2023] bg-[#0c0b0d] px-4 py-4 opacity-0 shadow-[0_18px_50px_rgba(0,0,0,0.46),0_0_35px_rgba(255,183,197,0.08)] transition duration-150 ease-out invisible group-hover/mention:visible group-hover/mention:translate-y-0 group-hover/mention:opacity-100 group-focus-within/mention:visible group-focus-within/mention:translate-y-0 group-focus-within/mention:opacity-100">
@@ -1404,7 +1448,7 @@ export default function ProfilePage() {
           {mentionProfile.photoURL ? (
             <AvatarMedia
               src={mentionProfile.photoURL}
-              alt={mentionPreviewDisplayName || mentionPreviewNickname}
+              alt={mentionPreviewAlt}
               loading="lazy"
               decoding="async"
               className="h-12 w-12 shrink-0 rounded-[18px] border border-[#2a2022] object-cover shadow-[0_0_18px_rgba(255,183,197,0.12)]"
@@ -1415,22 +1459,14 @@ export default function ProfilePage() {
             </span>
           )}
           <span className="min-w-0 flex-1">
-            {showMentionPreviewDisplayName ? (
-              <span
-                style={roleHeadlineStyle(mentionProfileRole)}
-                className="block truncate text-sm font-black uppercase tracking-[0.03em]"
-              >
-                {mentionPreviewDisplayName}
-              </span>
-            ) : null}
             <a
               href={typeof mentionProfile.profileId === "number" ? profilePath(mentionProfile.profileId) : "#"}
               style={roleCommentAuthorStyle(mentionProfileRole)}
-              className={`${showMentionPreviewDisplayName ? "mt-1 " : ""}block truncate text-sm font-semibold transition hover:brightness-125 hover:text-white`}
+              className="block truncate text-sm font-black uppercase tracking-[0.03em] transition hover:brightness-125 hover:text-white"
             >
-              {mentionPreviewNickname}
+              {mentionPreviewName}
             </a>
-            <span className="mt-2 flex items-center gap-2">
+            <span className="mt-2 flex items-end justify-between gap-3">
               <span
                 style={{ ...roleBadgeStyle(mentionPreviewBadgeRole), ...roleBadgeTextStyle }}
                 className="inline-flex max-w-full items-center truncate whitespace-nowrap rounded-full border px-3 py-1 text-[10px] font-bold"
@@ -1439,6 +1475,11 @@ export default function ProfilePage() {
                   {renderRoleBadgeText(mentionPreviewBadgeRole)}
                 </span>
               </span>
+              {typeof mentionProfile.profileId === "number" ? (
+                <span className="shrink-0 text-[10px] font-mono uppercase tracking-[0.14em] text-gray-500">
+                  ID: {mentionProfile.profileId}
+                </span>
+              ) : null}
             </span>
           </span>
         </span>
@@ -1503,6 +1544,179 @@ export default function ProfilePage() {
     }
 
     return parts;
+  };
+  const updateMentionComposerCaret = (
+    mode: MentionComposerMode,
+    element: HTMLTextAreaElement | null
+  ) => {
+    if (!element) {
+      return;
+    }
+
+    const nextCaret = element.selectionStart ?? element.value.length;
+    setActiveMentionComposer(mode);
+
+    if (mode === "new") {
+      setCommentMentionCaret(nextCaret);
+      return;
+    }
+
+    setEditingCommentMentionCaret(nextCaret);
+  };
+  const clearMentionSuggestions = () => {
+    setMentionSuggestions([]);
+    setIsMentionSuggestionsLoading(false);
+  };
+  const getActiveMentionDraft = (): MentionDraft | null => {
+    if (activeMentionComposer === "edit") {
+      return getCommentMentionDraft(editingCommentMessage, editingCommentMentionCaret);
+    }
+
+    if (activeMentionComposer === "new") {
+      return getCommentMentionDraft(commentInput, commentMentionCaret);
+    }
+
+    return null;
+  };
+  const applyMentionSuggestion = (mode: MentionComposerMode, profile: UserProfile) => {
+    const login = profile.login?.trim();
+
+    if (!login) {
+      return;
+    }
+
+    const textarea =
+      mode === "new" ? commentTextareaRef.current : editingCommentTextareaRef.current;
+    const currentValue = mode === "new" ? commentInput : editingCommentMessage;
+    const currentCaret =
+      textarea?.selectionStart ??
+      (mode === "new" ? commentMentionCaret : editingCommentMentionCaret);
+    const mentionDraft = getCommentMentionDraft(currentValue, currentCaret);
+
+    if (!mentionDraft) {
+      return;
+    }
+
+    const replacement = `@${login}`;
+    const nextCharacter = currentValue[mentionDraft.end];
+    const needsTrailingSpace = !nextCharacter;
+    const nextValue = `${currentValue.slice(0, mentionDraft.start)}${replacement}${needsTrailingSpace ? " " : ""}${currentValue.slice(mentionDraft.end)}`;
+    const nextCaret = mentionDraft.start + replacement.length + (needsTrailingSpace ? 1 : 0);
+
+    if (mode === "new") {
+      setCommentInput(nextValue);
+      setCommentMentionCaret(nextCaret);
+    } else {
+      setEditingCommentMessage(nextValue);
+      setEditingCommentMentionCaret(nextCaret);
+    }
+
+    clearMentionSuggestions();
+    setActiveMentionComposer(mode);
+
+    window.requestAnimationFrame(() => {
+      const nextTextarea =
+        mode === "new" ? commentTextareaRef.current : editingCommentTextareaRef.current;
+
+      if (!nextTextarea) {
+        return;
+      }
+
+      nextTextarea.focus();
+      nextTextarea.setSelectionRange(nextCaret, nextCaret);
+      syncTextareaHeight(nextTextarea);
+    });
+  };
+  const renderMentionSuggestions = (mode: MentionComposerMode) => {
+    if (activeMentionComposer !== mode) {
+      return null;
+    }
+
+    const activeDraft = getActiveMentionDraft();
+
+    if (!activeDraft) {
+      return null;
+    }
+
+    if (!isMentionSuggestionsLoading && !mentionSuggestions.length) {
+      return (
+        <div className="mt-3 rounded-[20px] border border-[#232323] bg-[#090909] px-4 py-3">
+          <p className="text-xs text-gray-500">No matching logins.</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="mt-3 overflow-hidden rounded-[20px] border border-[#232323] bg-[#090909] shadow-[0_0_24px_rgba(255,183,197,0.06)]">
+        <div className="border-b border-[#1b1b1b] px-4 py-3">
+          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-gray-500">
+            Mention Suggestions
+          </p>
+        </div>
+        {isMentionSuggestionsLoading ? (
+          <div className="px-4 py-3">
+            <p className="text-xs text-gray-500">Searching...</p>
+          </div>
+        ) : (
+          <div className="flex flex-col">
+            {mentionSuggestions.map((profile) => {
+              const mentionRole = resolveMentionProfileRole(profile);
+              const mentionDisplayName = profile.displayName?.trim();
+              const mentionNickname = profile.login ? `@${profile.login}` : "";
+              const mentionPreviewInitials = initialsOf(profile);
+              const mentionBadgeRole = deriveVisibleProfileRoles(profile)[0] ?? "user";
+
+              return (
+                <button
+                  key={profile.uid}
+                  type="button"
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    applyMentionSuggestion(mode, profile);
+                  }}
+                  className="flex items-center gap-3 border-b border-[#171717] px-4 py-3 text-left transition last:border-b-0 hover:bg-[#120d11]"
+                >
+                  {profile.photoURL ? (
+                    <AvatarMedia
+                      src={profile.photoURL}
+                      alt={mentionDisplayName || mentionNickname}
+                      loading="lazy"
+                      decoding="async"
+                      className="h-10 w-10 shrink-0 rounded-2xl border border-[#2a2022] object-cover"
+                    />
+                  ) : (
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[#2a2022] bg-[#171012] text-[11px] font-black uppercase text-[#ffb7c5]">
+                      {mentionPreviewInitials}
+                    </span>
+                  )}
+                  <span className="min-w-0 flex-1">
+                    <span
+                      style={roleCommentAuthorStyle(mentionRole)}
+                      className="block truncate text-sm font-semibold"
+                    >
+                      {mentionNickname}
+                    </span>
+                    {mentionDisplayName ? (
+                      <span className="mt-1 block truncate text-xs text-gray-400">
+                        {mentionDisplayName}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span
+                    style={{ ...roleBadgeStyle(mentionBadgeRole), ...roleBadgeTextStyle }}
+                    className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border px-3 py-1 text-[10px] font-bold"
+                  >
+                    <span aria-hidden="true" className="inline-flex items-center">
+                      {renderRoleBadgeText(mentionBadgeRole)}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
   };
   const commentMatchesUser = (comment: ProfileComment, user: UserProfile | null) => {
     if (!user) {
@@ -1630,6 +1844,10 @@ export default function ProfilePage() {
       setCommentInput("");
       setCommentError(null);
       setCommentSuccess(null);
+      setActiveMentionComposer(null);
+      setCommentMentionCaret(0);
+      setEditingCommentMentionCaret(0);
+      clearMentionSuggestions();
       setEditingCommentId(null);
       setEditingCommentMessage("");
       setEditingCommentMediaFile(null);
@@ -1658,6 +1876,10 @@ export default function ProfilePage() {
     setCommentInput("");
     setCommentError(null);
     setCommentSuccess(null);
+    setActiveMentionComposer(null);
+    setCommentMentionCaret(0);
+    setEditingCommentMentionCaret(0);
+    clearMentionSuggestions();
     setEditingCommentId(null);
     setEditingCommentMessage("");
     setEditingCommentMediaFile(null);
@@ -1948,6 +2170,63 @@ export default function ProfilePage() {
     };
   }, [comments, activeProfile, visibleCurrentUser, commentAuthorProfiles]);
 
+  useEffect(() => {
+    const activeMentionDraft = getActiveMentionDraft();
+
+    if (!activeMentionComposer || !activeMentionDraft) {
+      clearMentionSuggestions();
+      return;
+    }
+
+    const bridge = getWindowState().sakuraFirebaseAuth;
+
+    if (!bridge) {
+      clearMentionSuggestions();
+      return;
+    }
+
+    let isCancelled = false;
+    setIsMentionSuggestionsLoading(true);
+    setMentionSuggestions([]);
+    const searchTimeout = window.setTimeout(() => {
+      bridge
+        .getProfilesByLoginPrefix(activeMentionDraft.query)
+        .then((profiles) => {
+          if (isCancelled) {
+            return;
+          }
+
+          setMentionSuggestions(
+            profiles.filter((profile, index, entries) =>
+              Boolean(profile.login) &&
+              index === entries.findIndex((entry) => entry.uid === profile.uid)
+            )
+          );
+        })
+        .catch(() => {
+          if (!isCancelled) {
+            setMentionSuggestions([]);
+          }
+        })
+        .finally(() => {
+          if (!isCancelled) {
+            setIsMentionSuggestionsLoading(false);
+          }
+        });
+    }, 120);
+
+    return () => {
+      isCancelled = true;
+      window.clearTimeout(searchTimeout);
+    };
+  }, [
+    activeMentionComposer,
+    commentInput,
+    commentMentionCaret,
+    editingCommentMessage,
+    editingCommentMentionCaret,
+  ]);
+
   const normalizedDraftRoles = normalizeRoleSelection(draftRoles);
   const availableRoleOptions = EDITABLE_ROLE_OPTIONS.filter(
     (role) =>
@@ -1957,6 +2236,40 @@ export default function ProfilePage() {
   );
   const hasRoleChanges =
     normalizedDraftRoles.join("|") !== normalizedProfileRoles.join("|");
+
+  const handleMentionComposerChange = (
+    mode: MentionComposerMode,
+    event: ChangeEvent<HTMLTextAreaElement>
+  ) => {
+    const nextValue = event.currentTarget.value;
+
+    if (mode === "new") {
+      setCommentInput(nextValue);
+    } else {
+      setEditingCommentMessage(nextValue);
+    }
+
+    updateMentionComposerCaret(mode, event.currentTarget);
+  };
+  const handleMentionComposerInteraction = (
+    mode: MentionComposerMode,
+    element: HTMLTextAreaElement
+  ) => {
+    updateMentionComposerCaret(mode, element);
+  };
+  const handleMentionComposerBlur = () => {
+    window.requestAnimationFrame(() => {
+      const activeElement = document.activeElement;
+
+      if (
+        activeElement !== commentTextareaRef.current &&
+        activeElement !== editingCommentTextareaRef.current
+      ) {
+        setActiveMentionComposer(null);
+        clearMentionSuggestions();
+      }
+    });
+  };
 
   const handleLogout = async () => {
     const bridge = getWindowState().sakuraFirebaseAuth;
@@ -2715,8 +3028,25 @@ export default function ProfilePage() {
                   <form onSubmit={handleCommentSubmit} className="mt-5">
                     <label className="block">
                       <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">New Comment</span>
-                      <textarea ref={commentTextareaRef} value={commentInput} maxLength={280} rows={3} onChange={(event) => setCommentInput(event.target.value)} onInput={(event) => syncTextareaHeight(event.currentTarget)} className="w-full resize-none overflow-hidden rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55" placeholder={`Write something for ${primaryName}...`} />
+                      <textarea
+                        ref={commentTextareaRef}
+                        value={commentInput}
+                        maxLength={280}
+                        rows={3}
+                        onChange={(event) => handleMentionComposerChange("new", event)}
+                        onInput={(event) => {
+                          syncTextareaHeight(event.currentTarget);
+                          handleMentionComposerInteraction("new", event.currentTarget);
+                        }}
+                        onClick={(event) => handleMentionComposerInteraction("new", event.currentTarget)}
+                        onSelect={(event) => handleMentionComposerInteraction("new", event.currentTarget)}
+                        onFocus={(event) => handleMentionComposerInteraction("new", event.currentTarget)}
+                        onBlur={handleMentionComposerBlur}
+                        className="w-full resize-none overflow-hidden rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55"
+                        placeholder={`Write something for ${primaryName}...`}
+                      />
                     </label>
+                    {renderMentionSuggestions("new")}
                     <input ref={commentMediaInputRef} type="file" accept={COMMENT_MEDIA_FILE_ACCEPT} onChange={handleCommentMediaChange} className="hidden" />
                     <div className="mt-3 flex flex-wrap items-center gap-3">
                       {commentMediaFile ? <span className="min-w-0 truncate text-xs text-gray-400">{commentMediaFile.name}</span> : null}
@@ -2787,7 +3117,24 @@ export default function ProfilePage() {
                           </div>
                         </div>
                         {isEditingComment ? <div className="mt-3">
-                          <textarea ref={editingCommentTextareaRef} value={editingCommentMessage} maxLength={280} rows={3} onChange={(event) => setEditingCommentMessage(event.target.value)} onInput={(event) => syncTextareaHeight(event.currentTarget)} className="w-full resize-none overflow-hidden rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55" placeholder="Update comment..." />
+                          <textarea
+                            ref={editingCommentTextareaRef}
+                            value={editingCommentMessage}
+                            maxLength={280}
+                            rows={3}
+                            onChange={(event) => handleMentionComposerChange("edit", event)}
+                            onInput={(event) => {
+                              syncTextareaHeight(event.currentTarget);
+                              handleMentionComposerInteraction("edit", event.currentTarget);
+                            }}
+                            onClick={(event) => handleMentionComposerInteraction("edit", event.currentTarget)}
+                            onSelect={(event) => handleMentionComposerInteraction("edit", event.currentTarget)}
+                            onFocus={(event) => handleMentionComposerInteraction("edit", event.currentTarget)}
+                            onBlur={handleMentionComposerBlur}
+                            className="w-full resize-none overflow-hidden rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55"
+                            placeholder="Update comment..."
+                          />
+                          {renderMentionSuggestions("edit")}
                           <input ref={editingCommentMediaInputRef} type="file" accept={COMMENT_MEDIA_FILE_ACCEPT} onChange={handleEditingCommentMediaChange} className="hidden" />
                           <div className="mt-3 flex flex-wrap items-center gap-3">
                             {editingCommentMediaFile ? <span className="min-w-0 truncate text-xs text-gray-400">{editingCommentMediaFile.name}</span> : null}
