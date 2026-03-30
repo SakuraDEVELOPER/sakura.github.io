@@ -25,7 +25,6 @@
           reload,
           sendEmailVerification,
           signInAnonymously,
-          signInWithPopup,
           signInWithRedirect,
           signInWithEmailAndPassword,
           signOut,
@@ -346,15 +345,6 @@
     typeof error === "object" && error !== null && "code" in error
       ? String(error.code)
       : "";
-
-  const shouldFallbackGooglePopupToRedirect = (error) => {
-    const code = getErrorCode(error);
-
-    return (
-      code === "auth/popup-blocked" ||
-      code === "auth/operation-not-supported-in-this-environment"
-    );
-  };
 
   const isPermissionDeniedError = (error) =>
     getErrorCode(error) === "permission-denied" ||
@@ -1987,17 +1977,8 @@
     };
 
     const loginWithGoogle = async () => {
-      try {
-        const result = await signInWithPopup(auth, provider);
-        return await finalizeGoogleSignIn(result.user);
-      } catch (error) {
-        if (shouldFallbackGooglePopupToRedirect(error)) {
-          await signInWithRedirect(auth, provider);
-          return null;
-        }
-
-        throw error;
-      }
+      await signInWithRedirect(auth, provider);
+      return null;
     };
 
     const getProfileById = async (profileId) => {
@@ -3432,8 +3413,11 @@
           }
 
           try {
-            await redirectResultPromise;
-            const snapshot = await resolveUserSnapshot(user);
+            const redirectResult = await redirectResultPromise;
+            const snapshot =
+              redirectResult?.user?.uid === user.uid
+                ? await finalizeGoogleSignIn(user)
+                : await resolveUserSnapshot(user);
             const allowedSnapshot = await enforceActiveSessionNotBanned(snapshot, {
               throwError: false,
             });
