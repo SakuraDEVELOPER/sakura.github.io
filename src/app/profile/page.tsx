@@ -16,6 +16,7 @@ import {
 } from "@/lib/supabase-storage";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { readCachedAuthSnapshot } from "@/lib/auth-snapshot-cache";
+import { readCachedProfileSnapshot, writeCachedProfileSnapshot } from "@/lib/profile-cache";
 
 type UserProfile = {
   uid: string;
@@ -1004,7 +1005,7 @@ const getInitialCurrentUser = () =>
 const getInitialProfile = (currentUser: UserProfile | null, requestedProfileId: number | null) =>
   currentUser && !currentUser.isAnonymous && (requestedProfileId === null || (currentUser.profileId ?? null) === requestedProfileId)
     ? currentUser
-    : null;
+    : readCachedProfileSnapshot<UserProfile>(requestedProfileId);
 const getInitialBootstrap = () => {
   const currentUser = getInitialCurrentUser();
   const requestedProfileId = getInitialRequestedProfileId();
@@ -1136,6 +1137,14 @@ export default function ProfilePage() {
   useEffect(() => {
     setHasHydrated(true);
   }, []);
+
+  useEffect(() => {
+    if (!profile || profile.isAnonymous) {
+      return;
+    }
+
+    writeCachedProfileSnapshot(profile);
+  }, [profile]);
 
   useEffect(() => {
     syncTextareaHeight(commentTextareaRef.current);
