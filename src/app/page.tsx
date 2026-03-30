@@ -1583,19 +1583,19 @@ export default function Home() {
           </div>
         </nav>
 
-        <section className="flex flex-col items-center justify-center px-4 pt-32 pb-12">
+        <section className="flex flex-col items-center justify-center px-4 pt-20 pb-4">
           <m.h1
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8 }}
-            className="mb-6 text-center text-7xl font-black tracking-tighter uppercase"
+            className="mb-2 text-center text-7xl font-black tracking-tighter uppercase"
           >
             Feel The <br /> <span className="italic text-gray-500">Sakura Power</span>
           </m.h1>
 
         </section>
 
-        <section className="px-10 pb-8">
+        <section className="px-10 pb-2">
           <div className="mx-auto max-w-6xl">
             <p className="mb-4 font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">
               Feature Showcase
@@ -1614,7 +1614,7 @@ export default function Home() {
           }}
         />
 
-        <section id="features" className="grid grid-cols-1 gap-1 px-10 pt-20 pb-1 md:grid-cols-2">
+        <section id="features" className="grid grid-cols-1 gap-1 px-10 pt-10 pb-1 md:grid-cols-2">
           <FeatureBox
             delay={0.1}
             title="VMT Hooking"
@@ -1636,7 +1636,7 @@ export default function Home() {
 
 function TrialCta({ onClick }: { onClick: () => void }) {
   return (
-    <section className="px-10 pb-6">
+    <section className="px-10 pt-2 pb-4">
       <div className="mx-auto flex max-w-6xl flex-col items-center gap-5 text-center">
         <p className="text-lg leading-relaxed text-gray-300">
           Приватный чит для Dota 2.
@@ -2173,9 +2173,9 @@ function FeatureShowcase() {
   };
 
   return (
-    <section id="feature-showcase" className="px-10 py-24">
+    <section id="feature-showcase" className="px-10 pt-8 pb-14">
       <div className="mx-auto max-w-6xl">
-        <div className="grid items-stretch gap-8 lg:grid-cols-[0.85fr_1.15fr]">
+        <div className="grid items-stretch gap-6 lg:grid-cols-[0.85fr_1.15fr]">
           <m.div
             key={`copy-${slide.id}`}
             initial={{ opacity: 0, y: 24 }}
