@@ -3431,15 +3431,10 @@ export default function ProfilePage() {
                     </p>
                     <div className="mt-3">
                       <span
-                        style={metaValuePillStyle}
-                        className="inline-flex max-w-full items-center rounded-full border px-4 py-2"
+                        style={metaValueStyle}
+                        className="inline-flex max-w-full items-center text-[12px] leading-none sm:text-[13px]"
                       >
-                        <span
-                          style={metaValueStyle}
-                          className="truncate text-[12px] leading-none sm:text-[13px]"
-                        >
-                          {value}
-                        </span>
+                        {value}
                       </span>
                     </div>
                   </div>
