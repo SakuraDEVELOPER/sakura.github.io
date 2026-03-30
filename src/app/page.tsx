@@ -7,6 +7,7 @@ import { LazyMotion, domAnimation, m } from "framer-motion";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { AvatarMedia } from "./avatar-media";
 import { HeaderSocialLinks } from "./header-social-links";
+import { SiteOnlineBadge } from "./site-online-badge";
 
 type ShowcaseSlide = {
   id: string;
@@ -134,6 +135,7 @@ type FirebaseAuthBridge = {
     source?: string;
     forceVisit?: boolean;
   }) => Promise<AuthUserSnapshot | null>;
+  getSiteOnlineCount: () => Promise<number>;
   logout: () => Promise<void>;
   onAuthStateChanged: (callback: (user: AuthUserSnapshot | null) => void) => () => void;
 };
@@ -1445,6 +1447,63 @@ function HeaderAuth() {
 }
 
 export default function Home() {
+  const [siteOnlineCount, setSiteOnlineCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    let isCancelled = false;
+    let intervalId = 0;
+
+    const refreshSiteOnlineCount = async () => {
+      const bridge = window.sakuraFirebaseAuth;
+
+      if (!bridge) {
+        return;
+      }
+
+      try {
+        const nextCount = await bridge.getSiteOnlineCount();
+
+        if (!isCancelled) {
+          setSiteOnlineCount(nextCount);
+        }
+      } catch (error) {}
+    };
+
+    const startPolling = () => {
+      void refreshSiteOnlineCount();
+
+      if (!intervalId) {
+        intervalId = window.setInterval(() => {
+          void refreshSiteOnlineCount();
+        }, 60000);
+      }
+    };
+
+    requestFirebaseAuthBoot();
+
+    if (window.sakuraFirebaseAuth) {
+      startPolling();
+    }
+
+    const handleReady = () => {
+      startPolling();
+    };
+
+    window.addEventListener(AUTH_READY_EVENT, handleReady);
+
+    return () => {
+      isCancelled = true;
+      if (intervalId) {
+        window.clearInterval(intervalId);
+      }
+      window.removeEventListener(AUTH_READY_EVENT, handleReady);
+    };
+  }, []);
+
   const handleHeroTrialClick = async () => {
     if (typeof window === "undefined") {
       return;
@@ -1499,6 +1558,7 @@ export default function Home() {
           </div>
 
           <div className="flex flex-wrap items-center justify-start gap-3 text-sm font-medium text-gray-400 md:justify-self-end md:justify-end">
+            <SiteOnlineBadge count={siteOnlineCount} />
             <HeaderAuth />
           </div>
         </nav>

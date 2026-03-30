@@ -85,6 +85,7 @@
   const PROFILE_COMMENT_MEDIA_EXPORT_QUALITY = 0.74;
   const PROFILE_COMMENT_MEDIA_MAX_DATA_URL_LENGTH = 1000000;
   const PROFILE_LOOKUP_TIMEOUT_MS = 5000;
+  const PRESENCE_ONLINE_WINDOW_MS = 5 * 60 * 1000;
   const DISPLAY_NAME_MAX_LENGTH = 48;
   const USER_UPDATE_EVENT = "sakura-user-update";
   const AUTH_ERROR_EVENT = "sakura-auth-error";
@@ -608,6 +609,17 @@
         : fallbackPath,
     lastSeenAt: typeof presence?.lastSeenAt === "string" ? presence.lastSeenAt : null,
   });
+  const isPresenceFreshOnline = (presence) => {
+    const normalizedPresence = normalizePresence(presence, null);
+    const lastSeenAt = normalizedPresence.lastSeenAt ? Date.parse(normalizedPresence.lastSeenAt) : Number.NaN;
+
+    return (
+      normalizedPresence.status === "online" &&
+      normalizedPresence.isOnline &&
+      Number.isFinite(lastSeenAt) &&
+      Date.now() - lastSeenAt <= PRESENCE_ONLINE_WINDOW_MS
+    );
+  };
 
   const normalizeVisitHistory = (history) =>
     Array.isArray(history)
@@ -3106,6 +3118,37 @@
         verificationEmailSent: false,
       };
     };
+    const getSiteOnlineCount = async () => {
+      try {
+        const usersSnapshot = await getDocs(
+          query(collection(db, "users"), where("presence.status", "==", "online"))
+        );
+        let count = 0;
+
+        usersSnapshot.forEach((userDoc) => {
+          const details = userDoc.data();
+
+          if (details?.isBanned === true) {
+            return;
+          }
+
+          if (isPresenceFreshOnline(details?.presence)) {
+            count += 1;
+          }
+        });
+
+        return count;
+      } catch (error) {
+        if (!isPermissionDeniedError(error)) {
+          throw error;
+        }
+
+        throw createFirebaseError(
+          "presence/read-denied",
+          "Online presence could not be loaded. Check Firestore read rules for users."
+        );
+      }
+    };
 
     window.sakuraFirebaseAuth = {
       register: async ({ login, displayName, email, password }) => {
@@ -3214,6 +3257,7 @@
       deleteProfileComment,
       resendVerificationEmail,
       refreshVerificationStatus,
+      getSiteOnlineCount,
       updateProfileRoles,
       updateAvatar,
       deleteAvatar,
