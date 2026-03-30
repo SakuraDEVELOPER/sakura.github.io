@@ -378,6 +378,10 @@ function getFirebaseErrorMessage(error: unknown) {
     typeof error === "object" && error !== null && "code" in error
       ? String((error as { code?: unknown }).code)
       : "";
+  const currentHostname =
+    typeof window !== "undefined" && window.location.hostname
+      ? window.location.hostname
+      : "ваш домен";
 
   if (code === "auth/invalid-login") {
     return "Login must be 3-24 characters with no spaces.";
@@ -446,7 +450,7 @@ function getFirebaseErrorMessage(error: unknown) {
     case "auth/cancelled-popup-request":
       return "Запрос на вход через Google был отменен.";
     case "auth/unauthorized-domain":
-      return "Текущий домен не добавлен в список разрешенных в Firebase.";
+      return `Домен ${currentHostname} не добавлен в Authorized domains в Firebase Auth. Добавьте только hostname без https и без /sakura.github.io.`;
     case "auth/account-exists-with-different-credential":
       return "Для этого email уже используется другой способ входа.";
     default:
