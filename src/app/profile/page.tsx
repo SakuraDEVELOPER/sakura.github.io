@@ -866,6 +866,10 @@ const pickCommentAuthorAccentRole = (roles: string[] | null | undefined) => {
 };
 const canManageRoles = (roles: string[]) =>
   normalizeRoleSelection(roles).some((role) => ROLE_MANAGER_NAMES.has(normalizeRoleName(role)));
+const hasRoleInSelection = (roles: string[] | null | undefined, expectedRole: string) =>
+  normalizeRoleSelection(roles ?? []).some(
+    (role) => normalizeRoleName(role) === normalizeRoleName(expectedRole)
+  );
 const canModerateComments = (roles: string[]) =>
   normalizeRoleSelection(roles).some((role) =>
     COMMENT_MODERATOR_ROLE_NAMES.has(normalizeRoleName(role))
@@ -1270,7 +1274,17 @@ export default function ProfilePage() {
       activeProfile.verificationRequired !== false
   );
   const canManageRoleAssignments = Boolean(visibleCurrentUser && canManageRoles(visibleCurrentUser.roles));
-  const canOpenAdminPanel = Boolean(canManageRoleAssignments && activeProfile?.profileId);
+  const actorIsRootManager = hasRoleInSelection(visibleCurrentUser?.roles ?? [], "root");
+  const actorIsCoOwnerManager = hasRoleInSelection(visibleCurrentUser?.roles ?? [], "co-owner");
+  const targetHasRootRole = hasRoleInSelection(activeProfile?.roles ?? [], "root");
+  const isCoOwnerBlockedByRootTarget = Boolean(
+    actorIsCoOwnerManager && !actorIsRootManager && targetHasRootRole
+  );
+  const canOpenAdminPanel = Boolean(
+    canManageRoleAssignments &&
+    activeProfile?.profileId &&
+    !isCoOwnerBlockedByRootTarget
+  );
   const isTargetBanned = activeProfile?.isBanned === true;
   const targetVerificationStatus = !activeProfile?.email
     ? "no-email"
@@ -2599,6 +2613,7 @@ export default function ProfilePage() {
   const normalizedDraftRoles = normalizeRoleSelection(draftRoles);
   const availableRoleOptions = EDITABLE_ROLE_OPTIONS.filter(
     (role) =>
+      (actorIsRootManager || normalizeRoleName(role) !== "root") &&
       !normalizedDraftRoles.some(
         (draftRole) => normalizeRoleName(draftRole) === normalizeRoleName(role)
       )

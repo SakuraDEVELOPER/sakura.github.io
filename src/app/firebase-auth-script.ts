@@ -728,6 +728,34 @@
   ]);
   const canManageRoles = (roles) =>
     normalizeRoles(roles).some((role) => ROLE_MANAGER_NAMES.has(normalizeRoleName(role)));
+  const hasRole = (roles, expectedRole) =>
+    normalizeRoles(roles).some(
+      (role) => normalizeRoleName(role) === normalizeRoleName(expectedRole)
+    );
+  const isRootRoleHolder = (roles) => hasRole(roles, "root");
+  const isCoOwnerRoleHolder = (roles) => hasRole(roles, "co-owner");
+  const ensureActorCanManageTargetProfile = (actorRoles, targetRoles) => {
+    if (isRootRoleHolder(actorRoles)) {
+      return;
+    }
+
+    if (isCoOwnerRoleHolder(actorRoles) && isRootRoleHolder(targetRoles)) {
+      throw createFirebaseError(
+        "admin/root-target-forbidden",
+        "Co-owner cannot manage root accounts."
+      );
+    }
+  };
+  const ensureActorCanAssignRoles = (actorRoles, targetRoles, nextRoles) => {
+    ensureActorCanManageTargetProfile(actorRoles, targetRoles);
+
+    if (!isRootRoleHolder(actorRoles) && isRootRoleHolder(nextRoles)) {
+      throw createFirebaseError(
+        "roles/root-assignment-forbidden",
+        "Only root can assign the root role."
+      );
+    }
+  };
   const canModerateComments = (roles) =>
     normalizeRoles(roles).some((role) =>
       COMMENT_MODERATOR_ROLE_NAMES.has(normalizeRoleName(role))
@@ -2955,7 +2983,7 @@
       );
     };
     const adminUpdateProfileDisplayName = async (profileId, nextDisplayName) => {
-      const { user } = await ensureRootActorSnapshot();
+      const { user, actorSnapshot } = await ensureRootActorSnapshot();
 
       if (!Number.isInteger(profileId) || profileId <= 0) {
         throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
@@ -2972,6 +3000,8 @@
       if (!targetDoc) {
         return null;
       }
+
+      ensureActorCanManageTargetProfile(actorSnapshot?.roles ?? [], targetDoc.data()?.roles ?? []);
 
       try {
         await setDoc(
@@ -3007,7 +3037,7 @@
       });
     };
     const adminUpdateProfileLogin = async (profileId, nextLogin) => {
-      await ensureRootActorSnapshot();
+      const { actorSnapshot } = await ensureRootActorSnapshot();
 
       if (!Number.isInteger(profileId) || profileId <= 0) {
         throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
@@ -3024,6 +3054,8 @@
       if (!targetDoc) {
         return null;
       }
+
+      ensureActorCanManageTargetProfile(actorSnapshot?.roles ?? [], targetDoc.data()?.roles ?? []);
 
       const targetDetails = targetDoc.data();
       const usernameDetails = await resolveAvailableLogin(normalizedRequestedLogin, targetDoc.id);
@@ -3056,7 +3088,7 @@
       });
     };
     const adminUpdateProfileAvatar = async (profileId, file) => {
-      await ensureRootActorSnapshot();
+      const { actorSnapshot } = await ensureRootActorSnapshot();
 
       if (!Number.isInteger(profileId) || profileId <= 0) {
         throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
@@ -3067,6 +3099,8 @@
       if (!targetDoc) {
         return null;
       }
+
+      ensureActorCanManageTargetProfile(actorSnapshot?.roles ?? [], targetDoc.data()?.roles ?? []);
 
       const avatarUpload = await prepareAvatarUpload(file, targetDoc.id);
 
@@ -3121,7 +3155,7 @@
     };
 
     const adminDeleteProfileAvatar = async (profileId) => {
-      await ensureRootActorSnapshot();
+      const { actorSnapshot } = await ensureRootActorSnapshot();
 
       if (!Number.isInteger(profileId) || profileId <= 0) {
         throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
@@ -3132,6 +3166,8 @@
       if (!targetDoc) {
         return null;
       }
+
+      ensureActorCanManageTargetProfile(actorSnapshot?.roles ?? [], targetDoc.data()?.roles ?? []);
 
       if (STORAGE_AVATAR_UPLOADS_ENABLED) {
         try {
@@ -3173,7 +3209,7 @@
       });
     };
     const adminSetProfileBan = async (profileId, nextIsBanned) => {
-      const { user } = await ensureRootActorSnapshot();
+      const { user, actorSnapshot } = await ensureRootActorSnapshot();
 
       if (!Number.isInteger(profileId) || profileId <= 0) {
         throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
@@ -3184,6 +3220,8 @@
       if (!targetDoc) {
         return null;
       }
+
+      ensureActorCanManageTargetProfile(actorSnapshot?.roles ?? [], targetDoc.data()?.roles ?? []);
 
       const isBanned = Boolean(nextIsBanned);
       const bannedAt = isBanned ? new Date().toISOString() : null;
@@ -3237,7 +3275,7 @@
       return snapshot;
     };
     const adminSetProfileEmailVerification = async (profileId, nextIsVerified) => {
-      const { user } = await ensureRootActorSnapshot();
+      const { user, actorSnapshot } = await ensureRootActorSnapshot();
 
       if (!Number.isInteger(profileId) || profileId <= 0) {
         throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
@@ -3248,6 +3286,8 @@
       if (!targetDoc) {
         return null;
       }
+
+      ensureActorCanManageTargetProfile(actorSnapshot?.roles ?? [], targetDoc.data()?.roles ?? []);
 
       const isVerified = Boolean(nextIsVerified);
 
@@ -3289,7 +3329,7 @@
     };
 
     const updateProfileRoles = async (profileId, nextRoles) => {
-      const user = auth.currentUser;
+      const { user, actorSnapshot } = await ensureRootActorSnapshot();
 
       if (!user || user.isAnonymous) {
         throw createFirebaseError("auth/no-current-user", "Sign in again to manage roles.");
@@ -3299,13 +3339,6 @@
         throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
       }
 
-      if (!canManageRoles(window.sakuraCurrentUserSnapshot?.roles ?? [])) {
-        throw createFirebaseError(
-          "roles/forbidden",
-          "Only root and co-owner can manage user roles."
-        );
-      }
-
       const targetDoc = await findUserByProfileId(profileId);
 
       if (!targetDoc) {
@@ -3313,6 +3346,9 @@
       }
 
       const roles = normalizeRoles(nextRoles);
+      const actorRoles = actorSnapshot?.roles ?? [];
+
+      ensureActorCanAssignRoles(actorRoles, targetDoc.data()?.roles ?? [], roles);
 
       try {
         await setDoc(
