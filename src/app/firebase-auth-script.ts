@@ -83,9 +83,11 @@
   const PROFILE_COMMENT_MEDIA_CONTENT_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
   const PROFILE_COMMENT_MEDIA_MAX_BYTES = 5 * 1024 * 1024;
   const PROFILE_COMMENT_GIF_MAX_BYTES = 700 * 1024;
-  const PROFILE_COMMENT_MEDIA_MAX_DIMENSION = 960;
-  const PROFILE_COMMENT_MEDIA_EXPORT_QUALITY = 0.74;
-  const PROFILE_COMMENT_MEDIA_MAX_DATA_URL_LENGTH = 1000000;
+  const PROFILE_COMMENT_MEDIA_MAX_DIMENSION = 820;
+  const PROFILE_COMMENT_MEDIA_EXPORT_QUALITY = 0.72;
+  const PROFILE_COMMENT_MEDIA_MIN_EXPORT_QUALITY = 0.48;
+  const PROFILE_COMMENT_MEDIA_EXPORT_QUALITY_STEP = 0.08;
+  const PROFILE_COMMENT_MEDIA_MAX_DATA_URL_LENGTH = 760000;
   const PROFILE_LOOKUP_TIMEOUT_MS = 5000;
   const PRESENCE_ONLINE_WINDOW_MS = 5 * 60 * 1000;
   const DISPLAY_NAME_MAX_LENGTH = 48;
@@ -254,7 +256,7 @@
       if (mediaURL.length > PROFILE_COMMENT_MEDIA_MAX_DATA_URL_LENGTH) {
         throw createFirebaseError(
           "comments/media-too-large",
-          "The selected GIF is too large to save in a comment."
+          "The selected GIF is too large to save in a Firestore comment."
         );
       }
 
@@ -308,16 +310,37 @@
       image.close();
     }
 
-    const preferredMediaURL = canvas.toDataURL("image/webp", PROFILE_COMMENT_MEDIA_EXPORT_QUALITY);
-    const mediaURL = preferredMediaURL.startsWith("data:image/webp")
-      ? preferredMediaURL
-      : canvas.toDataURL("image/jpeg", PROFILE_COMMENT_MEDIA_EXPORT_QUALITY);
-    const mediaType = mediaURL.startsWith("data:image/webp") ? "image/webp" : "image/jpeg";
+    let mediaURL = "";
+    let mediaType = "";
+    let exportQuality = PROFILE_COMMENT_MEDIA_EXPORT_QUALITY;
 
-    if (mediaURL.length > PROFILE_COMMENT_MEDIA_MAX_DATA_URL_LENGTH) {
+    while (exportQuality >= PROFILE_COMMENT_MEDIA_MIN_EXPORT_QUALITY) {
+      const webpMediaURL = canvas.toDataURL("image/webp", exportQuality);
+
+      if (
+        webpMediaURL.startsWith("data:image/webp") &&
+        webpMediaURL.length <= PROFILE_COMMENT_MEDIA_MAX_DATA_URL_LENGTH
+      ) {
+        mediaURL = webpMediaURL;
+        mediaType = "image/webp";
+        break;
+      }
+
+      const jpegMediaURL = canvas.toDataURL("image/jpeg", exportQuality);
+
+      if (jpegMediaURL.length <= PROFILE_COMMENT_MEDIA_MAX_DATA_URL_LENGTH) {
+        mediaURL = jpegMediaURL;
+        mediaType = "image/jpeg";
+        break;
+      }
+
+      exportQuality -= PROFILE_COMMENT_MEDIA_EXPORT_QUALITY_STEP;
+    }
+
+    if (!mediaURL || mediaURL.length > PROFILE_COMMENT_MEDIA_MAX_DATA_URL_LENGTH) {
       throw createFirebaseError(
         "comments/media-too-large",
-        "The selected image is too large to save in a comment."
+        "The selected image is too large to save in a Firestore comment."
       );
     }
 
@@ -359,6 +382,10 @@
   const isPermissionDeniedError = (error) =>
     getErrorCode(error) === "permission-denied" ||
     (error instanceof Error && /Missing or insufficient permissions/i.test(error.message));
+
+  const isFirestoreDocumentTooLargeError = (error) =>
+    error instanceof Error &&
+    /cannot be written because its size .* exceeds the maximum allowed size/i.test(error.message);
 
   const sanitizeLogin = (value) =>
     typeof value === "string"
@@ -2304,18 +2331,46 @@
       try {
         await setDoc(commentRef, displayCommentPayload);
       } catch (error) {
+        if (isFirestoreDocumentTooLargeError(error)) {
+          throw createFirebaseError(
+            "comments/media-too-large",
+            "This comment is too large for Firestore. Use a smaller image or GIF."
+          );
+        }
+
         if (isPermissionDeniedError(error)) {
           try {
             await setDoc(commentRef, photoCommentPayload);
           } catch (fallbackError) {
+            if (isFirestoreDocumentTooLargeError(fallbackError)) {
+              throw createFirebaseError(
+                "comments/media-too-large",
+                "This comment is too large for Firestore. Use a smaller image or GIF."
+              );
+            }
+
             if (isPermissionDeniedError(fallbackError)) {
               try {
                 await setDoc(commentRef, persistedCommentPayload);
               } catch (legacyError) {
+                if (isFirestoreDocumentTooLargeError(legacyError)) {
+                  throw createFirebaseError(
+                    "comments/media-too-large",
+                    "This comment is too large for Firestore. Use a smaller image or GIF."
+                  );
+                }
+
                 if (isPermissionDeniedError(legacyError)) {
                   try {
                     await setDoc(commentRef, timestampCommentPayload);
                   } catch (timestampError) {
+                    if (isFirestoreDocumentTooLargeError(timestampError)) {
+                      throw createFirebaseError(
+                        "comments/media-too-large",
+                        "This comment is too large for Firestore. Use a smaller image or GIF."
+                      );
+                    }
+
                     if (isPermissionDeniedError(timestampError)) {
                       throw createFirebaseError(
                         "comments/write-denied",
@@ -2484,6 +2539,13 @@
           { merge: true }
         );
       } catch (error) {
+        if (isFirestoreDocumentTooLargeError(error)) {
+          throw createFirebaseError(
+            "comments/media-too-large",
+            "This updated comment is too large for Firestore. Use a smaller image or GIF."
+          );
+        }
+
         if (isPermissionDeniedError(error)) {
           throw createFirebaseError(
             "comments/update-denied",

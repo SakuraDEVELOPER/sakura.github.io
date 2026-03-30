@@ -165,7 +165,7 @@ const getProfileActionErrorMessage = (error: unknown, fallback: string) => {
   }
 
   if (code === "comments/media-too-large") {
-    return "The selected comment media is too large to save.";
+    return "The selected media is too large for a Firestore comment. Use a smaller image or GIF.";
   }
 
   if (code === "comments/media-invalid") {
