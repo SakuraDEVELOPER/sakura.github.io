@@ -144,6 +144,13 @@ const USER_UPDATE_EVENT = "sakura-user-update";
 const PROFILE_PATH_STORAGE_KEY = "sakura-profile-path";
 const CURRENT_PROFILE_ID_STORAGE_KEY = "sakura-current-profile-id";
 const PROFILE_BUILD_MARKER = "role-colors-v61";
+const PROFILE_THEME_TITLE_BY_PROFILE_ID = new Map<number, string>([
+  [1, "Pixies — Where Is My Mind"],
+  [4, "Pixies — Where Is My Mind"],
+  [6, "Pixies — Where Is My Mind"],
+  [2, "Profile 2 Theme"],
+  [8, "Cyberpunk"],
+]);
 const COMMENT_MENTION_PATTERN = /@([A-Za-z\u0400-\u04FF0-9._-]{3,24})/g;
 const COMMENT_MENTION_DRAFT_PATTERN = /(^|[\s([{"'`])@([A-Za-z\u0400-\u04FF0-9._-]{2,24})$/;
 const COMMENT_MENTION_TOKEN_CHARACTER_PATTERN = /[A-Za-z\u0400-\u04FF0-9._-]/;
@@ -152,7 +159,7 @@ const PROFILE_THEME_SONG_BY_PROFILE_ID = new Map<number, string>([
   [1, `${repoBasePath}/music/where-is-my-mind.mp3`],
   [4, `${repoBasePath}/music/where-is-my-mind.mp3`],
   [6, `${repoBasePath}/music/where-is-my-mind.mp3`],
-  [2, `${repoBasePath}/music/cyberpunk.mp3`],
+  [2, `${repoBasePath}/music/profile-2-theme.mp3`],
   [8, `${repoBasePath}/music/cyberpunk.mp3`],
 ]);
 const COMMENT_MEDIA_FILE_ACCEPT = ".png,.jpg,.jpeg,.webp,.gif,.mp4,.webm";
@@ -291,6 +298,17 @@ const shouldCleanupUploadedMedia = (uploadResult: SupabaseCommentMediaUploadResu
 const isCommentVideoMediaType = (value: string | null | undefined) =>
   value === "video/mp4" || value === "video/webm";
 const PREMIUM_AVATAR_MEDIA_TYPES = new Set(["image/gif", "video/mp4", "video/webm"]);
+const formatAudioClock = (value: number) => {
+  if (!Number.isFinite(value) || value < 0) {
+    return "0:00";
+  }
+
+  const totalSeconds = Math.floor(value);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+};
 
 function CommentMediaFrame({
   src,
