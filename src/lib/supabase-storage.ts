@@ -48,6 +48,10 @@ type StorageRuntimeWindow = Window & {
   sakuraFirebaseAuth?: {
     getAuthToken?: () => Promise<string | null>;
   };
+  sakuraSupabaseCurrentSession?: {
+    access_token?: string | null;
+  } | null;
+  sakuraStartSupabaseAuth?: (() => Promise<unknown>) | undefined;
 };
 
 type SignedUploadPayload = {
@@ -128,15 +132,55 @@ async function getFirebaseBridgeAuthToken() {
   }
 }
 
+async function getSupabaseBridgeAuthToken() {
+  if (!isSupabaseConfigured || !supabase || typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    if (!getRuntimeWindow().sakuraSupabaseCurrentSession?.access_token) {
+      await getRuntimeWindow().sakuraStartSupabaseAuth?.();
+    }
+  } catch {
+  }
+
+  try {
+    const runtimeToken = getRuntimeWindow().sakuraSupabaseCurrentSession?.access_token;
+
+    if (typeof runtimeToken === "string" && runtimeToken) {
+      return runtimeToken;
+    }
+  } catch {
+  }
+
+  try {
+    const { data } = await supabase.auth.getSession();
+    const sessionToken = data.session?.access_token;
+    return typeof sessionToken === "string" && sessionToken ? sessionToken : null;
+  } catch {
+    return null;
+  }
+}
+
+async function getStorageBridgeAuthToken() {
+  const firebaseToken = await getFirebaseBridgeAuthToken();
+
+  if (firebaseToken) {
+    return firebaseToken;
+  }
+
+  return await getSupabaseBridgeAuthToken();
+}
+
 async function callFirebaseSyncBridge<T>(body: Record<string, unknown>): Promise<T> {
   if (!supabaseSyncFunctionUrl) {
     throw new Error("Supabase sync function URL is not configured for this build.");
   }
 
-  const authToken = await getFirebaseBridgeAuthToken();
+  const authToken = await getStorageBridgeAuthToken();
 
   if (!authToken) {
-    throw new Error("Supabase Storage bridge requires an active Firebase session.");
+    throw new Error("Supabase Storage bridge requires an active signed-in session.");
   }
 
   const response = await fetch(supabaseSyncFunctionUrl, {
