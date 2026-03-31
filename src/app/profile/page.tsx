@@ -108,6 +108,7 @@ type Bridge = {
   adminUpdateProfileLogin: (profileId: number, login: string) => Promise<UserProfile | null>;
   adminSetProfileBan: (profileId: number, isBanned: boolean) => Promise<UserProfile | null>;
   adminSetProfileEmailVerification: (profileId: number, isVerified: boolean) => Promise<UserProfile | null>;
+  adminDeleteAccount: (profileId: number) => Promise<null>;
   updateProfileRoles: (profileId: number, roles: string[]) => Promise<UserProfile | null>;
   updateAvatar: (file: File | AvatarUploadPayload) => Promise<UserProfile | null>;
   deleteAvatar: () => Promise<UserProfile | null>;
@@ -282,6 +283,10 @@ const getProfileActionErrorMessage = (error: unknown, fallback: string) => {
 
   if (code === "auth/no-current-user") {
     return "Sign in again before deleting the account.";
+  }
+
+  if (code === "admin/self-delete-forbidden") {
+    return "Use the owner delete button for your own account.";
   }
 
   return error instanceof Error ? error.message : fallback;
@@ -1145,6 +1150,8 @@ export default function ProfilePage() {
   const [isAdminVerificationSaving, setIsAdminVerificationSaving] = useState(false);
   const [adminVerificationError, setAdminVerificationError] = useState<string | null>(null);
   const [adminVerificationSuccess, setAdminVerificationSuccess] = useState<string | null>(null);
+  const [isAdminAccountDeleting, setIsAdminAccountDeleting] = useState(false);
+  const [adminAccountDeleteError, setAdminAccountDeleteError] = useState<string | null>(null);
   const [isAccountDeleting, setIsAccountDeleting] = useState(false);
   const [accountDeleteError, setAccountDeleteError] = useState<string | null>(null);
   const [comments, setComments] = useState<ProfileComment[]>(bootstrap.comments);
@@ -1648,6 +1655,7 @@ export default function ProfilePage() {
   useEffect(() => {
     setIsProfileControlsOpen(false);
     setUsernamePasswordInput("");
+    setAdminAccountDeleteError(null);
     setAccountDeleteError(null);
   }, [activeProfile?.profileId, isOwner]);
 
@@ -3518,6 +3526,43 @@ export default function ProfilePage() {
       setIsAdminVerificationSaving(false);
     }
   };
+  const handleAdminDeleteAccount = async () => {
+    const bridge = getWindowState().sakuraFirebaseAuth;
+
+    if (!bridge || !canOpenAdminPanel || !activeProfile?.profileId) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete profile #${activeProfile.profileId} permanently? This removes the account, comments, avatar, and frees the email for a new registration.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setAdminAccountDeleteError(null);
+    setIsAdminAccountDeleting(true);
+
+    try {
+      await bridge.adminDeleteAccount(activeProfile.profileId);
+      setIsAdminPanelOpen(false);
+      setProfile(null);
+      setComments([]);
+      setCommentAuthorProfiles({});
+      setCommentAuthorProfilesByCommentId({});
+
+      if (!redirectToLocalProfile(activeProfile.profileId, visibleCurrentUser?.profileId ?? null)) {
+        redirectToRepoHome();
+      }
+    } catch (error) {
+      setAdminAccountDeleteError(
+        getProfileActionErrorMessage(error, "Could not delete this account.")
+      );
+    } finally {
+      setIsAdminAccountDeleting(false);
+    }
+  };
 
   const handleCommentSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -4536,6 +4581,35 @@ export default function ProfilePage() {
                       ) : null}
                       {adminVerificationError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{adminVerificationError}</p> : null}
                       {adminVerificationSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{adminVerificationSuccess}</p> : null}
+                    </section>
+
+                    <section className="rounded-[24px] border border-[#4d2028] bg-[linear-gradient(180deg,#190b10_0%,#12080c_100%)] p-5">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-[#ff9aa9]">Account Deletion</p>
+                          <p className="mt-2 text-sm font-semibold text-white">Permanent removal</p>
+                          <p className="mt-1 text-xs leading-relaxed text-[#f0c7cf]">Deletes the target account, removes profile comments and avatar files, frees the email, and resets the visible counter to the highest remaining profile id.</p>
+                        </div>
+                        <span className="inline-flex shrink-0 rounded-full border border-[#ff9aa9]/35 bg-[#190c11] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-[#ff9aa9]">
+                          Danger
+                        </span>
+                      </div>
+                      <div className="mt-4 flex flex-wrap items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={handleAdminDeleteAccount}
+                          disabled={isAdminAccountDeleting || isAdminSelfTarget}
+                          className="inline-flex items-center justify-center rounded-full border border-[#ff9aa9]/40 bg-[#ff9aa9] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffb2be] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isAdminAccountDeleting ? "Deleting..." : "Delete Account"}
+                        </button>
+                      </div>
+                      {isAdminSelfTarget ? (
+                        <p className="mt-3 text-xs leading-relaxed text-gray-500">
+                          Use the owner delete button for your own account.
+                        </p>
+                      ) : null}
+                      {adminAccountDeleteError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{adminAccountDeleteError}</p> : null}
                     </section>
 
                     <section className="rounded-[24px] border border-[#1d1d1d] bg-[#0d0d0d] p-5">

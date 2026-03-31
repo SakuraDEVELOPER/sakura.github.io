@@ -39,6 +39,7 @@ const firebaseJwks = createRemoteJWKSet(
 type JsonRecord = Record<string, unknown>;
 
 type ActorProfile = {
+  firebaseUid?: string | null;
   profileId: number | null;
   roles: string[];
   authUserId: string | null;
@@ -168,6 +169,23 @@ const hasCommentModerationRole = (roles: string[]) =>
   );
 
 const canManageStorageObjects = (roles: string[]) => hasCommentModerationRole(roles);
+const canManageRoles = (roles: string[]) =>
+  roles.some((role) => ["root", "co-owner"].includes(role));
+const hasRole = (roles: string[], expectedRole: string) =>
+  roles.some((role) => role === expectedRole);
+const ensureActorCanManageTargetProfile = (actorRoles: string[], targetRoles: string[]) => {
+  if (hasRole(actorRoles, "root")) {
+    return;
+  }
+
+  if (!hasRole(actorRoles, "co-owner")) {
+    throw new Error("Only root and co-owner accounts can use this admin action.");
+  }
+
+  if (hasRole(targetRoles, "root")) {
+    throw new Error("Co-owner cannot manage a root account.");
+  }
+};
 
 const getBearerToken = (request: Request) => {
   const authorization = request.headers.get("authorization") ?? "";
@@ -202,7 +220,7 @@ const verifyFirebaseIdToken = async (token: string) => {
 const loadActorProfile = async (firebaseUid: string): Promise<ActorProfile> => {
   const { data, error } = await supabaseAdmin
     .from("profiles")
-    .select("profile_id,roles,auth_user_id,email,display_name")
+    .select("firebase_uid,profile_id,roles,auth_user_id,email,display_name,avatar_path")
     .eq("firebase_uid", firebaseUid)
     .maybeSingle();
 
@@ -211,12 +229,38 @@ const loadActorProfile = async (firebaseUid: string): Promise<ActorProfile> => {
   }
 
   return {
+    firebaseUid: normalizeString(data?.firebase_uid, 128),
     profileId: normalizeInteger(data?.profile_id),
     roles: normalizeRoles(data?.roles),
     authUserId: normalizeString(data?.auth_user_id, 128),
     email: normalizeString(data?.email, 320),
     displayName: normalizeString(data?.display_name, 96),
     avatarPath: normalizeStorageObjectPath(data?.avatar_path),
+  };
+};
+const loadProfileByProfileId = async (profileId: number): Promise<ActorProfile | null> => {
+  const { data, error } = await supabaseAdmin
+    .from("profiles")
+    .select("firebase_uid,profile_id,roles,auth_user_id,email,display_name,avatar_path")
+    .eq("profile_id", profileId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  return {
+    firebaseUid: normalizeString(data.firebase_uid, 128),
+    profileId: normalizeInteger(data.profile_id),
+    roles: normalizeRoles(data.roles),
+    authUserId: normalizeString(data.auth_user_id, 128),
+    email: normalizeString(data.email, 320),
+    displayName: normalizeString(data.display_name, 96),
+    avatarPath: normalizeStorageObjectPath(data.avatar_path),
   };
 };
 
@@ -614,6 +658,117 @@ const handleDeleteProfileAccountData = async (
     deletedFirebaseUid: actor.uid,
   });
 };
+const handleAdminDeleteProfileAccountData = async (
+  actor: { uid: string; email: string | null },
+  body: JsonRecord,
+) => {
+  const actorProfile = await loadActorProfile(actor.uid);
+
+  if (!canManageRoles(actorProfile.roles)) {
+    return json({ error: "Only root and co-owner accounts can delete accounts from the admin panel." }, 403);
+  }
+
+  const targetProfileId = normalizeInteger(body.profileId);
+
+  if (!targetProfileId || targetProfileId <= 0) {
+    return json({ error: "Target profile id is required." }, 400);
+  }
+
+  const targetProfile = await loadProfileByProfileId(targetProfileId);
+
+  if (!targetProfile) {
+    return json({
+      ok: true,
+      action: "admin_delete_profile_account_data",
+      deleted: false,
+      profileId: targetProfileId,
+    });
+  }
+
+  ensureActorCanManageTargetProfile(actorProfile.roles, targetProfile.roles);
+
+  if (targetProfile.firebaseUid && targetProfile.firebaseUid === actor.uid) {
+    return json({ error: "Use the owner delete flow for your own account." }, 403);
+  }
+
+  const mediaPaths = new Set<string>();
+
+  if (targetProfile.avatarPath) {
+    mediaPaths.add(targetProfile.avatarPath);
+  }
+
+  if (targetProfile.profileId && targetProfile.profileId > 0) {
+    const { data: commentRows, error: commentRowsError } = await supabaseAdmin
+      .from("profile_comments")
+      .select("id,media_path")
+      .or(`profile_id.eq.${targetProfile.profileId},author_profile_id.eq.${targetProfile.profileId}`);
+
+    if (commentRowsError) {
+      throw commentRowsError;
+    }
+
+    for (const row of Array.isArray(commentRows) ? commentRows : []) {
+      const mediaPath = normalizeStorageObjectPath(row?.media_path);
+
+      if (mediaPath) {
+        mediaPaths.add(mediaPath);
+      }
+    }
+
+    const { error: deleteCommentsError } = await supabaseAdmin
+      .from("profile_comments")
+      .delete()
+      .or(`profile_id.eq.${targetProfile.profileId},author_profile_id.eq.${targetProfile.profileId}`);
+
+    if (deleteCommentsError) {
+      throw deleteCommentsError;
+    }
+
+    const { error: deleteProfileError } = await supabaseAdmin
+      .from("profiles")
+      .delete()
+      .eq("profile_id", targetProfile.profileId);
+
+    if (deleteProfileError) {
+      throw deleteProfileError;
+    }
+  }
+
+  await deleteSupabaseStoragePaths([...mediaPaths]);
+
+  const supabaseAuthUserId =
+    targetProfile.authUserId ??
+    (targetProfile.email ? await findSupabaseAuthUserIdByEmail(targetProfile.email) : null);
+
+  if (supabaseAuthUserId) {
+    const { error: deleteSupabaseAuthError } = await supabaseAdmin.auth.admin.deleteUser(
+      supabaseAuthUserId,
+    );
+
+    if (deleteSupabaseAuthError && !isMissingAuthUserError(deleteSupabaseAuthError)) {
+      throw deleteSupabaseAuthError;
+    }
+  }
+
+  if (targetProfile.firebaseUid) {
+    try {
+      await getFirebaseAdminAuth().deleteUser(targetProfile.firebaseUid);
+    } catch (error) {
+      if (!isMissingAuthUserError(error)) {
+        throw error;
+      }
+    }
+  }
+
+  return json({
+    ok: true,
+    action: "admin_delete_profile_account_data",
+    deleted: true,
+    profileId: targetProfile.profileId,
+    deletedSupabaseAuthUserId: supabaseAuthUserId,
+    deletedFirebaseUid: targetProfile.firebaseUid ?? null,
+  });
+};
 
 const handlePresenceUpsert = async (firebaseUid: string, body: JsonRecord) => {
   const presence = body.presence;
@@ -855,6 +1010,8 @@ Deno.serve(async (request) => {
         return await handleEnsureSupabasePasswordUser(actor, body);
       case "delete_profile_account_data":
         return await handleDeleteProfileAccountData(actor);
+      case "admin_delete_profile_account_data":
+        return await handleAdminDeleteProfileAccountData(actor, body);
       case "upsert_presence":
         return await handlePresenceUpsert(actor.uid, body);
       case "upsert_comment":

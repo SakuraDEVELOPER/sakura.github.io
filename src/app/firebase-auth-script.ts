@@ -2721,7 +2721,7 @@
         })
       );
     };
-    const deleteProfileCommentDocumentsForAccount = async (user, snapshot) => {
+    const deleteProfileCommentDocumentsForAccount = async (targetUid, snapshot) => {
       const commentRefsById = new Map();
       const commentLookups = [];
 
@@ -2731,9 +2731,9 @@
         );
       }
 
-      if (typeof user?.uid === "string" && user.uid) {
+      if (typeof targetUid === "string" && targetUid) {
         commentLookups.push(
-          getDocs(query(profileCommentsCollection, where("authorUid", "==", user.uid)))
+          getDocs(query(profileCommentsCollection, where("authorUid", "==", targetUid)))
         );
       }
 
@@ -2752,6 +2752,14 @@
       );
 
       return commentRefsById.size;
+    };
+    const deleteFirestoreProfileAccountData = async (targetUid, snapshot) => {
+      await deleteProfileCommentDocumentsForAccount(targetUid, snapshot);
+      await deleteAvatarFromStorage(targetUid).catch((error) => {
+        console.error("Failed to delete account avatar from Firebase Storage:", error);
+      });
+      await deleteDoc(userRefFor(targetUid));
+      await resetProfileCountAfterDeletion();
     };
     const resetProfileCountAfterDeletion = async () => {
       const usersSnapshot = await getDocs(usersCollection);
@@ -2809,12 +2817,7 @@
       stopPresenceTracking();
 
       try {
-        await deleteProfileCommentDocumentsForAccount(user, snapshot);
-        await deleteAvatarFromStorage(user.uid).catch((error) => {
-          console.error("Failed to delete account avatar from Firebase Storage:", error);
-        });
-        await deleteDoc(userRefFor(user.uid));
-        await resetProfileCountAfterDeletion();
+        await deleteFirestoreProfileAccountData(user.uid, snapshot);
       } catch (error) {
         const message =
           error instanceof Error && error.message
@@ -2844,6 +2847,53 @@
       }
 
       publishUserSnapshot(null);
+      return null;
+    };
+    const adminDeleteProfileAccount = async (profileId) => {
+      const { user, actorSnapshot } = await ensureRootActorSnapshot();
+
+      if (!Number.isInteger(profileId) || profileId <= 0) {
+        throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
+      }
+
+      const targetDoc = await findUserByProfileId(profileId);
+
+      if (!targetDoc) {
+        return null;
+      }
+
+      ensureActorCanManageTargetProfile(actorSnapshot?.roles ?? [], targetDoc.data()?.roles ?? []);
+
+      if (targetDoc.id === user.uid) {
+        throw createFirebaseError(
+          "admin/self-delete-forbidden",
+          "Use the profile delete button for your own account."
+        );
+      }
+
+      const targetSnapshot = toStoredUserSnapshot(targetDoc.id, targetDoc.data());
+
+      try {
+        await deleteFirestoreProfileAccountData(targetDoc.id, targetSnapshot);
+      } catch (error) {
+        const message =
+          error instanceof Error && error.message
+            ? error.message
+            : "Account data could not be deleted from Firebase.";
+        throw createFirebaseError("account/delete-firestore-failed", message);
+      }
+
+      await requestSupabaseSyncActionOrThrow(
+        user,
+        "admin_delete_profile_account_data",
+        {
+          profileId,
+        },
+        "account/delete-sync-failed",
+        "Account data could not be deleted from Supabase."
+      );
+
+      clearProfileLookupCaches();
       return null;
     };
 
@@ -5046,6 +5096,7 @@
       adminUpdateProfileLogin,
       adminSetProfileBan,
       adminSetProfileEmailVerification,
+      adminDeleteAccount: async (profileId) => adminDeleteProfileAccount(profileId),
       getProfileById,
       getProfileByAuthorName,
       getProfilesByLoginPrefix,
