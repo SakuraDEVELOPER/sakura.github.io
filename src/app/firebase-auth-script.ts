@@ -4634,8 +4634,8 @@
       },
       logout: async () => {
         stopPresenceTracking();
-        await signOut(auth);
         await signOutSupabaseBridge();
+        await signOut(auth);
         publishUserSnapshot(null);
       },
       onAuthStateChanged: (callback) =>
