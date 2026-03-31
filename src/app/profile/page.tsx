@@ -14,7 +14,7 @@ import {
   uploadSupabaseCommentMedia,
   type SupabaseCommentMediaUploadResult,
 } from "@/lib/supabase-storage";
-import { isSupabaseConfigured } from "@/lib/supabase";
+import { getSupabasePublicObjectUrl, isSupabaseConfigured } from "@/lib/supabase";
 import { readCachedAuthSnapshot } from "@/lib/auth-snapshot-cache";
 import { readCachedProfileSnapshot, writeCachedProfileSnapshot } from "@/lib/profile-cache";
 import { readCachedProfileComments, writeCachedProfileComments } from "@/lib/profile-comments-cache";
@@ -428,6 +428,17 @@ const initialsFromText = (value: string) =>
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("")
     .slice(0, 2) || "CM";
+const resolveProfileAvatarUrl = (profile: UserProfile | null | undefined) => {
+  if (!profile) {
+    return null;
+  }
+
+  if (typeof profile.photoURL === "string" && profile.photoURL.trim()) {
+    return profile.photoURL.trim();
+  }
+
+  return getSupabasePublicObjectUrl(profile.avatarPath);
+};
 const redirectToLocalProfile = (requestedProfileId: number, currentProfileId: number | null) => {
   if (typeof window === "undefined") return false;
 
@@ -1636,6 +1647,8 @@ export default function ProfilePage() {
 
   const primaryName = activeProfile ? nameOf(activeProfile) : "Sakura User";
   const initials = activeProfile ? initialsOf(activeProfile) : "SA";
+  const activeProfileAvatarUrl = resolveProfileAvatarUrl(activeProfile);
+  const hasActiveProfileAvatar = Boolean(activeProfileAvatarUrl);
   const activeProfileRoleSignature = activeProfile?.roles?.join("|") ?? "";
 
   useEffect(() => {
@@ -1822,9 +1835,9 @@ export default function ProfilePage() {
       <span className={`absolute ${previewAlignmentClassName} top-full z-30 mt-3 w-[260px] translate-y-2 rounded-[22px] border border-[#2a2023] bg-[#0c0b0d] px-4 py-4 opacity-0 shadow-[0_18px_50px_rgba(0,0,0,0.46),0_0_35px_rgba(255,183,197,0.08)] transition duration-150 ease-out invisible group-hover/comment-profile:visible group-hover/comment-profile:translate-y-0 group-hover/comment-profile:opacity-100 group-focus-within/comment-profile:visible group-focus-within/comment-profile:translate-y-0 group-focus-within/comment-profile:opacity-100`}>
         <span className={`absolute ${previewArrowClassName} top-0 h-3 w-3 -translate-y-1/2 rotate-45 border-l border-t border-[#2a2023] bg-[#0c0b0d]`} />
         <span className="flex items-start gap-3">
-          {previewProfile.photoURL ? (
+          {resolveProfileAvatarUrl(previewProfile) ? (
             <AvatarMedia
-              src={previewProfile.photoURL}
+              src={resolveProfileAvatarUrl(previewProfile) ?? ""}
               alt={mentionPreviewAlt}
               loading="lazy"
               decoding="async"
@@ -2013,12 +2026,12 @@ export default function ProfilePage() {
                     href={typeof profile.profileId === "number" ? profilePath(profile.profileId) : "#"}
                     className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 transition hover:bg-[#171014]"
                   >
-                    {profile.photoURL ? (
-                      <AvatarMedia
-                        src={profile.photoURL}
-                        alt={profilePreviewName}
-                        loading="lazy"
-                        decoding="async"
+                  {resolveProfileAvatarUrl(profile) ? (
+                    <AvatarMedia
+                      src={resolveProfileAvatarUrl(profile) ?? ""}
+                      alt={profilePreviewName}
+                      loading="lazy"
+                      decoding="async"
                         className="h-10 w-10 shrink-0 rounded-2xl border border-[#2a2022] object-cover"
                       />
                     ) : (
@@ -2087,9 +2100,9 @@ export default function ProfilePage() {
                   href={typeof profile.profileId === "number" ? profilePath(profile.profileId) : "#"}
                   className="flex w-full min-w-0 items-center gap-3 rounded-[18px] border border-[#2a2022] bg-[#120d11] px-4 py-3 pr-16 transition hover:border-[#ffb7c5]/40 hover:bg-[#171014]"
                 >
-                  {profile.photoURL ? (
+                  {resolveProfileAvatarUrl(profile) ? (
                     <AvatarMedia
-                      src={profile.photoURL}
+                      src={resolveProfileAvatarUrl(profile) ?? ""}
                       alt={profilePreviewName}
                       loading="lazy"
                       decoding="async"
@@ -2323,9 +2336,9 @@ export default function ProfilePage() {
                   }}
                   className="flex items-center gap-3 border-b border-[#171717] px-4 py-3 text-left transition last:border-b-0 hover:bg-[#120d11]"
                 >
-                  {profile.photoURL ? (
+                  {resolveProfileAvatarUrl(profile) ? (
                     <AvatarMedia
-                      src={profile.photoURL}
+                      src={resolveProfileAvatarUrl(profile) ?? ""}
                       alt={mentionDisplayName || mentionNickname}
                       loading="lazy"
                       decoding="async"
@@ -2450,8 +2463,10 @@ export default function ProfilePage() {
   const resolveCommentAuthorPhotoURL = (comment: ProfileComment) => {
     const resolvedCommentAuthorProfile = resolveCommentAuthorProfile(comment);
 
-    if (resolvedCommentAuthorProfile?.photoURL) {
-      return resolvedCommentAuthorProfile.photoURL;
+    const resolvedProfileAvatarUrl = resolveProfileAvatarUrl(resolvedCommentAuthorProfile);
+
+    if (resolvedProfileAvatarUrl) {
+      return resolvedProfileAvatarUrl;
     }
 
     if (comment.authorPhotoURL) {
@@ -3804,7 +3819,7 @@ export default function ProfilePage() {
               <div className="border-b border-[#1b1b1b] bg-[radial-gradient(circle_at_top,rgba(255,183,197,0.16),transparent_55%)] px-8 py-8">
                 <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
                   <div className="flex shrink-0 flex-col items-center gap-3">
-                  {activeProfile.photoURL ? <AvatarMedia src={activeProfile.photoURL} alt={primaryName} decoding="async" className="h-[104px] w-[104px] rounded-[30px] border border-[#2c2023] object-cover shadow-[0_0_30px_rgba(255,183,197,0.14)]" /> : <div className="flex h-[104px] w-[104px] items-center justify-center rounded-[30px] border border-[#2c2023] bg-[#1a1012] text-2xl font-black uppercase text-[#ffb7c5] shadow-[0_0_30px_rgba(255,183,197,0.14)]">{initials}</div>}
+                  {hasActiveProfileAvatar ? <AvatarMedia src={activeProfileAvatarUrl ?? ""} alt={primaryName} decoding="async" className="h-[104px] w-[104px] rounded-[30px] border border-[#2c2023] object-cover shadow-[0_0_30px_rgba(255,183,197,0.14)]" /> : <div className="flex h-[104px] w-[104px] items-center justify-center rounded-[30px] border border-[#2c2023] bg-[#1a1012] text-2xl font-black uppercase text-[#ffb7c5] shadow-[0_0_30px_rgba(255,183,197,0.14)]">{initials}</div>}
                   <span className={`inline-flex min-w-[104px] shrink-0 justify-center rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${isActiveProfileOnline ? "border-[#1f3b2f] bg-[#0d1713] text-[#8ce5b2]" : "border-[#312228] bg-[#140d11] text-[#ffb7c5]"}`}>{isActiveProfileOnline ? "Online" : "Offline"}</span>
                   </div>
                   <div className="min-w-0">
@@ -4126,13 +4141,13 @@ export default function ProfilePage() {
               {isOwner && isProfileControlsOpen && !activeProfile?.isBanned ? <div className="rounded-[32px] border border-[#201517] bg-[#0d0d0d] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
                 <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">Avatar</p>
                 <div className="mt-5 rounded-[24px] border border-[#1d1d1d] bg-[#090909] p-4">
-                  <p className="text-sm font-semibold text-white">{activeProfile.photoURL ? "Custom Avatar" : "Generated Avatar"}</p>
+                  <p className="text-sm font-semibold text-white">{hasActiveProfileAvatar ? "Custom Avatar" : "Generated Avatar"}</p>
                   <p className="mt-2 text-xs leading-relaxed text-gray-400">Upload, replace, or delete your avatar here. PNG, JPG, and WEBP are available to all users. GIF, MP4, and WEBM require a higher profile tier.</p>
                   <div className="mt-4 flex flex-wrap items-center gap-3">
                     <button type="button" onClick={() => avatarInputRef.current?.click()} disabled={isAvatarUploading || isAvatarDeleting} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">
-                      {isAvatarUploading ? "Uploading..." : activeProfile.photoURL ? "Replace Avatar" : "Upload Avatar"}
+                      {isAvatarUploading ? "Uploading..." : hasActiveProfileAvatar ? "Replace Avatar" : "Upload Avatar"}
                     </button>
-                    {activeProfile.photoURL ? <button type="button" onClick={handleAvatarDelete} disabled={isAvatarUploading || isAvatarDeleting} className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60">{isAvatarDeleting ? "Deleting..." : "Delete Avatar"}</button> : null}
+                    {hasActiveProfileAvatar ? <button type="button" onClick={handleAvatarDelete} disabled={isAvatarUploading || isAvatarDeleting} className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60">{isAvatarDeleting ? "Deleting..." : "Delete Avatar"}</button> : null}
                     <input ref={avatarInputRef} type="file" accept={AVATAR_FILE_ACCEPT} onChange={handleAvatarChange} className="hidden" />
                   </div>
                   {avatarError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{avatarError}</p> : null}
@@ -4555,9 +4570,9 @@ export default function ProfilePage() {
                           disabled={isAvatarUploading || isAvatarDeleting}
                           className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          {isAvatarUploading ? "Uploading..." : activeProfile.photoURL ? "Replace Avatar" : "Upload Avatar"}
+                          {isAvatarUploading ? "Uploading..." : hasActiveProfileAvatar ? "Replace Avatar" : "Upload Avatar"}
                         </button>
-                        {activeProfile.photoURL ? (
+                        {hasActiveProfileAvatar ? (
                           <button
                             type="button"
                             onClick={handleAvatarDelete}
