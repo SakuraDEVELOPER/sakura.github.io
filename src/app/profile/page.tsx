@@ -3643,6 +3643,19 @@ export default function ProfilePage() {
       );
 
       applyUpdatedProfileSnapshot(snapshot);
+      setAdminPrivateProfileFields((currentFields) => ({
+        email:
+          currentFields?.email ??
+          snapshot?.email ??
+          targetEmail ??
+          null,
+        emailVerified: isTargetVerificationLocked,
+        verificationRequired: !isTargetVerificationLocked,
+        providerIds:
+          currentFields?.providerIds?.length
+            ? currentFields.providerIds
+            : snapshot?.providerIds ?? targetProviderIds,
+      }));
       setAdminVerificationSuccess(
         isTargetVerificationLocked ? "Email marked as verified." : "Email verification revoked."
       );

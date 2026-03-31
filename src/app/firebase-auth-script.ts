@@ -5031,51 +5031,51 @@
         throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
       }
 
-      const targetDoc = await findUserByProfileId(profileId);
-
-      if (!targetDoc) {
-        return null;
-      }
-
-      ensureActorCanManageTargetProfile(actorSnapshot?.roles ?? [], targetDoc.data()?.roles ?? []);
-
       const isVerified = Boolean(nextIsVerified);
 
-      if (targetDoc.id === user.uid && !isVerified) {
+      if (
+        actorSnapshot?.profileId === profileId &&
+        !isVerified &&
+        normalizeRoles(actorSnapshot?.roles ?? []).includes("root")
+      ) {
         throw createFirebaseError(
           "verification/self-forbidden",
           "You cannot revoke email verification on your own root account."
         );
       }
 
-      try {
-        await setDoc(
-          userRefFor(targetDoc.id),
-          {
-            emailVerified: isVerified,
-            verificationRequired: !isVerified,
-            verificationEmailSent: false,
-            updatedAt: new Date().toISOString(),
-          },
-          { merge: true }
-        );
-      } catch (error) {
-        if (!isPermissionDeniedError(error)) {
-          throw error;
-        }
+      const response = await requestSupabaseSyncActionOrThrow(
+        user,
+        "admin_set_profile_email_verification",
+        {
+          profileId,
+          isVerified,
+        },
+        "verification/persist-failed",
+        "Email verification status could not be saved."
+      );
 
-        throw createFirebaseError(
-          "verification/persist-failed",
-          "Email verification status could not be saved. Check Firestore rules for privileged users."
-        );
+      const refreshedSnapshot = await getProfileById(profileId).catch(() => null);
+      const responseFields =
+        response && typeof response.fields === "object" && response.fields ? response.fields : null;
+
+      if (!refreshedSnapshot) {
+        return null;
       }
 
-      return refreshStoredUserSnapshot(targetDoc.id, {
-        ...targetDoc.data(),
+      return {
+        ...refreshedSnapshot,
+        email:
+          typeof responseFields?.email === "string"
+            ? responseFields.email
+            : refreshedSnapshot.email ?? null,
         emailVerified: isVerified,
         verificationRequired: !isVerified,
-        verificationEmailSent: false,
-      });
+        providerIds:
+          Array.isArray(responseFields?.providerIds) && responseFields.providerIds.length
+            ? responseFields.providerIds
+            : refreshedSnapshot.providerIds,
+      };
     };
     const getAdminPrivateProfileFields = async (profileId) => {
       const { user } = await ensureRootActorSnapshot();

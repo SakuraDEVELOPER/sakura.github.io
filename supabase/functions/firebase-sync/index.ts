@@ -52,6 +52,9 @@ type ActorProfile = {
   avatarPath: string | null;
 };
 
+const PROFILE_COMPATIBILITY_SELECT =
+  "firebase_uid,profile_id,roles,auth_user_id,email,email_verified,verification_required,provider_ids,display_name,avatar_path";
+
 const nowIso = () => new Date().toISOString();
 
 const json = (body: JsonRecord, status = 200) =>
@@ -226,7 +229,7 @@ const verifyFirebaseIdToken = async (token: string) => {
 const loadActorProfile = async (firebaseUid: string): Promise<ActorProfile> => {
   const { data, error } = await supabaseAdmin
     .from("profiles")
-    .select("firebase_uid,profile_id,roles,auth_user_id,email,display_name,avatar_path")
+    .select(PROFILE_COMPATIBILITY_SELECT)
     .eq("firebase_uid", firebaseUid)
     .maybeSingle();
 
@@ -251,7 +254,7 @@ const loadActorProfile = async (firebaseUid: string): Promise<ActorProfile> => {
 const loadProfileByProfileId = async (profileId: number): Promise<ActorProfile | null> => {
   const { data, error } = await supabaseAdmin
     .from("profiles")
-    .select("firebase_uid,profile_id,roles,auth_user_id,email,display_name,avatar_path")
+    .select(PROFILE_COMPATIBILITY_SELECT)
     .eq("profile_id", profileId)
     .maybeSingle();
 
@@ -276,6 +279,144 @@ const loadProfileByProfileId = async (profileId: number): Promise<ActorProfile |
     displayName: normalizeString(data.display_name, 96),
     avatarPath: normalizeStorageObjectPath(data.avatar_path),
   };
+};
+
+const syncFirebaseVerificationCompatibility = async (
+  profile: ActorProfile,
+  isVerified: boolean,
+) => {
+  if (!profile.firebaseUid) {
+    return;
+  }
+
+  try {
+    await getFirebaseAdminAuth().updateUser(profile.firebaseUid, {
+      emailVerified: isVerified,
+    });
+  } catch (error) {
+    if (!isMissingAuthUserError(error)) {
+      throw error;
+    }
+  }
+
+  await getFirebaseAdminFirestore().collection("users").doc(profile.firebaseUid).set(
+    {
+      email: profile.email,
+      emailVerified: isVerified,
+      verificationRequired: !isVerified,
+      verificationEmailSent: false,
+      updatedAt: nowIso(),
+    },
+    { merge: true },
+  );
+};
+
+const handleAdminSetProfileEmailVerification = async (
+  actor: { uid: string; email: string | null; emailVerified: boolean },
+  body: JsonRecord,
+) => {
+  const profileId = normalizeInteger(body.profileId);
+  const requestedIsVerified = body.isVerified === true;
+
+  if (!profileId || profileId <= 0) {
+    return json({ error: "Profile id must be a positive number." }, 400);
+  }
+
+  const actorProfile = await loadActorProfile(actor.uid);
+
+  if (!canManageRoles(actorProfile.roles)) {
+    return json({ error: "Only root and co-owner accounts can use this admin action." }, 403);
+  }
+
+  const targetProfile = await loadProfileByProfileId(profileId);
+
+  if (!targetProfile) {
+    return json({
+      ok: true,
+      action: "admin_set_profile_email_verification",
+      profileId,
+      updated: false,
+      fields: null,
+    });
+  }
+
+  ensureActorCanManageTargetProfile(actorProfile.roles, targetProfile.roles);
+
+  if (
+    actorProfile.profileId === targetProfile.profileId &&
+    !requestedIsVerified &&
+    hasRole(actorProfile.roles, "root")
+  ) {
+    return json({ error: "You cannot revoke email verification on your own root account." }, 403);
+  }
+
+  const { data: updatedProfileRow, error: updateProfileError } = await supabaseAdmin
+    .from("profiles")
+    .update({
+      email_verified: requestedIsVerified,
+      verification_required: !requestedIsVerified,
+      verification_email_sent: false,
+      updated_at: nowIso(),
+    })
+    .eq("profile_id", profileId)
+    .select(PROFILE_COMPATIBILITY_SELECT)
+    .maybeSingle();
+
+  if (updateProfileError) {
+    throw updateProfileError;
+  }
+
+  const updatedProfile =
+    updatedProfileRow && typeof updatedProfileRow === "object"
+      ? {
+          firebaseUid: normalizeString(updatedProfileRow.firebase_uid, 128),
+          profileId: normalizeInteger(updatedProfileRow.profile_id),
+          roles: normalizeRoles(updatedProfileRow.roles),
+          authUserId: normalizeString(updatedProfileRow.auth_user_id, 128),
+          email: normalizeString(updatedProfileRow.email, 320),
+          emailVerified:
+            typeof updatedProfileRow.email_verified === "boolean"
+              ? updatedProfileRow.email_verified
+              : null,
+          verificationRequired:
+            typeof updatedProfileRow.verification_required === "boolean"
+              ? updatedProfileRow.verification_required
+              : null,
+          providerIds: normalizeRoles(updatedProfileRow.provider_ids),
+          displayName: normalizeString(updatedProfileRow.display_name, 96),
+          avatarPath: normalizeStorageObjectPath(updatedProfileRow.avatar_path),
+        }
+      : targetProfile;
+
+  if (updatedProfile.authUserId) {
+    const authAttributes: Record<string, unknown> = {
+      email_confirm: requestedIsVerified,
+    };
+
+    const { error: updateAuthError } = await supabaseAdmin.auth.admin.updateUserById(
+      updatedProfile.authUserId,
+      authAttributes,
+    );
+
+    if (updateAuthError && !isMissingAuthUserError(updateAuthError)) {
+      throw updateAuthError;
+    }
+  }
+
+  await syncFirebaseVerificationCompatibility(updatedProfile, requestedIsVerified);
+
+  return json({
+    ok: true,
+    action: "admin_set_profile_email_verification",
+    profileId,
+    updated: true,
+    fields: {
+      email: updatedProfile.email,
+      emailVerified: requestedIsVerified,
+      verificationRequired: !requestedIsVerified,
+      providerIds: Array.isArray(updatedProfile.providerIds) ? updatedProfile.providerIds : [],
+    },
+  });
 };
 
 const getErrorMessage = (error: unknown) =>
@@ -1150,6 +1291,8 @@ Deno.serve(async (request) => {
         return await handleDeleteProfileAccountData(actor);
       case "admin_delete_profile_account_data":
         return await handleAdminDeleteProfileAccountData(actor, body);
+      case "admin_set_profile_email_verification":
+        return await handleAdminSetProfileEmailVerification(actor, body);
       case "get_private_profile_fields":
         return await handleGetPrivateProfileFields(actor, body);
       case "upsert_presence":
