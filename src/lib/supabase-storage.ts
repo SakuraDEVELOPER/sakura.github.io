@@ -143,7 +143,7 @@ export async function uploadSupabaseAvatarMedia(
   userId: string
 ): Promise<SupabaseCommentMediaUploadResult> {
   validateSupabaseAvatarFile(file);
-  return uploadStorageObject(file, await buildObjectPath(file, "avatars", userId));
+  return uploadStorageObject(file, await buildObjectPath(file, "comments/avatars", userId));
 }
 
 export async function uploadSupabaseCommentMediaTest(file: File) {

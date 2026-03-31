@@ -991,7 +991,13 @@ const initialsOf = (user: UserProfile) =>
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("")
     .slice(0, 2);
-const avatarErrorMessage = (error: unknown) => (error instanceof Error ? error.message : "Avatar action failed.");
+const avatarErrorMessage = (error: unknown) => {
+  if (error instanceof TypeError && /fetch/i.test(error.message)) {
+    return "Avatar upload could not reach Supabase Storage. Check the bucket policy for comments/avatars and try again.";
+  }
+
+  return error instanceof Error ? error.message : "Avatar action failed.";
+};
 const getInitialRequestedProfileId = () => {
   if (typeof window === "undefined") return null;
   const fallback = window.sessionStorage.getItem(PROFILE_PATH_STORAGE_KEY);
@@ -1636,12 +1642,55 @@ export default function ProfilePage() {
       return;
     }
 
-    if (activeProfile && snapshot.uid === activeProfile.uid) {
+    const snapshotProfileId =
+      typeof snapshot.profileId === "number" && snapshot.profileId > 0
+        ? snapshot.profileId
+        : null;
+    const matchesSnapshot = (profile: UserProfile | null | undefined) =>
+      Boolean(
+        profile &&
+          (
+            profile.uid === snapshot.uid ||
+            (snapshotProfileId !== null && profile.profileId === snapshotProfileId)
+          )
+      );
+
+    if (matchesSnapshot(activeProfile)) {
       setProfile(snapshot);
     }
 
-    if (visibleCurrentUser?.uid === snapshot.uid) {
+    if (matchesSnapshot(visibleCurrentUser)) {
       setCurrentUser(snapshot);
+    }
+
+    if (snapshotProfileId !== null) {
+      setCommentAuthorProfiles((currentProfiles) => ({
+        ...currentProfiles,
+        [snapshotProfileId]: snapshot,
+      }));
+
+      setCommentAuthorProfilesByCommentId((currentProfilesByCommentId) => {
+        let hasChanges = false;
+        const nextProfilesByCommentId: Record<string, UserProfile> = {};
+
+        Object.entries(currentProfilesByCommentId).forEach(([commentId, profile]) => {
+          if (
+            profile &&
+            (
+              profile.uid === snapshot.uid ||
+              profile.profileId === snapshotProfileId
+            )
+          ) {
+            nextProfilesByCommentId[commentId] = snapshot;
+            hasChanges = true;
+            return;
+          }
+
+          nextProfilesByCommentId[commentId] = profile;
+        });
+
+        return hasChanges ? nextProfilesByCommentId : currentProfilesByCommentId;
+      });
     }
   };
   const normalizeCommentAuthorKey = (value: string | null | undefined) =>
