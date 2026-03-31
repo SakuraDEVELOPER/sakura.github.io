@@ -14,6 +14,7 @@ export type SupabaseAuthUserSnapshot = {
 
 type SupabaseAuthBridge = {
   loginWithGoogle: () => Promise<null>;
+  loginWithPassword: (email: string, password: string) => Promise<Session | null>;
   logout: () => Promise<void>;
   getSession: () => Promise<Session | null>;
   onAuthStateChanged: (callback: (user: SupabaseAuthUserSnapshot | null) => void) => () => void;
@@ -190,6 +191,59 @@ const buildSupabaseRedirectTo = () => {
   }
 };
 
+const createSupabaseBridgeError = (code: string, message: string) => {
+  const error = new Error(message) as Error & { code?: string };
+  error.code = code;
+  return error;
+};
+
+const normalizeSupabaseAuthError = (error: unknown) => {
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "object" && error !== null && "message" in error
+        ? String((error as { message?: unknown }).message ?? "")
+        : "Supabase Auth request failed.";
+  const normalizedMessage = message.toLowerCase();
+  const status =
+    typeof error === "object" && error !== null && "status" in error
+      ? Number((error as { status?: unknown }).status)
+      : null;
+  const code =
+    typeof error === "object" && error !== null && "code" in error
+      ? String((error as { code?: unknown }).code ?? "")
+      : "";
+
+  if (code === "email_not_confirmed" || normalizedMessage.includes("email not confirmed")) {
+    return createSupabaseBridgeError(
+      "auth/email-not-verified",
+      "Подтвердите почту, прежде чем входить через Supabase Auth."
+    );
+  }
+
+  if (
+    code === "invalid_credentials" ||
+    normalizedMessage.includes("invalid login credentials") ||
+    normalizedMessage.includes("invalid credentials")
+  ) {
+    return createSupabaseBridgeError("auth/invalid-credential", "Invalid email or password.");
+  }
+
+  if (code === "email_address_invalid" || normalizedMessage.includes("invalid email")) {
+    return createSupabaseBridgeError("auth/invalid-email", "Enter a valid email address.");
+  }
+
+  if (status === 429 || normalizedMessage.includes("rate limit")) {
+    return createSupabaseBridgeError("auth/too-many-requests", "Too many auth attempts.");
+  }
+
+  if (error instanceof Error) {
+    return error;
+  }
+
+  return createSupabaseBridgeError("auth/internal-error", message);
+};
+
 export const startSupabaseAuthRuntime = async () => {
   const runtime = getRuntimeWindow();
 
@@ -221,6 +275,18 @@ export const startSupabaseAuthRuntime = async () => {
         }
 
         return null;
+      },
+      loginWithPassword: async (email, password) => {
+        const { data, error } = await client.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (error) {
+          throw normalizeSupabaseAuthError(error);
+        }
+
+        return publishSession(data.session ?? null);
       },
       logout: async () => {
         const { error } = await client.auth.signOut();

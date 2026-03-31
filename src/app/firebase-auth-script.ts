@@ -1610,6 +1610,51 @@
     });
   };
 
+  const syncSupabasePasswordAccount = async (user, snapshot, email, password) => {
+    if (
+      !user ||
+      user.isAnonymous ||
+      !snapshot ||
+      snapshot.isAnonymous ||
+      typeof email !== "string" ||
+      !email.trim() ||
+      typeof password !== "string" ||
+      password.length < 6
+    ) {
+      return false;
+    }
+
+    const normalizedEmail = email.trim();
+    const synced = await postSupabaseSyncAction(user, "ensure_supabase_password_user", {
+      auth: {
+        email: normalizedEmail,
+        password,
+        displayName:
+          typeof snapshot.displayName === "string" && snapshot.displayName
+            ? snapshot.displayName
+            : user.displayName ?? null,
+      },
+    });
+
+    if (!synced || snapshot.emailVerified !== true) {
+      return synced;
+    }
+
+    try {
+      if (!window.sakuraSupabaseAuth && typeof window.sakuraStartSupabaseAuth === "function") {
+        await window.sakuraStartSupabaseAuth();
+      }
+
+      if (window.sakuraSupabaseAuth?.loginWithPassword) {
+        await window.sakuraSupabaseAuth.loginWithPassword(normalizedEmail, password);
+      }
+    } catch (error) {
+      console.error("Supabase password session sync failed:", error);
+    }
+
+    return synced;
+  };
+
   const syncSupabaseCommentRecord = async (user, comment) => {
     if (
       !comment ||
@@ -4668,6 +4713,12 @@
           });
 
           const allowedSnapshot = await enforceActiveSessionNotBanned(snapshot);
+          void syncSupabasePasswordAccount(
+            credentials.user,
+            allowedSnapshot,
+            email,
+            password
+          );
 
           return {
             ...allowedSnapshot,
@@ -4710,6 +4761,12 @@
             source: "login",
             forceVisit: true,
           });
+          void syncSupabasePasswordAccount(
+            credentials.user,
+            allowedSnapshot,
+            email,
+            password
+          );
           return allowedSnapshot;
         } catch (error) {
           if (isProfileRecordError(error)) {

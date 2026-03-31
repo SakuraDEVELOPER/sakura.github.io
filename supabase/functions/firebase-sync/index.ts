@@ -33,6 +33,9 @@ type JsonRecord = Record<string, unknown>;
 type ActorProfile = {
   profileId: number | null;
   roles: string[];
+  authUserId: string | null;
+  email: string | null;
+  displayName: string | null;
 };
 
 const nowIso = () => new Date().toISOString();
@@ -62,6 +65,11 @@ const normalizeInteger = (value: unknown) => {
 const normalizeString = (value: unknown, maxLength = 500) =>
   typeof value === "string" && value.trim()
     ? value.trim().slice(0, maxLength)
+    : null;
+
+const normalizePassword = (value: unknown) =>
+  typeof value === "string" && value.length >= 6 && value.length <= 1024
+    ? value
     : null;
 
 const normalizeIsoString = (value: unknown) => {
@@ -132,13 +140,14 @@ const verifyFirebaseIdToken = async (token: string) => {
   return {
     uid,
     email: typeof payload.email === "string" ? payload.email : null,
+    emailVerified: payload.email_verified === true,
   };
 };
 
 const loadActorProfile = async (firebaseUid: string): Promise<ActorProfile> => {
   const { data, error } = await supabaseAdmin
     .from("profiles")
-    .select("profile_id,roles")
+    .select("profile_id,roles,auth_user_id,email,display_name")
     .eq("firebase_uid", firebaseUid)
     .maybeSingle();
 
@@ -149,8 +158,26 @@ const loadActorProfile = async (firebaseUid: string): Promise<ActorProfile> => {
   return {
     profileId: normalizeInteger(data?.profile_id),
     roles: normalizeRoles(data?.roles),
+    authUserId: normalizeString(data?.auth_user_id, 128),
+    email: normalizeString(data?.email, 320),
+    displayName: normalizeString(data?.display_name, 96),
   };
 };
+
+const getErrorMessage = (error: unknown) =>
+  error instanceof Error
+    ? error.message
+    : typeof error === "object" && error !== null && "message" in error
+      ? String((error as { message?: unknown }).message ?? "")
+      : "";
+
+const isAlreadyRegisteredError = (error: unknown) =>
+  /already been registered|already registered|user already registered|email.*exists/i.test(
+    getErrorMessage(error),
+  );
+
+const isMissingAuthUserError = (error: unknown) =>
+  /user not found|not found/i.test(getErrorMessage(error));
 
 const authorizeStorageObjectPath = async (
   firebaseUid: string,
@@ -246,6 +273,138 @@ const handleProfileUpsert = async (firebaseUid: string, body: JsonRecord) => {
   }
 
   return json({ ok: true, action: "upsert_profile", profileId });
+};
+
+const linkProfileToSupabaseAuthUser = async (
+  profileId: number,
+  authUserId: string,
+  email: string | null,
+) => {
+  const updates: Record<string, unknown> = {
+    auth_user_id: authUserId,
+    updated_at: nowIso(),
+  };
+
+  if (email) {
+    updates.email = email;
+  }
+
+  const { error } = await supabaseAdmin
+    .from("profiles")
+    .update(updates)
+    .eq("profile_id", profileId);
+
+  if (error) {
+    throw error;
+  }
+};
+
+const handleEnsureSupabasePasswordUser = async (
+  actor: { uid: string; email: string | null; emailVerified: boolean },
+  body: JsonRecord,
+) => {
+  const authPayload = body.auth;
+
+  if (!authPayload || typeof authPayload !== "object") {
+    return json({ error: "Missing auth payload." }, 400);
+  }
+
+  const actorProfile = await loadActorProfile(actor.uid);
+  const requestedEmail = normalizeString((authPayload as JsonRecord).email, 320);
+  const email = requestedEmail ?? actor.email ?? actorProfile.email;
+  const password = normalizePassword((authPayload as JsonRecord).password);
+  const displayName =
+    normalizeString((authPayload as JsonRecord).displayName, 96) ?? actorProfile.displayName;
+
+  if (!email) {
+    return json({ error: "Email is required." }, 400);
+  }
+
+  if (!password) {
+    return json({ error: "Password must be at least 6 characters long." }, 400);
+  }
+
+  if (actor.email && actor.email !== email) {
+    return json({ error: "Supabase auth email must match the Firebase session email." }, 403);
+  }
+
+  const userMetadata: Record<string, unknown> = {
+    firebase_uid: actor.uid,
+  };
+
+  if (displayName) {
+    userMetadata.display_name = displayName;
+  }
+
+  if (actorProfile.profileId && actorProfile.profileId > 0) {
+    userMetadata.profile_id = actorProfile.profileId;
+  }
+
+  const authAttributes: Record<string, unknown> = {
+    email,
+    password,
+    user_metadata: userMetadata,
+  };
+
+  if (actor.emailVerified) {
+    authAttributes.email_confirm = true;
+  }
+
+  let authUserId = actorProfile.authUserId;
+  let created = false;
+  let updated = false;
+
+  if (authUserId) {
+    const { data, error } = await supabaseAdmin.auth.admin.updateUserById(authUserId, authAttributes);
+
+    if (error) {
+      if (!isMissingAuthUserError(error)) {
+        throw error;
+      }
+
+      authUserId = null;
+    } else {
+      authUserId = normalizeString(data.user?.id, 128) ?? authUserId;
+      updated = true;
+    }
+  }
+
+  if (!authUserId) {
+    const { data, error } = await supabaseAdmin.auth.admin.createUser(authAttributes);
+
+    if (error) {
+      if (!isAlreadyRegisteredError(error)) {
+        throw error;
+      }
+
+      return json({
+        ok: true,
+        action: "ensure_supabase_password_user",
+        created: false,
+        updated,
+        linked: false,
+        authUserId: null,
+        existing: true,
+      });
+    }
+
+    authUserId = normalizeString(data.user?.id, 128);
+    created = Boolean(authUserId);
+  }
+
+  if (authUserId && actorProfile.profileId && actorProfile.profileId > 0) {
+    await linkProfileToSupabaseAuthUser(actorProfile.profileId, authUserId, email);
+  }
+
+  return json({
+    ok: true,
+    action: "ensure_supabase_password_user",
+    created,
+    updated,
+    linked: Boolean(authUserId && actorProfile.profileId && actorProfile.profileId > 0),
+    authUserId,
+    existing: !created && !updated,
+  });
 };
 
 const handlePresenceUpsert = async (firebaseUid: string, body: JsonRecord) => {
@@ -484,6 +643,8 @@ Deno.serve(async (request) => {
     switch (action) {
       case "upsert_profile":
         return await handleProfileUpsert(actor.uid, body);
+      case "ensure_supabase_password_user":
+        return await handleEnsureSupabasePasswordUser(actor, body);
       case "upsert_presence":
         return await handlePresenceUpsert(actor.uid, body);
       case "upsert_comment":
