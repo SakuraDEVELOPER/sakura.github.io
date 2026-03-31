@@ -1575,6 +1575,33 @@
     Array.isArray(value)
       ? value.filter((entry) => typeof entry === "string").map((entry) => entry.trim()).filter(Boolean)
       : [];
+  const getSupabaseBridgeAccessTokenEarly = async () => {
+    try {
+      if (!window.sakuraSupabaseAuth && typeof window.sakuraStartSupabaseAuth === "function") {
+        await window.sakuraStartSupabaseAuth();
+      }
+    } catch (error) {
+    }
+
+    if (
+      typeof window.sakuraSupabaseCurrentSession?.access_token === "string" &&
+      window.sakuraSupabaseCurrentSession.access_token
+    ) {
+      return window.sakuraSupabaseCurrentSession.access_token;
+    }
+
+    try {
+      if (window.sakuraSupabaseAuth?.getSession) {
+        const session = await window.sakuraSupabaseAuth.getSession();
+        return typeof session?.access_token === "string" && session.access_token
+          ? session.access_token
+          : null;
+      }
+    } catch (error) {
+    }
+
+    return null;
+  };
 
   const getSupabaseSyncToken = async (user) => {
     if (!user || typeof user.getIdToken !== "function") {
@@ -1724,7 +1751,7 @@
       return null;
     }
 
-    const accessToken = await getSupabaseBridgeAccessToken();
+    const accessToken = await getSupabaseBridgeAccessTokenEarly();
 
     if (!accessToken) {
       return null;
@@ -1810,7 +1837,7 @@
       return null;
     }
 
-    const accessToken = await getSupabaseBridgeAccessToken();
+    const accessToken = await getSupabaseBridgeAccessTokenEarly();
 
     if (!accessToken) {
       return null;
