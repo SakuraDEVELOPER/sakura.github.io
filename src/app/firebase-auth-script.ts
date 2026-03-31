@@ -1758,95 +1758,6 @@
     });
   };
 
-  const canViewPrivateProfileFields = (actorSnapshot, targetProfileId) =>
-    Boolean(
-      actorSnapshot &&
-        !actorSnapshot.isAnonymous &&
-        (
-          actorSnapshot.profileId === targetProfileId ||
-          canManageRoles(actorSnapshot.roles ?? [])
-        )
-    );
-  const waitForAuthStateSettlementEarly = () =>
-    window.sakuraAuthStateSettled
-      ? Promise.resolve()
-      : new Promise((resolve) => {
-          const finish = () => {
-            window.clearTimeout(timeoutId);
-            window.removeEventListener(AUTH_STATE_SETTLED_EVENT, finish);
-            resolve();
-          };
-
-          const timeoutId = window.setTimeout(finish, 1500);
-          window.addEventListener(AUTH_STATE_SETTLED_EVENT, finish, { once: true });
-        });
-
-  const enrichProfileSnapshotWithPrivateFields = async (profileId, snapshot) => {
-    if (!snapshot || snapshot.isAnonymous || !Number.isInteger(profileId) || profileId <= 0) {
-      return snapshot;
-    }
-
-    await waitForAuthStateSettlementEarly();
-
-    let actorSnapshot = window.sakuraCurrentUserSnapshot;
-
-    if (
-      auth.currentUser &&
-      !auth.currentUser.isAnonymous &&
-      (!actorSnapshot || actorSnapshot.isAnonymous || actorSnapshot.uid !== auth.currentUser.uid)
-    ) {
-      try {
-        actorSnapshot = await resolveUserSnapshot(auth.currentUser);
-      } catch (error) {
-      }
-    }
-
-    if (!canViewPrivateProfileFields(actorSnapshot, profileId)) {
-      return snapshot;
-    }
-
-    try {
-      const privateProfileDoc = await findUserByProfileId(profileId);
-
-      if (!privateProfileDoc) {
-        return snapshot;
-      }
-
-      const privateProfileData = privateProfileDoc.data() ?? {};
-
-      return toStoredUserSnapshot(privateProfileDoc.id, {
-        ...privateProfileData,
-        ...stripNullishFields(snapshot),
-        email:
-          snapshot.email ??
-          (typeof privateProfileData.email === "string" ? privateProfileData.email : null),
-        emailVerified:
-          typeof snapshot.emailVerified === "boolean"
-            ? snapshot.emailVerified
-            : privateProfileData.emailVerified,
-        verificationRequired:
-          typeof snapshot.verificationRequired === "boolean"
-            ? snapshot.verificationRequired
-            : privateProfileData.verificationRequired,
-        providerIds:
-          Array.isArray(snapshot.providerIds) && snapshot.providerIds.length
-            ? snapshot.providerIds
-            : privateProfileData.providerIds,
-        loginHistory:
-          Array.isArray(snapshot.loginHistory) && snapshot.loginHistory.length
-            ? snapshot.loginHistory
-            : privateProfileData.loginHistory,
-        visitHistory:
-          Array.isArray(snapshot.visitHistory) && snapshot.visitHistory.length
-            ? snapshot.visitHistory
-            : privateProfileData.visitHistory,
-        presence: snapshot.presence ?? privateProfileData.presence ?? null,
-      });
-    } catch (error) {
-      return snapshot;
-    }
-  };
-
   const mapSupabasePresenceRow = (row) =>
     row
       ? {
@@ -2662,6 +2573,80 @@
       );
 
       return snapshot.empty ? null : snapshot.docs[0];
+    };
+    const canViewPrivateProfileFields = (actorSnapshot, targetProfileId) =>
+      Boolean(
+        actorSnapshot &&
+          !actorSnapshot.isAnonymous &&
+          (
+            actorSnapshot.profileId === targetProfileId ||
+            canManageRoles(actorSnapshot.roles ?? [])
+          )
+      );
+    const enrichProfileSnapshotWithPrivateFields = async (profileId, snapshot) => {
+      if (!snapshot || snapshot.isAnonymous || !Number.isInteger(profileId) || profileId <= 0) {
+        return snapshot;
+      }
+
+      await waitForAuthStateSettlement();
+
+      let actorSnapshot = window.sakuraCurrentUserSnapshot;
+
+      if (
+        auth.currentUser &&
+        !auth.currentUser.isAnonymous &&
+        (!actorSnapshot || actorSnapshot.isAnonymous || actorSnapshot.uid !== auth.currentUser.uid)
+      ) {
+        try {
+          actorSnapshot = await resolveUserSnapshot(auth.currentUser);
+        } catch (error) {
+        }
+      }
+
+      if (!canViewPrivateProfileFields(actorSnapshot, profileId)) {
+        return snapshot;
+      }
+
+      try {
+        const privateProfileDoc = await findUserByProfileId(profileId);
+
+        if (!privateProfileDoc) {
+          return snapshot;
+        }
+
+        const privateProfileData = privateProfileDoc.data() ?? {};
+
+        return toStoredUserSnapshot(privateProfileDoc.id, {
+          ...privateProfileData,
+          ...stripNullishFields(snapshot),
+          email:
+            snapshot.email ??
+            (typeof privateProfileData.email === "string" ? privateProfileData.email : null),
+          emailVerified:
+            typeof snapshot.emailVerified === "boolean"
+              ? snapshot.emailVerified
+              : privateProfileData.emailVerified,
+          verificationRequired:
+            typeof snapshot.verificationRequired === "boolean"
+              ? snapshot.verificationRequired
+              : privateProfileData.verificationRequired,
+          providerIds:
+            Array.isArray(snapshot.providerIds) && snapshot.providerIds.length
+              ? snapshot.providerIds
+              : privateProfileData.providerIds,
+          loginHistory:
+            Array.isArray(snapshot.loginHistory) && snapshot.loginHistory.length
+              ? snapshot.loginHistory
+              : privateProfileData.loginHistory,
+          visitHistory:
+            Array.isArray(snapshot.visitHistory) && snapshot.visitHistory.length
+              ? snapshot.visitHistory
+              : privateProfileData.visitHistory,
+          presence: snapshot.presence ?? privateProfileData.presence ?? null,
+        });
+      } catch (error) {
+        return snapshot;
+      }
     };
     const uploadAvatarToStorage = async (uid, file) => {
       const extension = getAvatarStorageExtension(file);
