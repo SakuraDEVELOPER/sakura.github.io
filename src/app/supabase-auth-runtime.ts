@@ -12,9 +12,21 @@ export type SupabaseAuthUserSnapshot = {
   hasSession: boolean;
 };
 
+export type SupabasePasswordSignUpResult = {
+  session: Session | null;
+  user: SupabaseAuthUserSnapshot | null;
+  needsEmailVerification: boolean;
+};
+
 type SupabaseAuthBridge = {
   loginWithGoogle: () => Promise<null>;
   loginWithPassword: (email: string, password: string) => Promise<Session | null>;
+  signUpWithPassword: (options: {
+    email: string;
+    password: string;
+    login?: string | null;
+    displayName?: string | null;
+  }) => Promise<SupabasePasswordSignUpResult>;
   logout: () => Promise<void>;
   getSession: () => Promise<Session | null>;
   onAuthStateChanged: (callback: (user: SupabaseAuthUserSnapshot | null) => void) => () => void;
@@ -172,6 +184,25 @@ const toSupabaseSnapshot = (session: Session | null): SupabaseAuthUserSnapshot |
   };
 };
 
+const toSupabaseSnapshotFromUser = (
+  user: User | null,
+  hasSession: boolean,
+): SupabaseAuthUserSnapshot | null => {
+  if (!user?.id) {
+    return null;
+  }
+
+  return {
+    id: user.id,
+    email: typeof user.email === "string" ? user.email : null,
+    providerIds: normalizeProviderIds(user),
+    createdAt: typeof user.created_at === "string" ? user.created_at : null,
+    lastSignInAt:
+      typeof user.last_sign_in_at === "string" ? user.last_sign_in_at : null,
+    hasSession,
+  };
+};
+
 const publishSnapshot = (snapshot: SupabaseAuthUserSnapshot | null) => {
   const runtime = getRuntimeWindow();
   runtime.sakuraSupabaseCurrentUserSnapshot = snapshot;
@@ -287,6 +318,33 @@ export const startSupabaseAuthRuntime = async () => {
         }
 
         return publishSession(data.session ?? null);
+      },
+      signUpWithPassword: async ({ email, password, login, displayName }) => {
+        const { data, error } = await client.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: buildSupabaseRedirectTo(),
+            data: {
+              login: typeof login === "string" && login.trim() ? login.trim() : undefined,
+              display_name:
+                typeof displayName === "string" && displayName.trim()
+                  ? displayName.trim()
+                  : undefined,
+            },
+          },
+        });
+
+        if (error) {
+          throw normalizeSupabaseAuthError(error);
+        }
+
+        const session = publishSession(data.session ?? null);
+        return {
+          session,
+          user: toSupabaseSnapshotFromUser(data.user ?? null, Boolean(session?.access_token)),
+          needsEmailVerification: Boolean(data.user && !session?.access_token),
+        };
       },
       logout: async () => {
         const { error } = await client.auth.signOut();

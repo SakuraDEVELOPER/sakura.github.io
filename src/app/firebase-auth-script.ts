@@ -577,8 +577,53 @@
     return cleaned || \`user\${user.uid.slice(0, 6)}\`;
   };
 
-  const getProviderIds = (user) =>
-    user.providerData.map((providerData) => providerData?.providerId).filter(Boolean);
+  const normalizeRuntimeProviderId = (providerId) => {
+    if (typeof providerId !== "string") {
+      return null;
+    }
+
+    const normalizedProviderId = providerId.trim();
+
+    if (!normalizedProviderId) {
+      return null;
+    }
+
+    if (normalizedProviderId === "google") {
+      return "google.com";
+    }
+
+    if (normalizedProviderId === "email") {
+      return "password";
+    }
+
+    return normalizedProviderId;
+  };
+  const getProviderIds = (user) => {
+    const firebaseProviderIds = Array.isArray(user?.providerData)
+      ? user.providerData
+          .map((providerData) => normalizeRuntimeProviderId(providerData?.providerId))
+          .filter(Boolean)
+      : [];
+    const nonCustomFirebaseProviderIds = firebaseProviderIds.filter(
+      (providerId) => providerId !== "custom"
+    );
+
+    if (nonCustomFirebaseProviderIds.length) {
+      return [...new Set(nonCustomFirebaseProviderIds)];
+    }
+
+    const supabaseProviderIds = normalizeProviderIdsList(
+      window.sakuraSupabaseCurrentUserSnapshot?.providerIds ?? []
+    )
+      .map((providerId) => normalizeRuntimeProviderId(providerId))
+      .filter(Boolean);
+
+    if (supabaseProviderIds.length) {
+      return [...new Set(supabaseProviderIds)];
+    }
+
+    return [...new Set(firebaseProviderIds)];
+  };
 
   const isUserLikeRole = (role) =>
     typeof role === "string" && /^u(?:[\\s_-]*s)?[\\s_-]*e[\\s_-]*r$/i.test(role.trim());
@@ -2420,6 +2465,71 @@
       });
 
       return supabaseGoogleBridgePromise;
+    };
+    const ensureSupabasePasswordBridge = async () => {
+      try {
+        if (!window.sakuraSupabaseAuth && typeof window.sakuraStartSupabaseAuth === "function") {
+          await window.sakuraStartSupabaseAuth();
+        }
+      } catch (error) {
+      }
+
+      return window.sakuraSupabaseAuth ?? null;
+    };
+    const shouldFallbackToFirebasePasswordRegister = (error) => {
+      const code = getErrorCode(error);
+
+      return (
+        !code ||
+        code === "auth/internal-error" ||
+        code === "auth/network-request-failed"
+      );
+    };
+    const shouldFallbackToFirebasePasswordLogin = (error) => {
+      const code = getErrorCode(error);
+
+      if (
+        code === "auth/email-not-verified" ||
+        code === "auth/too-many-requests" ||
+        code === "auth/invalid-email"
+      ) {
+        return false;
+      }
+
+      return true;
+    };
+    const resolveSupabasePasswordSessionSnapshot = async ({
+      source,
+      requestedLogin = null,
+      preferredDisplayName = null,
+      skipPresence = false,
+    } = {}) => {
+      const bridgedUser =
+        (await bridgeSupabaseSessionToFirebase()) ??
+        (await bridgeSupabaseGoogleSessionToFirebase());
+
+      if (!bridgedUser || bridgedUser.isAnonymous) {
+        throw createFirebaseError(
+          "auth/firebase-bridge-failed",
+          "Supabase session is ready, but Firebase profile bridge is not ready yet."
+        );
+      }
+
+      const snapshot = await resolveUserSnapshot(bridgedUser, {
+        requestedLogin: requestedLogin ?? undefined,
+        preferredDisplayName: preferredDisplayName ?? undefined,
+      });
+      const allowedSnapshot = await enforceActiveSessionNotBanned(snapshot);
+
+      if (!skipPresence) {
+        await syncPresence(bridgedUser, {
+          path: window.location.pathname,
+          source: source ?? "login",
+          forceVisit: true,
+        });
+      }
+
+      return allowedSnapshot;
     };
     const clearBrokenProfileSession = async (message) => {
       stopPresenceTracking();
@@ -5053,18 +5163,47 @@
 
     window.sakuraFirebaseAuth = {
       register: async ({ login, displayName, email, password }) => {
-        const credentials = await createUserWithEmailAndPassword(auth, email, password);
+        const supabaseAuthBridge = await ensureSupabasePasswordBridge();
         const preferredLogin =
           sanitizeLogin(login) ||
-          (typeof login === "string" ? login.trim() : "") ||
-          ("user" + credentials.user.uid.slice(0, 6));
+          (typeof login === "string" ? login.trim() : "");
         const preferredDisplayName = sanitizeDisplayName(displayName);
+
+        if (supabaseAuthBridge?.signUpWithPassword) {
+          try {
+            const signUpResult = await supabaseAuthBridge.signUpWithPassword({
+              email,
+              password,
+              login: preferredLogin,
+              displayName: preferredDisplayName,
+            });
+
+            if (!signUpResult?.session) {
+              return null;
+            }
+
+            return await resolveSupabasePasswordSessionSnapshot({
+              source: "register",
+              requestedLogin: preferredLogin || null,
+              preferredDisplayName:
+                preferredDisplayName || preferredLogin || null,
+            });
+          } catch (error) {
+            if (!shouldFallbackToFirebasePasswordRegister(error)) {
+              throw error;
+            }
+          }
+        }
+
+        const credentials = await createUserWithEmailAndPassword(auth, email, password);
+        const fallbackPreferredLogin =
+          preferredLogin || ("user" + credentials.user.uid.slice(0, 6));
         let verificationEmailSent = false;
 
         try {
           let snapshot = await resolveUserSnapshot(credentials.user, {
             requestedLogin: login,
-            preferredDisplayName: preferredDisplayName || preferredLogin,
+            preferredDisplayName: preferredDisplayName || fallbackPreferredLogin,
           });
           const storedRegistrationSnapshot = await getDoc(userRefFor(credentials.user.uid)).catch(
             (error) => {
@@ -5085,9 +5224,9 @@
               ? storedRegistrationData.loginLower
               : null;
 
-          if ((!storedRegistrationLogin || !storedRegistrationLoginLower) && preferredLogin) {
+          if ((!storedRegistrationLogin || !storedRegistrationLoginLower) && fallbackPreferredLogin) {
             const recoveredLoginDetails = await resolveAvailableLogin(
-              snapshot?.login || preferredLogin,
+              snapshot?.login || fallbackPreferredLogin,
               credentials.user.uid
             );
 
@@ -5114,7 +5253,7 @@
           }
 
           const registrationDisplayName =
-            snapshot?.displayName ?? preferredDisplayName ?? snapshot?.login ?? preferredLogin;
+            snapshot?.displayName ?? preferredDisplayName ?? snapshot?.login ?? fallbackPreferredLogin;
 
           await updateProfile(credentials.user, {
             displayName: registrationDisplayName,
@@ -5172,6 +5311,22 @@
       },
       login: async (identifier, password) => {
         const email = await resolveEmailForLogin(identifier);
+        const supabaseAuthBridge = await ensureSupabasePasswordBridge();
+
+        if (supabaseAuthBridge?.loginWithPassword) {
+          try {
+            await supabaseAuthBridge.loginWithPassword(email, password);
+
+            return await resolveSupabasePasswordSessionSnapshot({
+              source: "login",
+            });
+          } catch (error) {
+            if (!shouldFallbackToFirebasePasswordLogin(error)) {
+              throw error;
+            }
+          }
+        }
+
         const credentials = await signInWithEmailAndPassword(auth, email, password);
 
         try {

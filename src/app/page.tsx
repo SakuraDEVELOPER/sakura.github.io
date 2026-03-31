@@ -1056,6 +1056,7 @@ function HeaderAuth() {
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     requestFirebaseAuthBoot();
+    requestSupabaseAuthBoot();
 
     if (!window.sakuraFirebaseAuth) {
       setSubmitError(
@@ -1126,6 +1127,11 @@ function HeaderAuth() {
           email: identifier.trim(),
           password,
         });
+        if (!snapshot) {
+          closeModal();
+          setFlashMessage("Аккаунт создан. Подтвердите почту и затем войдите через Supabase.");
+          return;
+        }
         setFlashMessage(
           isEmailVerificationLocked(snapshot)
             ? "Аккаунт создан. Подтвердите почту, чтобы открыть профиль и использовать аккаунт."
@@ -1140,15 +1146,17 @@ function HeaderAuth() {
         );
       }
 
-      if (!snapshot?.login) {
+      if (snapshot && !snapshot.login) {
         setFlashMessage("Signed in. Create a login on your profile.");
       }
 
       closeModal();
-      if (isEmailVerificationLocked(snapshot)) {
+      if (snapshot && isEmailVerificationLocked(snapshot)) {
         setIsVerificationModalOpen(true);
       }
-      await navigateToProfile(snapshot);
+      if (snapshot) {
+        await navigateToProfile(snapshot);
+      }
     } catch (error) {
       setSubmitError(getFirebaseErrorMessage(error));
     } finally {
