@@ -1533,6 +1533,11 @@
 
     return null;
   };
+  const isUuidLike = (value) =>
+    typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value.trim()
+    );
 
   const buildSupabaseRestUrl = (table, query = {}) => {
     const url = new URL(SUPABASE_REST_URL + "/" + table);
@@ -1876,6 +1881,14 @@
       const providerIds = normalizeProviderIdsList(payload.providerIds);
 
       return {
+        authUserId:
+          typeof payload.authUserId === "string" && payload.authUserId
+            ? payload.authUserId
+            : null,
+        firebaseUid:
+          typeof payload.firebaseUid === "string" && payload.firebaseUid
+            ? payload.firebaseUid
+            : null,
         email:
           typeof payload.email === "string" && payload.email.trim() ? payload.email.trim() : null,
         emailVerified:
@@ -1972,6 +1985,28 @@
 
     if (message === "Display name is required.") {
       return createFirebaseError("display-name/empty", "Enter a profile name.");
+    }
+
+    if (message === "Comment id is invalid.") {
+      return createFirebaseError("comments/invalid-id", "Comment id is required.");
+    }
+
+    if (
+      message === "Write a comment or attach media before sending." ||
+      message === "Write a comment or attach media before saving."
+    ) {
+      return createFirebaseError("comments/empty-message", message);
+    }
+
+    if (message === "Only the author, root, or co-owner can edit this comment.") {
+      return createFirebaseError("comments/update-forbidden", message);
+    }
+
+    if (
+      message ===
+      "Only the author, profile owner, or comment moderator can delete this comment."
+    ) {
+      return createFirebaseError("comments/delete-forbidden", message);
     }
 
     if (message === "Authentication required." || message === "Actor profile not found.") {
@@ -2179,6 +2214,8 @@
       authorUid:
         typeof row?.firebase_author_uid === "string" && row.firebase_author_uid
           ? row.firebase_author_uid
+          : typeof row?.auth_user_id === "string" && row.auth_user_id
+            ? row.auth_user_id
           : null,
       authorProfileId: normalizeSupabaseInteger(row?.author_profile_id),
       authorName:
@@ -2195,6 +2232,38 @@
       createdAt: typeof row?.created_at === "string" ? row.created_at : null,
       updatedAt: typeof row?.updated_at === "string" ? row.updated_at : null,
     });
+  const mapSupabaseRpcCommentPayloadToStoredComment = (payload) => {
+    if (!payload || typeof payload !== "object") {
+      return null;
+    }
+
+    const commentId = typeof payload.id === "string" ? payload.id : "";
+
+    if (!commentId) {
+      return null;
+    }
+
+    return toStoredProfileComment(commentId, {
+      profileId: normalizeSupabaseInteger(payload.profileId),
+      authorUid:
+        typeof payload.authorUid === "string" && payload.authorUid
+          ? payload.authorUid
+          : null,
+      authorProfileId: normalizeSupabaseInteger(payload.authorProfileId),
+      authorName: typeof payload.authorName === "string" ? payload.authorName : null,
+      authorPhotoURL:
+        typeof payload.authorPhotoURL === "string" ? payload.authorPhotoURL : null,
+      authorAccentRole:
+        typeof payload.authorAccentRole === "string" ? payload.authorAccentRole : null,
+      message: typeof payload.message === "string" ? payload.message : "",
+      mediaURL: typeof payload.mediaURL === "string" ? payload.mediaURL : null,
+      mediaType: typeof payload.mediaType === "string" ? payload.mediaType : null,
+      mediaPath: typeof payload.mediaPath === "string" ? payload.mediaPath : null,
+      mediaSize: normalizeSupabaseInteger(payload.mediaSize),
+      createdAt: typeof payload.createdAt === "string" ? payload.createdAt : null,
+      updatedAt: typeof payload.updatedAt === "string" ? payload.updatedAt : null,
+    });
+  };
 
   const mapSupabaseProfileRowToSnapshot = (row, presenceRow = null) => {
     const uid =
@@ -2366,6 +2435,21 @@
     );
 
     return enrichProfileCommentsWithAuthors(comments);
+  };
+  const fetchSupabaseCommentById = async (commentId) => {
+    if (!isUuidLike(commentId)) {
+      return null;
+    }
+
+    const rows = await fetchSupabaseRows("public_profile_comments", {
+      select: SUPABASE_PROFILE_COMMENT_SELECT,
+      id: "eq." + commentId,
+      limit: 1,
+    });
+
+    return Array.isArray(rows) && rows[0]
+      ? mapSupabaseCommentRowToStoredComment(rows[0])
+      : null;
   };
 
   window.firebaseConfig = firebaseConfig;
@@ -4669,6 +4753,16 @@
         return false;
       }
 
+      const supabaseRows = await fetchSupabaseRows("public_profile_comments", {
+        select: "id",
+        media_path: "eq." + normalizedMediaPath,
+        limit: 1,
+      });
+
+      if (Array.isArray(supabaseRows) && supabaseRows.length > 0) {
+        return true;
+      }
+
       const snapshot = await getDocs(
         query(profileCommentsCollection, where("mediaPath", "==", normalizedMediaPath), limit(1))
       );
@@ -4682,29 +4776,29 @@
       }
 
       const normalizedMessage = normalizeProfileCommentMessage(message);
-
+      const currentSupabaseDetails = await loadCurrentAuthProfileFromSupabaseRpcWithRetry({
+        attempts: 2,
+        delayMs: 120,
+      });
       const user = auth.currentUser;
 
-      if (!user || user.isAnonymous) {
+      if ((!user || user.isAnonymous) && !hasAssignedProfileId(currentSupabaseDetails)) {
         throw createFirebaseError(
           "comments/login-required",
           "Sign in to leave a comment on this profile."
         );
       }
 
-      await ensureVerifiedSessionAccess(
-        user,
-        "Verify your email before posting comments."
-      );
-
-      let authorSnapshot = window.sakuraCurrentUserSnapshot;
-      if (
-        !authorSnapshot ||
-        authorSnapshot.isAnonymous ||
-        authorSnapshot.uid !== user.uid ||
-        !hasAssignedProfileId(authorSnapshot)
-      ) {
-        authorSnapshot = await resolveUserSnapshot(user);
+      if (user && !user.isAnonymous) {
+        await ensureVerifiedSessionAccess(
+          user,
+          "Verify your email before posting comments."
+        );
+      } else if (isEmailVerificationLocked(currentSupabaseDetails)) {
+        throw createFirebaseError(
+          "auth/email-not-verified",
+          "Verify your email before posting comments."
+        );
       }
 
       const commentMedia = await prepareProfileCommentMedia(mediaFile);
@@ -4714,6 +4808,43 @@
           "comments/empty-message",
           "Write a comment or attach media before sending."
         );
+      }
+
+      if (hasAssignedProfileId(currentSupabaseDetails)) {
+        const supabaseResponse = await callSupabaseAuthenticatedRpc(
+          "add_profile_comment_rpc",
+          {
+            target_profile_id: profileId,
+            target_message: normalizedMessage,
+            target_media_url: commentMedia?.mediaURL ?? null,
+            target_media_type: commentMedia?.mediaType ?? null,
+            target_media_path: commentMedia?.mediaPath ?? null,
+            target_media_size: commentMedia?.mediaSize ?? null,
+          },
+          "Comment could not be saved."
+        );
+        const supabaseComment = mapSupabaseRpcCommentPayloadToStoredComment(supabaseResponse);
+
+        if (supabaseComment) {
+          return supabaseComment;
+        }
+      }
+
+      if (!user || user.isAnonymous) {
+        throw createFirebaseError(
+          "comments/write-denied",
+          "Comment could not be saved."
+        );
+      }
+
+      let authorSnapshot = window.sakuraCurrentUserSnapshot;
+      if (
+        !authorSnapshot ||
+        authorSnapshot.isAnonymous ||
+        authorSnapshot.uid !== user.uid ||
+        !hasAssignedProfileId(authorSnapshot)
+      ) {
+        authorSnapshot = await resolveUserSnapshot(user);
       }
 
       const commentRef = doc(profileCommentsCollection);
@@ -4836,6 +4967,10 @@
 
     const deleteProfileComment = async (commentId) => {
       const normalizedCommentId = typeof commentId === "string" ? commentId.trim() : "";
+      const currentSupabaseDetails = await loadCurrentAuthProfileFromSupabaseRpcWithRetry({
+        attempts: 2,
+        delayMs: 120,
+      });
 
       if (!normalizedCommentId) {
         throw createFirebaseError("comments/invalid-id", "Comment id is required.");
@@ -4843,17 +4978,49 @@
 
       const user = auth.currentUser;
 
-      if (!user || user.isAnonymous) {
+      if ((!user || user.isAnonymous) && !hasAssignedProfileId(currentSupabaseDetails)) {
         throw createFirebaseError(
           "comments/login-required",
           "Sign in to manage comments on this profile."
         );
       }
 
-      await ensureVerifiedSessionAccess(
-        user,
-        "Verify your email before managing comments."
-      );
+      if (user && !user.isAnonymous) {
+        await ensureVerifiedSessionAccess(
+          user,
+          "Verify your email before managing comments."
+        );
+      } else if (isEmailVerificationLocked(currentSupabaseDetails)) {
+        throw createFirebaseError(
+          "auth/email-not-verified",
+          "Verify your email before managing comments."
+        );
+      }
+
+      if (hasAssignedProfileId(currentSupabaseDetails) && isUuidLike(normalizedCommentId)) {
+        const supabaseResponse = await callSupabaseAuthenticatedRpc(
+          "delete_profile_comment_rpc",
+          {
+            target_comment_id: normalizedCommentId,
+          },
+          "Comment could not be deleted."
+        );
+
+        if (typeof supabaseResponse?.id === "string" && supabaseResponse.id) {
+          return supabaseResponse.id;
+        }
+
+        if (!user || user.isAnonymous) {
+          return null;
+        }
+      }
+
+      if (!user || user.isAnonymous) {
+        throw createFirebaseError(
+          "auth/no-current-user",
+          "Sign in again to manage older comments on this profile."
+        );
+      }
 
       const commentRef = doc(profileCommentsCollection, normalizedCommentId);
       const commentSnapshot = await getDoc(commentRef);
@@ -4908,20 +5075,88 @@
       }
 
       const normalizedMessage = normalizeProfileCommentMessage(message);
-
+      const currentSupabaseDetails = await loadCurrentAuthProfileFromSupabaseRpcWithRetry({
+        attempts: 2,
+        delayMs: 120,
+      });
       const user = auth.currentUser;
 
-      if (!user || user.isAnonymous) {
+      if ((!user || user.isAnonymous) && !hasAssignedProfileId(currentSupabaseDetails)) {
         throw createFirebaseError(
           "comments/login-required",
           "Sign in to manage comments on this profile."
         );
       }
 
-      await ensureVerifiedSessionAccess(
-        user,
-        "Verify your email before editing comments."
-      );
+      if (user && !user.isAnonymous) {
+        await ensureVerifiedSessionAccess(
+          user,
+          "Verify your email before editing comments."
+        );
+      } else if (isEmailVerificationLocked(currentSupabaseDetails)) {
+        throw createFirebaseError(
+          "auth/email-not-verified",
+          "Verify your email before editing comments."
+        );
+      }
+
+      if (hasAssignedProfileId(currentSupabaseDetails) && isUuidLike(normalizedCommentId)) {
+        const existingSupabaseComment = await fetchSupabaseCommentById(normalizedCommentId);
+
+        if (existingSupabaseComment) {
+          const commentMedia = await prepareProfileCommentMedia(mediaFile);
+          const finalMediaURL = commentMedia
+            ? commentMedia.mediaURL
+            : (removeMedia ? null : (existingSupabaseComment.mediaURL ?? null));
+          const finalMediaType = commentMedia
+            ? commentMedia.mediaType
+            : (removeMedia ? null : (existingSupabaseComment.mediaType ?? null));
+          const finalMediaPath = commentMedia
+            ? commentMedia.mediaPath ?? null
+            : (removeMedia ? null : (existingSupabaseComment.mediaPath ?? null));
+          const finalMediaSize = commentMedia
+            ? commentMedia.mediaSize ?? null
+            : (removeMedia ? null : (existingSupabaseComment.mediaSize ?? null));
+
+          if (!normalizedMessage && !finalMediaURL) {
+            throw createFirebaseError(
+              "comments/empty-message",
+              "Write a comment or attach media before saving."
+            );
+          }
+
+          const supabaseResponse = await callSupabaseAuthenticatedRpc(
+            "update_profile_comment_rpc",
+            {
+              target_comment_id: normalizedCommentId,
+              target_message: normalizedMessage,
+              target_media_url: finalMediaURL,
+              target_media_type: finalMediaType,
+              target_media_path: finalMediaPath,
+              target_media_size: finalMediaSize,
+            },
+            "Comment could not be updated."
+          );
+          const supabaseComment = mapSupabaseRpcCommentPayloadToStoredComment(supabaseResponse);
+
+          if (supabaseComment) {
+            return supabaseComment;
+          }
+
+          return null;
+        }
+
+        if (!user || user.isAnonymous) {
+          return null;
+        }
+      }
+
+      if (!user || user.isAnonymous) {
+        throw createFirebaseError(
+          "auth/no-current-user",
+          "Sign in again to manage older comments on this profile."
+        );
+      }
 
       const commentRef = doc(profileCommentsCollection, normalizedCommentId);
       const commentSnapshot = await getDoc(commentRef);

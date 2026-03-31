@@ -2670,6 +2670,7 @@ export default function ProfilePage() {
       visibleCurrentUser &&
         !isCurrentAccountVerificationLocked &&
         (() => {
+          const isCurrentUserCommentAuthor = commentMatchesUser(comment, visibleCurrentUser);
           const ownsTargetProfile =
             isOwner &&
             typeof activeProfile?.profileId === "number" &&
@@ -2677,7 +2678,7 @@ export default function ProfilePage() {
           const resolvedCommentAuthorRole = resolveCommentAuthorRole(comment);
 
           return (
-            comment.authorUid === visibleCurrentUser.uid ||
+            isCurrentUserCommentAuthor ||
             ownsTargetProfile ||
             canDeleteCommentAsModerator(
               {
@@ -2694,7 +2695,7 @@ export default function ProfilePage() {
     Boolean(
       visibleCurrentUser &&
         !isCurrentAccountVerificationLocked &&
-        (comment.authorUid === visibleCurrentUser.uid ||
+        (commentMatchesUser(comment, visibleCurrentUser) ||
           canManageRoles(visibleCurrentUser.roles))
     );
 
