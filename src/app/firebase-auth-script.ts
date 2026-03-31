@@ -202,6 +202,10 @@
         }
       );
     });
+  const waitForDelay = (delayMs) =>
+    new Promise((resolve) => {
+      window.setTimeout(resolve, delayMs);
+    });
 
   const readFileAsDataUrl = (file) =>
     new Promise((resolve, reject) => {
@@ -1922,6 +1926,27 @@
       return null;
     }
   };
+  const loadCurrentAuthProfileFromSupabaseRpcWithRetry = async ({
+    attempts = 4,
+    delayMs = 250,
+  } = {}) => {
+    const retryCount =
+      Number.isFinite(attempts) && Number(attempts) > 0 ? Math.trunc(Number(attempts)) : 1;
+
+    for (let attemptIndex = 0; attemptIndex < retryCount; attemptIndex += 1) {
+      const profileDetails = await loadCurrentAuthProfileFromSupabaseRpc();
+
+      if (typeof profileDetails?.profileId === "number" && profileDetails.profileId > 0) {
+        return profileDetails;
+      }
+
+      if (attemptIndex < retryCount - 1) {
+        await waitForDelay(delayMs);
+      }
+    }
+
+    return null;
+  };
   const loadPrivateProfileFields = async (user, profileId) => {
     const rpcFields = await loadPrivateProfileFieldsFromSupabaseRpc(profileId);
 
@@ -2704,12 +2729,96 @@
 
       return true;
     };
+    const resolveSupabaseSessionSnapshotFallback = async ({
+      requestedLogin = null,
+      preferredDisplayName = null,
+    } = {}) => {
+      const currentSupabaseDetails = await loadCurrentAuthProfileFromSupabaseRpcWithRetry();
+
+      if (!hasAssignedProfileId(currentSupabaseDetails)) {
+        return null;
+      }
+
+      const session = await getSupabaseBridgeSession();
+      const sessionUser = session?.user ?? null;
+      const currentProviderIds = normalizeProviderIdsList(
+        currentSupabaseDetails.providerIds?.length
+          ? currentSupabaseDetails.providerIds
+          : window.sakuraSupabaseCurrentUserSnapshot?.providerIds ?? []
+      );
+
+      const fallbackUid =
+        typeof currentSupabaseDetails.firebaseUid === "string" && currentSupabaseDetails.firebaseUid
+          ? currentSupabaseDetails.firebaseUid
+          : typeof currentSupabaseDetails.authUserId === "string" &&
+              currentSupabaseDetails.authUserId
+            ? currentSupabaseDetails.authUserId
+            : typeof sessionUser?.id === "string" && sessionUser.id
+              ? sessionUser.id
+              : null;
+
+      if (!fallbackUid) {
+        return null;
+      }
+
+      return publishUserSnapshot(
+        toStoredUserSnapshot(fallbackUid, {
+          ...currentSupabaseDetails,
+          email:
+            currentSupabaseDetails.email ??
+            (typeof sessionUser?.email === "string" ? sessionUser.email : null),
+          login: requestedLogin ?? currentSupabaseDetails.login ?? null,
+          displayName:
+            preferredDisplayName ??
+            currentSupabaseDetails.displayName ??
+            requestedLogin ??
+            currentSupabaseDetails.login ??
+            (typeof sessionUser?.email === "string" ? sessionUser.email.split("@")[0] : null),
+          providerIds: currentProviderIds,
+          creationTime:
+            currentSupabaseDetails.creationTime ??
+            (typeof sessionUser?.created_at === "string" ? sessionUser.created_at : null),
+          lastSignInTime:
+            currentSupabaseDetails.lastSignInTime ??
+            (typeof sessionUser?.last_sign_in_at === "string"
+              ? sessionUser.last_sign_in_at
+              : null),
+        })
+      );
+    };
     const resolveSupabasePasswordSessionSnapshot = async ({
       source,
       requestedLogin = null,
       preferredDisplayName = null,
       skipPresence = false,
     } = {}) => {
+      const fallbackSnapshot = await resolveSupabaseSessionSnapshotFallback({
+        requestedLogin,
+        preferredDisplayName,
+      });
+
+      if (fallbackSnapshot) {
+        if (!skipPresence) {
+          void (async () => {
+            try {
+              const bridgedUser =
+                (await bridgeSupabaseSessionToFirebase()) ??
+                (await bridgeSupabaseGoogleSessionToFirebase());
+
+              if (bridgedUser && !bridgedUser.isAnonymous) {
+                await syncPresence(bridgedUser, {
+                  path: window.location.pathname,
+                  source: source ?? "login",
+                  forceVisit: true,
+                });
+              }
+            } catch (error) {}
+          })();
+        }
+
+        return await enforceActiveSessionNotBanned(fallbackSnapshot);
+      }
+
       const bridgedUser =
         (await bridgeSupabaseSessionToFirebase()) ??
         (await bridgeSupabaseGoogleSessionToFirebase());
@@ -5682,6 +5791,13 @@
 
           if (!user) {
             try {
+              const fallbackSnapshot = await resolveSupabaseSessionSnapshotFallback();
+
+              if (fallbackSnapshot) {
+                callback(fallbackSnapshot);
+                return;
+              }
+
               const bridgedUser =
                 (await bridgeSupabaseSessionToFirebase()) ??
                 (await bridgeSupabaseGoogleSessionToFirebase());
@@ -5703,6 +5819,13 @@
 
           if (user.isAnonymous) {
             try {
+              const fallbackSnapshot = await resolveSupabaseSessionSnapshotFallback();
+
+              if (fallbackSnapshot) {
+                callback(fallbackSnapshot);
+                return;
+              }
+
               const bridgedUser =
                 (await bridgeSupabaseSessionToFirebase()) ??
                 (await bridgeSupabaseGoogleSessionToFirebase());
