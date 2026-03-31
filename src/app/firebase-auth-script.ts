@@ -5771,8 +5771,18 @@
       syncPresence: async (options = {}) => {
         const user = auth.currentUser;
 
-        if (!user) {
-          return publishUserSnapshot(null);
+        if (!user || user.isAnonymous) {
+          const fallbackSnapshot = await resolveSupabaseSessionSnapshotFallback();
+
+          if (fallbackSnapshot) {
+            return fallbackSnapshot;
+          }
+
+          if (user?.isAnonymous) {
+            return publishUserSnapshot(toAnonymousViewerSnapshot(user));
+          }
+
+          return window.sakuraCurrentUserSnapshot ?? null;
         }
 
         return syncPresence(user, options);
