@@ -1947,6 +1947,81 @@
 
     return null;
   };
+  const createSupabaseProfileRpcError = (payload, fallbackMessage) => {
+    const message =
+      typeof payload?.message === "string" && payload.message.trim()
+        ? payload.message.trim()
+        : typeof payload?.error === "string" && payload.error.trim()
+          ? payload.error.trim()
+          : fallbackMessage;
+
+    if (message === "Login already in use.") {
+      return createFirebaseError("auth/login-already-in-use", "This username is already taken.");
+    }
+
+    if (
+      message === "Enter a login." ||
+      message ===
+        "Login must be 3-24 characters long and only contain letters, numbers, dots, underscores, or hyphens."
+    ) {
+      return createFirebaseError(
+        "auth/invalid-login",
+        "Username must be 3-24 characters and only contain letters, numbers, dots, underscores, or hyphens."
+      );
+    }
+
+    if (message === "Display name is required.") {
+      return createFirebaseError("display-name/empty", "Enter a profile name.");
+    }
+
+    if (message === "Authentication required." || message === "Actor profile not found.") {
+      return createFirebaseError("auth/no-current-user", "Sign in again to update your profile.");
+    }
+
+    return createFirebaseError("supabase/rpc-failed", message);
+  };
+  const callSupabaseAuthenticatedRpc = async (
+    functionName,
+    payload = {},
+    fallbackMessage = "Supabase RPC request failed."
+  ) => {
+    if (!SUPABASE_PUBLIC_READS_ENABLED) {
+      return null;
+    }
+
+    const accessToken = await getSupabaseBridgeAccessTokenEarly();
+
+    if (!accessToken) {
+      return null;
+    }
+
+    let response;
+
+    try {
+      response = await fetch(buildSupabaseRpcUrl(functionName), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: SUPABASE_PUBLIC_ANON_KEY,
+          Authorization: "Bearer " + accessToken,
+          "Accept-Profile": "public",
+          "Content-Profile": "public",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+    } catch (error) {
+      return null;
+    }
+
+    const responsePayload = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      throw createSupabaseProfileRpcError(responsePayload, fallbackMessage);
+    }
+
+    return responsePayload;
+  };
   const loadPrivateProfileFields = async (user, profileId) => {
     const rpcFields = await loadPrivateProfileFieldsFromSupabaseRpc(profileId);
 
@@ -3834,8 +3909,89 @@
       stopPresenceTracking = presenceRuntime.startPresenceTracking(user);
       return stopPresenceTracking;
     };
+    const reauthenticateSupabasePasswordProfile = async (email, currentPassword) => {
+      const supabaseAuthBridge = await ensureSupabasePasswordBridge();
+
+      if (!supabaseAuthBridge?.loginWithPassword) {
+        throw createFirebaseError(
+          "auth/current-password-required",
+          "This account cannot verify the current password right now."
+        );
+      }
+
+      try {
+        await supabaseAuthBridge.loginWithPassword(email, currentPassword);
+      } catch (error) {
+        const errorCode = getErrorCode(error);
+
+        if (
+          errorCode === "auth/wrong-password" ||
+          errorCode === "auth/invalid-credential" ||
+          errorCode === "auth/user-mismatch"
+        ) {
+          throw createFirebaseError(
+            "auth/current-password-invalid",
+            "Current password is incorrect."
+          );
+        }
+
+        throw error;
+      }
+    };
 
     const updateUsername = async (nextUsername, currentPassword = "") => {
+      const currentSupabaseSession = await getSupabaseBridgeSession();
+      const currentSupabaseDetails = await loadCurrentAuthProfileFromSupabaseRpcWithRetry({
+        attempts: 2,
+        delayMs: 120,
+      });
+      const currentSupabaseProviderIds = normalizeProviderIdsList(
+        currentSupabaseDetails?.providerIds?.length
+          ? currentSupabaseDetails.providerIds
+          : window.sakuraSupabaseCurrentUserSnapshot?.providerIds ?? []
+      );
+      const currentSupabaseEmail =
+        currentSupabaseDetails?.email ??
+        (typeof currentSupabaseSession?.user?.email === "string"
+          ? currentSupabaseSession.user.email
+          : null);
+
+      if (hasAssignedProfileId(currentSupabaseDetails) && currentSupabaseDetails?.authUserId) {
+        if (currentSupabaseProviderIds.includes("password")) {
+          if (!currentPassword) {
+            throw createFirebaseError(
+              "auth/current-password-required",
+              "Enter your current password to change the login."
+            );
+          }
+
+          if (!currentSupabaseEmail) {
+            throw createFirebaseError(
+              "auth/current-password-required",
+              "This account cannot verify the current password right now."
+            );
+          }
+
+          await reauthenticateSupabasePasswordProfile(currentSupabaseEmail, currentPassword);
+        }
+
+        await callSupabaseAuthenticatedRpc(
+          "update_current_profile_identity_rpc",
+          {
+            target_login: nextUsername,
+          },
+          "Login could not be saved."
+        );
+
+        const snapshot = await resolveSupabaseSessionSnapshotFallback({
+          requestedLogin: nextUsername,
+        });
+
+        if (snapshot) {
+          return snapshot;
+        }
+      }
+
       const user = auth.currentUser;
 
       if (!user || user.isAnonymous) {
@@ -3937,6 +4093,42 @@
       return snapshot;
     };
     const updateDisplayName = async (nextDisplayName) => {
+      const sanitizedDisplayName = sanitizeDisplayName(nextDisplayName);
+      const currentSupabaseDetails = await loadCurrentAuthProfileFromSupabaseRpcWithRetry({
+        attempts: 2,
+        delayMs: 120,
+      });
+
+      if (hasAssignedProfileId(currentSupabaseDetails) && currentSupabaseDetails?.authUserId) {
+        if (!sanitizedDisplayName) {
+          throw createFirebaseError("display-name/empty", "Enter a profile name.");
+        }
+
+        await callSupabaseAuthenticatedRpc(
+          "update_current_profile_identity_rpc",
+          {
+            target_display_name: sanitizedDisplayName,
+          },
+          "Profile name could not be saved."
+        );
+
+        if (auth.currentUser && !auth.currentUser.isAnonymous) {
+          try {
+            await updateProfile(auth.currentUser, { displayName: sanitizedDisplayName });
+          } catch (error) {
+            console.error("Failed to sync Firebase Auth displayName after profile name change:", error);
+          }
+        }
+
+        const snapshot = await resolveSupabaseSessionSnapshotFallback({
+          preferredDisplayName: sanitizedDisplayName,
+        });
+
+        if (snapshot) {
+          return snapshot;
+        }
+      }
+
       const user = auth.currentUser;
 
       if (!user || user.isAnonymous) {
@@ -3944,8 +4136,6 @@
       }
 
       await ensureVerifiedSessionAccess(user, "Verify your email before changing the profile name.");
-
-      const sanitizedDisplayName = sanitizeDisplayName(nextDisplayName);
 
       if (!sanitizedDisplayName) {
         throw createFirebaseError("display-name/empty", "Enter a profile name.");
@@ -4998,8 +5188,6 @@
       return snapshot;
     };
     const adminUpdateProfileDisplayName = async (profileId, nextDisplayName) => {
-      const { user, actorSnapshot } = await ensureRootActorSnapshot();
-
       if (!Number.isInteger(profileId) || profileId <= 0) {
         throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
       }
@@ -5009,6 +5197,53 @@
       if (!sanitizedDisplayName) {
         throw createFirebaseError("display-name/empty", "Enter a profile name.");
       }
+
+      const supabaseResponse = await callSupabaseAuthenticatedRpc(
+        "admin_update_profile_identity_rpc",
+        {
+          target_profile_id: profileId,
+          target_display_name: sanitizedDisplayName,
+        },
+        "Profile name could not be saved."
+      );
+
+      if (supabaseResponse) {
+        if (
+          window.sakuraCurrentUserSnapshot?.profileId === profileId &&
+          auth.currentUser &&
+          !auth.currentUser.isAnonymous
+        ) {
+          try {
+            await updateProfile(auth.currentUser, { displayName: sanitizedDisplayName });
+          } catch (error) {
+            console.error("Failed to sync Firebase Auth displayName from admin panel:", error);
+          }
+        }
+
+        if (window.sakuraCurrentUserSnapshot?.profileId === profileId) {
+          const currentSnapshot = await resolveSupabaseSessionSnapshotFallback({
+            preferredDisplayName: sanitizedDisplayName,
+          });
+
+          if (currentSnapshot) {
+            return currentSnapshot;
+          }
+        }
+
+        const refreshedSnapshot = await getProfileById(profileId).catch(() => null);
+
+        if (refreshedSnapshot) {
+          return {
+            ...refreshedSnapshot,
+            displayName:
+              typeof supabaseResponse?.displayName === "string"
+                ? supabaseResponse.displayName
+                : refreshedSnapshot.displayName,
+          };
+        }
+      }
+
+      const { user, actorSnapshot } = await ensureRootActorSnapshot();
 
       const targetDoc = await findUserByProfileId(profileId);
 
@@ -5052,8 +5287,6 @@
       });
     };
     const adminUpdateProfileLogin = async (profileId, nextLogin) => {
-      const { actorSnapshot } = await ensureRootActorSnapshot();
-
       if (!Number.isInteger(profileId) || profileId <= 0) {
         throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
       }
@@ -5063,6 +5296,41 @@
       if (!normalizedRequestedLogin) {
         throw createFirebaseError("auth/invalid-login", "Enter a login.");
       }
+
+      const supabaseResponse = await callSupabaseAuthenticatedRpc(
+        "admin_update_profile_identity_rpc",
+        {
+          target_profile_id: profileId,
+          target_login: normalizedRequestedLogin,
+        },
+        "Login could not be saved."
+      );
+
+      if (supabaseResponse) {
+        if (window.sakuraCurrentUserSnapshot?.profileId === profileId) {
+          const currentSnapshot = await resolveSupabaseSessionSnapshotFallback({
+            requestedLogin: normalizedRequestedLogin,
+          });
+
+          if (currentSnapshot) {
+            return currentSnapshot;
+          }
+        }
+
+        const refreshedSnapshot = await getProfileById(profileId).catch(() => null);
+
+        if (refreshedSnapshot) {
+          return {
+            ...refreshedSnapshot,
+            login:
+              typeof supabaseResponse?.login === "string"
+                ? supabaseResponse.login
+                : refreshedSnapshot.login,
+          };
+        }
+      }
+
+      const { actorSnapshot } = await ensureRootActorSnapshot();
 
       const targetDoc = await findUserByProfileId(profileId);
 
