@@ -487,6 +487,55 @@ function getFirebaseErrorMessage(error: unknown) {
   }
 }
 
+function consumeSupabaseAuthCallbackErrorFromUrl() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const url = new URL(window.location.href);
+  const hashParams = new URLSearchParams(url.hash.startsWith("#") ? url.hash.slice(1) : "");
+  const searchParams = url.searchParams;
+  const errorCode =
+    hashParams.get("error_code") ||
+    searchParams.get("error_code") ||
+    "";
+  const errorType =
+    hashParams.get("error") ||
+    searchParams.get("error") ||
+    "";
+  const errorDescription =
+    hashParams.get("error_description") ||
+    searchParams.get("error_description") ||
+    "";
+
+  if (!errorCode && !errorType && !errorDescription) {
+    return null;
+  }
+
+  let message = "Не удалось обработать ссылку подтверждения. Попробуйте отправить письмо ещё раз.";
+
+  if (
+    errorCode === "otp_expired" ||
+    /expired|invalid/i.test(errorDescription)
+  ) {
+    message =
+      "Ссылка подтверждения почты недействительна или уже истекла. Отправьте новое письмо и попробуйте снова.";
+  } else if (/access_denied/i.test(errorType)) {
+    message = "Подтверждение по ссылке не удалось. Попробуйте открыть самое новое письмо.";
+  }
+
+  ["error", "error_code", "error_description", "sb"].forEach((key) => {
+    searchParams.delete(key);
+  });
+
+  if (hashParams.has("error") || hashParams.has("error_code") || hashParams.has("error_description")) {
+    url.hash = "";
+  }
+
+  window.history.replaceState({}, "", url.toString());
+  return message;
+}
+
 function isEmailVerificationLocked(user: AuthUserSnapshot | null | undefined) {
   return Boolean(
     user &&
@@ -689,10 +738,25 @@ function HeaderAuth() {
   const [verificationSuccess, setVerificationSuccess] = useState<string | null>(null);
   const [isVerificationSending, setIsVerificationSending] = useState(false);
   const [isVerificationRefreshing, setIsVerificationRefreshing] = useState(false);
+  const [pendingCallbackError, setPendingCallbackError] = useState<string | null>(null);
   const visibleUser = currentUser && !currentUser.isAnonymous ? currentUser : null;
   const isVerificationLockedUser = isEmailVerificationLocked(visibleUser);
   const isGoogleSetupFlowActive = requiresGoogleAccountCompletion(visibleUser);
   const currentUserId = visibleUser?.uid ?? null;
+
+  useEffect(() => {
+    const callbackError = consumeSupabaseAuthCallbackErrorFromUrl();
+
+    if (!callbackError) {
+      return;
+    }
+
+    setPendingCallbackError(callbackError);
+    setMode("login");
+    setIsModalOpen(true);
+    setSubmitError(callbackError);
+    setFlashMessage(callbackError);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -892,6 +956,16 @@ function HeaderAuth() {
       setIsVerificationModalOpen(false);
     }
   }, [isVerificationLockedUser]);
+
+  useEffect(() => {
+    if (!pendingCallbackError || !isVerificationLockedUser) {
+      return;
+    }
+
+    setVerificationError(pendingCallbackError);
+    setVerificationSuccess(null);
+    setIsVerificationModalOpen(true);
+  }, [pendingCallbackError, isVerificationLockedUser]);
 
   useEffect(() => {
     if (!visibleUser || !requiresGoogleAccountCompletion(visibleUser)) {

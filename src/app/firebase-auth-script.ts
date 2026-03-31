@@ -1805,6 +1805,96 @@
       return null;
     }
   };
+  const loadCurrentAuthProfileFromSupabaseRpc = async () => {
+    if (!SUPABASE_PUBLIC_READS_ENABLED) {
+      return null;
+    }
+
+    const accessToken = await getSupabaseBridgeAccessToken();
+
+    if (!accessToken) {
+      return null;
+    }
+
+    try {
+      const response = await fetch(buildSupabaseRpcUrl("get_current_auth_profile_rpc"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: SUPABASE_PUBLIC_ANON_KEY,
+          Authorization: "Bearer " + accessToken,
+          "Accept-Profile": "public",
+          "Content-Profile": "public",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({}),
+      });
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const payload = await response.json().catch(() => null);
+
+      if (!payload || typeof payload !== "object") {
+        return null;
+      }
+
+      const login =
+        typeof payload.login === "string" && payload.login.trim() ? payload.login.trim() : null;
+      const providerIds = normalizeProviderIdsList(payload.providerIds);
+
+      return {
+        email:
+          typeof payload.email === "string" && payload.email.trim() ? payload.email.trim() : null,
+        emailVerified:
+          typeof payload.emailVerified === "boolean" ? payload.emailVerified : null,
+        login,
+        loginLower: login ? normalizeLogin(login) : null,
+        displayName:
+          typeof payload.displayName === "string" && payload.displayName.trim()
+            ? payload.displayName.trim()
+            : null,
+        profileId: normalizeSupabaseInteger(payload.profileId),
+        photoURL:
+          typeof payload.photoURL === "string" && payload.photoURL ? payload.photoURL : null,
+        avatarPath:
+          typeof payload.avatarPath === "string" && payload.avatarPath ? payload.avatarPath : null,
+        avatarType:
+          typeof payload.avatarType === "string" && payload.avatarType ? payload.avatarType : null,
+        avatarSize: normalizeSupabaseInteger(payload.avatarSize),
+        roles: normalizeSupabaseTextArray(payload.roles),
+        isBanned: payload.isBanned === true,
+        bannedAt:
+          typeof payload.bannedAt === "string" && payload.bannedAt ? payload.bannedAt : null,
+        verificationRequired:
+          typeof payload.verificationRequired === "boolean"
+            ? payload.verificationRequired
+            : null,
+        verificationEmailSent:
+          typeof payload.verificationEmailSent === "boolean"
+            ? payload.verificationEmailSent
+            : false,
+        providerIds,
+        creationTime:
+          typeof payload.creationTime === "string" && payload.creationTime
+            ? payload.creationTime
+            : null,
+        lastSignInTime:
+          typeof payload.lastSignInTime === "string" && payload.lastSignInTime
+            ? payload.lastSignInTime
+            : null,
+        loginHistory: Array.isArray(payload.loginHistory) ? payload.loginHistory : [],
+        visitHistory: normalizeVisitHistory(payload.visitHistory),
+        presence:
+          payload.presence && typeof payload.presence === "object"
+            ? normalizePresence(payload.presence, window.location.pathname)
+            : normalizePresence(null, window.location.pathname),
+      };
+    } catch (error) {
+      return null;
+    }
+  };
   const loadPrivateProfileFields = async (user, profileId) => {
     const rpcFields = await loadPrivateProfileFieldsFromSupabaseRpc(profileId);
 
@@ -3337,16 +3427,62 @@
     };
 
     const ensureProfileRecord = async (user, options = {}) => {
+      const preferredDisplayName =
+        typeof options.preferredDisplayName === "string" && options.preferredDisplayName.trim()
+          ? options.preferredDisplayName.trim()
+          : null;
+      const currentSupabaseDetails = user?.isAnonymous
+        ? null
+        : await loadCurrentAuthProfileFromSupabaseRpc();
+
+      if (hasAssignedProfileId(currentSupabaseDetails)) {
+        const providerIds =
+          currentSupabaseDetails.providerIds?.length
+            ? currentSupabaseDetails.providerIds
+            : getProviderIds(user);
+        const roles = normalizeRoles(currentSupabaseDetails.roles);
+
+        return {
+          ...currentSupabaseDetails,
+          email: currentSupabaseDetails.email ?? user.email ?? null,
+          emailVerified: resolveEmailVerifiedState(user, {
+            ...currentSupabaseDetails,
+            providerIds,
+          }),
+          displayName:
+            preferredDisplayName ??
+            currentSupabaseDetails.displayName ??
+            user.displayName ??
+            currentSupabaseDetails.login ??
+            currentSupabaseDetails.email?.split("@")[0] ??
+            user.email?.split("@")[0] ??
+            "Sakura User",
+          roles,
+          verificationRequired: resolveVerificationRequired(
+            roles,
+            providerIds,
+            currentSupabaseDetails.verificationRequired
+          ),
+          verificationEmailSent: currentSupabaseDetails.verificationEmailSent === true,
+          providerIds,
+          creationTime:
+            currentSupabaseDetails.creationTime ?? user.metadata.creationTime ?? null,
+          lastSignInTime:
+            currentSupabaseDetails.lastSignInTime ?? user.metadata.lastSignInTime ?? null,
+          loginHistory: Array.isArray(currentSupabaseDetails.loginHistory)
+            ? currentSupabaseDetails.loginHistory
+            : buildLoginHistory([], user.metadata.creationTime ?? null, user.metadata.lastSignInTime ?? null),
+          visitHistory: normalizeVisitHistory(currentSupabaseDetails.visitHistory),
+          presence: normalizePresence(currentSupabaseDetails.presence, window.location.pathname),
+        };
+      }
+
       const userRef = userRefFor(user.uid);
       const userSnapshot = await getDoc(userRef);
       const existingData = userSnapshot.exists() ? userSnapshot.data() : null;
       const existingProfileId =
         typeof existingData?.profileId === "number" ? existingData.profileId : null;
       const providerIds = getProviderIds(user);
-      const preferredDisplayName =
-        typeof options.preferredDisplayName === "string" && options.preferredDisplayName.trim()
-          ? options.preferredDisplayName.trim()
-          : null;
 
       const loginDetails =
         typeof existingData?.login === "string" && typeof existingData?.loginLower === "string"
