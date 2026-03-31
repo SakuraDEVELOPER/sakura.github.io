@@ -2554,19 +2554,12 @@
 
       return window.sakuraSupabaseCurrentSession ?? null;
     };
-    const getSupabaseBridgeAccessToken = async () => {
-      const session = await getSupabaseBridgeSession();
-
-      return typeof session?.access_token === "string" && session.access_token
-        ? session.access_token
-        : null;
-    };
     const fetchFirebaseCustomTokenFromSupabase = async () => {
       if (!SUPABASE_AUTH_BRIDGE_FUNCTION_URL) {
         return null;
       }
 
-      const accessToken = await getSupabaseBridgeAccessToken();
+      const accessToken = await getSupabaseBridgeAccessTokenEarly();
 
       if (!accessToken) {
         return null;
