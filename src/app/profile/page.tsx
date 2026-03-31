@@ -91,6 +91,7 @@ type PrivateProfileFields = {
 
 type Bridge = {
   getProfileById: (profileId: number) => Promise<UserProfile | null>;
+  refreshProfileById: (profileId: number) => Promise<UserProfile | null>;
   getProfileByAuthorName: (authorName: string) => Promise<UserProfile | null>;
   getProfilesByLoginPrefix: (loginPrefix: string) => Promise<UserProfile[]>;
   getProfileComments: (profileId: number) => Promise<ProfileComment[]>;
@@ -1712,11 +1713,20 @@ export default function ProfilePage() {
 
     let isCancelled = false;
 
-    bridge
-      .getAdminPrivateProfileFields(profile.profileId)
-      .then((fields) => {
+    Promise.all([
+      bridge.getAdminPrivateProfileFields(profile.profileId),
+      bridge.refreshProfileById?.(profile.profileId) ?? Promise.resolve(null),
+    ])
+      .then(([fields, refreshedProfile]) => {
         if (isCancelled) {
           return;
+        }
+
+        if (refreshedProfile && refreshedProfile.profileId === profile.profileId) {
+          applyUpdatedProfileSnapshot(refreshedProfile, {
+            targetProfileId: profile.profileId,
+            updateCurrentUser: visibleCurrentUser?.profileId === profile.profileId,
+          });
         }
 
         setAdminPrivateProfileFields(fields);
@@ -1757,7 +1767,7 @@ export default function ProfilePage() {
     return () => {
       isCancelled = true;
     };
-  }, [canOpenAdminPanel, isAdminPanelOpen, profile?.profileId]);
+  }, [canOpenAdminPanel, isAdminPanelOpen, profile?.profileId, visibleCurrentUser?.profileId]);
   const isTargetBanned =
     optimisticAdminBanState !== null ? optimisticAdminBanState : activeProfile?.isBanned === true;
   const targetVerificationStatus = !targetEmail
@@ -1951,6 +1961,95 @@ export default function ProfilePage() {
       });
     }
   };
+  useEffect(() => {
+    if (
+      typeof window === "undefined" ||
+      !authReady ||
+      !authStateSettled ||
+      authError ||
+      !activeProfile?.profileId
+    ) {
+      return;
+    }
+
+    const shouldRefreshProfileStatus =
+      isAdminPanelOpen ||
+      (visibleCurrentUser?.profileId != null &&
+        visibleCurrentUser.profileId === activeProfile.profileId);
+
+    if (!shouldRefreshProfileStatus) {
+      return;
+    }
+
+    const bridge = getWindowState().sakuraFirebaseAuth;
+    const activeProfileId = activeProfile.profileId;
+
+    if (!bridge?.refreshProfileById) {
+      return;
+    }
+
+    let isCancelled = false;
+    let isRefreshing = false;
+
+    const refreshProfileStatus = async () => {
+      if (isRefreshing) {
+        return;
+      }
+
+      try {
+        isRefreshing = true;
+        const snapshot = await bridge.refreshProfileById(activeProfileId);
+
+        if (
+          isCancelled ||
+          !snapshot ||
+          snapshot.profileId !== activeProfileId
+        ) {
+          return;
+        }
+
+        applyUpdatedProfileSnapshot(snapshot, {
+          targetProfileId: activeProfileId,
+          updateCurrentUser:
+            visibleCurrentUser?.profileId === activeProfileId,
+        });
+      } catch (_error) {
+      } finally {
+        isRefreshing = false;
+      }
+    };
+
+    void refreshProfileStatus();
+
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState !== "hidden") {
+        void refreshProfileStatus();
+      }
+    }, 15000);
+
+    const handleRefresh = () => {
+      if (document.visibilityState !== "hidden") {
+        void refreshProfileStatus();
+      }
+    };
+
+    window.addEventListener("focus", handleRefresh);
+    document.addEventListener("visibilitychange", handleRefresh);
+
+    return () => {
+      isCancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleRefresh);
+      document.removeEventListener("visibilitychange", handleRefresh);
+    };
+  }, [
+    activeProfile?.profileId,
+    authError,
+    authReady,
+    authStateSettled,
+    isAdminPanelOpen,
+    visibleCurrentUser?.profileId,
+  ]);
   const normalizeCommentAuthorKey = (value: string | null | undefined) =>
     typeof value === "string"
       ? value.trim().replace(/^@+/, "").toLocaleLowerCase().replace(/\s+/g, " ")

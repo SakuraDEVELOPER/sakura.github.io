@@ -4830,6 +4830,14 @@
 
       return await enrichProfileSnapshotWithPrivateFields(profileId, resolvedProfileSnapshot);
     };
+    const refreshProfileById = async (profileId) => {
+      if (!Number.isInteger(profileId) || profileId <= 0) {
+        throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
+      }
+
+      markProfileForFreshFetch(profileId);
+      return await getProfileById(profileId);
+    };
 
     const getProfileByAuthorName = async (authorName) => {
       const normalizedAuthorName = normalizeProfileCommentAuthorName(authorName);
@@ -6970,6 +6978,7 @@
       getAdminPrivateProfileFields,
       adminDeleteAccount: async (profileId) => adminDeleteProfileAccount(profileId),
       getProfileById,
+      refreshProfileById,
       getProfileByAuthorName,
       getProfilesByLoginPrefix,
       getProfileComments,
