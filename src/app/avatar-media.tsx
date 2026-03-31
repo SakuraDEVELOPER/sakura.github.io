@@ -216,7 +216,9 @@ export function AvatarMedia({
     <img
       key={`${renderKey}:${resolvedSrc}`}
       src={resolvedSrc}
-      alt={alt}
+      alt=""
+      aria-label={alt}
+      title={alt}
       loading={loading}
       decoding={isAnimatedAvatarSource(resolvedSrc) ? undefined : decoding}
       className={className}

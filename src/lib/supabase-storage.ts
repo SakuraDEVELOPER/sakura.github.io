@@ -56,22 +56,16 @@ function inferFileExtension(file: File) {
   }
 }
 
-function toHex(buffer: ArrayBuffer) {
-  return Array.from(new Uint8Array(buffer), (value) => value.toString(16).padStart(2, "0")).join("");
-}
-
-async function createFileContentHash(file: File) {
-  const buffer = await file.arrayBuffer();
-  const digest = await crypto.subtle.digest("SHA-256", buffer);
-  return toHex(digest);
-}
-
 async function buildObjectPath(file: File, folder: string, userId = "guest") {
   const safeUserId = sanitizeFileName(userId);
-  const hash = await createFileContentHash(file);
+  const safeBaseName = sanitizeFileName(file.name.replace(/\.[^.]+$/, "")) || "upload";
   const extension = inferFileExtension(file);
+  const uniqueSuffix =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
-  return `${folder}/${safeUserId}/${hash}.${extension}`;
+  return `${folder}/${safeUserId}/${safeBaseName}-${uniqueSuffix}.${extension}`;
 }
 
 export function validateSupabaseCommentMediaFile(file: File) {
@@ -106,13 +100,7 @@ async function uploadStorageObject(file: File, objectPath: string): Promise<Supa
       upsert: false,
     });
 
-  const alreadyExists = Boolean(
-    error &&
-      (String((error as { statusCode?: string | number } | null)?.statusCode ?? "") === "409" ||
-        /already exists/i.test(error.message))
-  );
-
-  if (error && !alreadyExists) {
+  if (error) {
     throw error;
   }
 
@@ -126,7 +114,7 @@ async function uploadStorageObject(file: File, objectPath: string): Promise<Supa
     publicUrl,
     contentType: file.type,
     size: file.size,
-    reused: alreadyExists,
+    reused: false,
   };
 }
 
@@ -143,7 +131,7 @@ export async function uploadSupabaseAvatarMedia(
   userId: string
 ): Promise<SupabaseCommentMediaUploadResult> {
   validateSupabaseAvatarFile(file);
-  return uploadStorageObject(file, await buildObjectPath(file, "comments/avatars", userId));
+  return uploadStorageObject(file, await buildObjectPath(file, "avatars", userId));
 }
 
 export async function uploadSupabaseCommentMediaTest(file: File) {
