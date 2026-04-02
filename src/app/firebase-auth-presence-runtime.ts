@@ -1,25 +1,167 @@
+type PresenceStatus = "online" | "offline";
+type FirestoreDatabase = unknown;
+type FirestoreReference = unknown;
+type FirestoreQuery = unknown;
+type FirestoreSetOptions = Record<string, unknown>;
+type SupabaseRow = Record<string, unknown>;
+
+type FirebaseUserLike = {
+  uid: string;
+  isAnonymous: boolean;
+  getIdToken?: () => Promise<string>;
+};
+
+type VisitHistoryEntry = {
+  timestamp: string;
+  path: string;
+  source: string;
+  status: PresenceStatus;
+  [key: string]: unknown;
+};
+
+type PresenceSnapshot = {
+  status?: PresenceStatus;
+  isOnline?: boolean;
+  currentPath?: string | null;
+  lastSeenAt?: string | null;
+  [key: string]: unknown;
+};
+
+type RuntimeUserDetails = Record<string, unknown> & {
+  uid?: string | null;
+  isAnonymous?: boolean;
+  email?: string | null;
+  emailVerified?: boolean | null;
+  login?: string | null;
+  displayName?: string | null;
+  profileId?: number | null;
+  photoURL?: string | null;
+  roles?: unknown[];
+  accentRole?: string | null;
+  isBanned?: boolean;
+  bannedAt?: string | null;
+  verificationRequired?: boolean;
+  providerIds?: string[];
+  creationTime?: string | null;
+  lastSignInTime?: string | null;
+  loginHistory?: string[];
+  visitHistory?: VisitHistoryEntry[];
+  presence?: PresenceSnapshot | null;
+};
+
+type RuntimeUserSnapshot = RuntimeUserDetails;
+
+type FirestoreDocumentSnapshot<TData extends RuntimeUserDetails = RuntimeUserDetails> = {
+  exists: () => boolean;
+  data: () => TData;
+};
+
+type FirestoreQueryDocumentSnapshot<TData extends RuntimeUserDetails = RuntimeUserDetails> = {
+  id: string;
+  data: () => TData;
+};
+
+type FirestoreQuerySnapshot<TData extends RuntimeUserDetails = RuntimeUserDetails> = {
+  forEach: (callback: (doc: FirestoreQueryDocumentSnapshot<TData>) => void) => void;
+};
+
+type PresenceTabEntry = {
+  uid: string | null;
+  visible: boolean;
+  path: string | null;
+  timestamp: number;
+};
+
+type SiteOnlineUser = {
+  uid: string | null;
+  profileId: number | null;
+  displayName: string | null;
+  login: string | null;
+  photoURL: string | null;
+  accentRole?: string | null;
+  presence?: {
+    lastSeenAt: string | null;
+  } | null;
+};
+
+type PresenceSyncOptions = Record<string, unknown> & {
+  path?: string;
+  source?: string;
+  forceVisit?: boolean;
+  visibility?: "visible" | "hidden";
+};
+
+type SupabaseAuthSessionLike = {
+  access_token?: string | null;
+};
+
+type SupabaseAuthBridgeLike = {
+  getSession?: () => Promise<SupabaseAuthSessionLike | null>;
+};
+
+type PresenceRuntimeWindow = Window & {
+  sakuraSupabaseAuth?: SupabaseAuthBridgeLike;
+  sakuraStartSupabaseAuth?: () => Promise<unknown> | unknown;
+  sakuraSupabaseCurrentSession?: SupabaseAuthSessionLike | null;
+  sakuraCurrentUserSnapshot?: RuntimeUserSnapshot | null;
+};
+
+type SupabasePresenceRow = SupabaseRow & {
+  profile_id?: unknown;
+  last_seen_at?: unknown;
+};
+
+type SupabaseProfileRow = SupabaseRow & {
+  profile_id?: unknown;
+  firebase_uid?: unknown;
+  display_name?: unknown;
+  login?: unknown;
+  photo_url?: unknown;
+  roles?: unknown;
+  is_banned?: unknown;
+};
+
+type SupabasePresenceRpcResponse = SupabaseRow & {
+  presence?: unknown;
+  visitHistory?: unknown;
+  firebaseUid?: string;
+  authUserId?: string;
+};
+
 type FirebasePresenceRuntimeContext = {
-  auth: any;
-  db: any;
-  usersCollection: any;
-  userRefFor: (uid: string) => any;
-  getDoc: (ref: any) => Promise<any>;
-  setDoc: (ref: any, data: any, options?: any) => Promise<any>;
-  getDocs: (query: any) => Promise<any>;
-  query: (...args: any[]) => any;
-  collection: (...args: any[]) => any;
-  where: (...args: any[]) => any;
+  auth: {
+    currentUser: FirebaseUserLike | null;
+  };
+  db: FirestoreDatabase;
+  usersCollection: FirestoreReference;
+  userRefFor: (uid: string) => FirestoreReference;
+  getDoc: (ref: FirestoreReference) => Promise<FirestoreDocumentSnapshot>;
+  setDoc: (
+    ref: FirestoreReference,
+    data: RuntimeUserDetails,
+    options?: FirestoreSetOptions,
+  ) => Promise<unknown>;
+  getDocs: (query: FirestoreQuery) => Promise<FirestoreQuerySnapshot>;
+  query: (...args: unknown[]) => FirestoreQuery;
+  collection: (...args: unknown[]) => FirestoreReference;
+  where: (...args: unknown[]) => unknown;
   createFirebaseError: (code: string, message: string) => Error & { code?: string };
   isPermissionDeniedError: (error: unknown) => boolean;
-  buildFallbackUserDetails: (user: any, options?: Record<string, unknown>) => any;
-  normalizeVisitHistory: (value: unknown) => any[];
-  buildVisitHistory: (previousVisits: any[], nextVisit: any) => any[];
-  toUserSnapshot: (user: any, details: any) => any;
-  toStoredUserSnapshot: (uid: string, details: any) => any;
-  normalizePresence: (value: unknown, fallbackPath?: string | null) => any;
+  buildFallbackUserDetails: (
+    user: FirebaseUserLike | null,
+    options?: PresenceSyncOptions,
+  ) => RuntimeUserDetails;
+  normalizeVisitHistory: (value: unknown) => VisitHistoryEntry[];
+  buildVisitHistory: (
+    previousVisits: VisitHistoryEntry[],
+    nextVisit: VisitHistoryEntry,
+  ) => VisitHistoryEntry[];
+  toUserSnapshot: (user: FirebaseUserLike, details: RuntimeUserDetails) => RuntimeUserSnapshot;
+  toStoredUserSnapshot: (uid: string, details: RuntimeUserDetails) => RuntimeUserSnapshot;
+  normalizePresence: (value: unknown, fallbackPath?: string | null) => PresenceSnapshot;
   isPresenceFreshOnline: (presence: unknown) => boolean;
   pickCommentAccentRole: (roles: unknown[]) => string | null;
-  publishUserSnapshot: (snapshot: any) => any;
+  publishUserSnapshot: (snapshot: RuntimeUserSnapshot | null) => RuntimeUserSnapshot | null;
   constants: {
     onlineUsersRuntimeCacheTtlMs: number;
     presenceHeartbeatIntervalMs: number;
@@ -64,12 +206,12 @@ const supabaseSyncFunctionUrl = (() => {
 })();
 const supabaseLiveSyncActive = Boolean(supabaseLiveSyncEnabled && supabaseSyncFunctionUrl);
 const readCurrentLocationPath = () => `${window.location.pathname}${window.location.search}`;
+const getRuntimeWindow = () => window as PresenceRuntimeWindow;
 
 export const createFirebasePresenceRuntime = (context: FirebasePresenceRuntimeContext) => {
   const {
     auth,
     db,
-    usersCollection,
     userRefFor,
     getDoc,
     setDoc,
@@ -101,8 +243,8 @@ export const createFirebasePresenceRuntime = (context: FirebasePresenceRuntimeCo
 
   const currentPresenceTabId =
     "presence-tab-" + Math.random().toString(36).slice(2) + "-" + Date.now().toString(36);
-  const siteOnlineUsersRuntimeCache = new Map<string, CacheEntry<any>>();
-  const pendingOnlineUsersLookups = new Map<string, Promise<any>>();
+  const siteOnlineUsersRuntimeCache = new Map<string, CacheEntry<SiteOnlineUser[]>>();
+  const pendingOnlineUsersLookups = new Map<string, Promise<SiteOnlineUser[]>>();
   let lastPresenceSignature = "";
   let lastPresenceAt = 0;
   let stopPresenceTrackingInternal = () => {};
@@ -135,7 +277,10 @@ export const createFirebasePresenceRuntime = (context: FirebasePresenceRuntimeCo
   };
   const buildSupabaseRpcUrl = (functionName: string) => supabaseRestUrl + "/rpc/" + functionName;
 
-  const fetchSupabaseRows = async (table: string, query: Record<string, unknown> = {}) => {
+  const fetchSupabaseRows = async <TRow extends SupabaseRow>(
+    table: string,
+    query: Record<string, unknown> = {},
+  ) => {
     if (!supabaseReadsEnabled) {
       return null;
     }
@@ -155,7 +300,7 @@ export const createFirebasePresenceRuntime = (context: FirebasePresenceRuntimeCo
       }
 
       const payload = await response.json();
-      return Array.isArray(payload) ? payload : null;
+      return Array.isArray(payload) ? (payload as TRow[]) : null;
     } catch {
       return null;
     }
@@ -163,7 +308,7 @@ export const createFirebasePresenceRuntime = (context: FirebasePresenceRuntimeCo
 
   const getSupabaseBridgeAccessToken = async () => {
     try {
-      const runtimeWindow = window as any;
+      const runtimeWindow = getRuntimeWindow();
 
       if (!runtimeWindow.sakuraSupabaseAuth && typeof runtimeWindow.sakuraStartSupabaseAuth === "function") {
         await runtimeWindow.sakuraStartSupabaseAuth();
@@ -187,7 +332,10 @@ export const createFirebasePresenceRuntime = (context: FirebasePresenceRuntimeCo
     return null;
   };
 
-  const callSupabasePresenceRpc = async (functionName: string, payload: Record<string, unknown>) => {
+  const callSupabasePresenceRpc = async <TResponse extends SupabaseRow>(
+    functionName: string,
+    payload: Record<string, unknown>,
+  ) => {
     if (!supabaseReadsEnabled) {
       return null;
     }
@@ -217,13 +365,13 @@ export const createFirebasePresenceRuntime = (context: FirebasePresenceRuntimeCo
         return null;
       }
 
-      return await response.json().catch(() => null);
+      return (await response.json().catch(() => null)) as TResponse | null;
     } catch {
       return null;
     }
   };
 
-  const getSupabaseSyncToken = async (user: any) => {
+  const getSupabaseSyncToken = async (user: FirebaseUserLike | null) => {
     if (!user || typeof user.getIdToken !== "function") {
       return null;
     }
@@ -235,7 +383,10 @@ export const createFirebasePresenceRuntime = (context: FirebasePresenceRuntimeCo
     }
   };
 
-  const syncSupabasePresenceRecord = async (user: any, presencePayload: Record<string, unknown>) => {
+  const syncSupabasePresenceRecord = async (
+    user: FirebaseUserLike | null,
+    presencePayload: Record<string, unknown>,
+  ) => {
     if (!supabaseLiveSyncActive) {
       return false;
     }
@@ -299,18 +450,20 @@ export const createFirebasePresenceRuntime = (context: FirebasePresenceRuntimeCo
     } catch {}
   };
 
-  const prunePresenceTabRegistry = (registry: Record<string, any>) => {
+  const prunePresenceTabRegistry = (registry: Record<string, unknown>) => {
     const now = Date.now();
-    const nextRegistry: Record<string, any> = {};
+    const nextRegistry: Record<string, PresenceTabEntry> = {};
 
     Object.entries(registry || {}).forEach(([key, value]) => {
       if (!value || typeof value !== "object") {
         return;
       }
 
+      const entry = value as Partial<PresenceTabEntry>;
+
       const timestamp =
-        typeof value.timestamp === "number" && Number.isFinite(value.timestamp)
-          ? value.timestamp
+        typeof entry.timestamp === "number" && Number.isFinite(entry.timestamp)
+          ? entry.timestamp
           : Number.NaN;
 
       if (!Number.isFinite(timestamp) || now - timestamp > presenceTabRegistryMaxAgeMs) {
@@ -318,9 +471,9 @@ export const createFirebasePresenceRuntime = (context: FirebasePresenceRuntimeCo
       }
 
       nextRegistry[key] = {
-        uid: typeof value.uid === "string" && value.uid ? value.uid : null,
-        visible: value.visible !== false,
-        path: typeof value.path === "string" && value.path ? value.path : null,
+        uid: typeof entry.uid === "string" && entry.uid ? entry.uid : null,
+        visible: entry.visible !== false,
+        path: typeof entry.path === "string" && entry.path ? entry.path : null,
         timestamp,
       };
     });
@@ -376,7 +529,7 @@ export const createFirebasePresenceRuntime = (context: FirebasePresenceRuntimeCo
     stopPresenceTrackingInternal = () => {};
   };
 
-  const readCacheEntry = <T,>(key: string) => {
+  const readCacheEntry = (key: string) => {
     const cachedEntry = siteOnlineUsersRuntimeCache.get(key);
 
     if (!cachedEntry || cachedEntry.expiresAt <= Date.now()) {
@@ -384,10 +537,10 @@ export const createFirebasePresenceRuntime = (context: FirebasePresenceRuntimeCo
       return null;
     }
 
-    return cachedEntry.value as T;
+    return cachedEntry.value;
   };
 
-  const writeCacheEntry = <T,>(key: string, value: T) => {
+  const writeCacheEntry = (key: string, value: SiteOnlineUser[]) => {
     siteOnlineUsersRuntimeCache.set(key, {
       value,
       expiresAt: Date.now() + onlineUsersRuntimeCacheTtlMs,
@@ -396,15 +549,15 @@ export const createFirebasePresenceRuntime = (context: FirebasePresenceRuntimeCo
     return value;
   };
 
-  const runCachedOnlineUsersLookup = async <T,>(loader: () => Promise<T>) => {
-    const cachedValue = readCacheEntry<T>("all");
+  const runCachedOnlineUsersLookup = async (loader: () => Promise<SiteOnlineUser[]>) => {
+    const cachedValue = readCacheEntry("all");
 
     if (cachedValue) {
       return cachedValue;
     }
 
     if (pendingOnlineUsersLookups.has("all")) {
-      return pendingOnlineUsersLookups.get("all") as Promise<T>;
+      return pendingOnlineUsersLookups.get("all") ?? loader();
     }
 
     const pendingLookup = loader()
@@ -421,7 +574,10 @@ export const createFirebasePresenceRuntime = (context: FirebasePresenceRuntimeCo
     return pendingLookup;
   };
 
-  const compareOnlineUsers = (left: any, right: any) => {
+  const compareOnlineUsers = (
+    left: Pick<RuntimeUserSnapshot, "presence" | "displayName" | "login">,
+    right: Pick<RuntimeUserSnapshot, "presence" | "displayName" | "login">,
+  ) => {
     const leftSeenAt =
       left?.presence?.lastSeenAt ? Date.parse(left.presence.lastSeenAt) : Number.NaN;
     const rightSeenAt =
@@ -445,7 +601,7 @@ export const createFirebasePresenceRuntime = (context: FirebasePresenceRuntimeCo
 
   const getFreshOnlineUsers = async () => {
     if (supabaseReadsEnabled) {
-      const presenceRows = await fetchSupabaseRows("public_profile_presence", {
+      const presenceRows = await fetchSupabaseRows<SupabasePresenceRow>("public_profile_presence", {
         select: "profile_id,last_seen_at",
         status: "eq.online",
         is_online: "eq.true",
@@ -455,41 +611,40 @@ export const createFirebasePresenceRuntime = (context: FirebasePresenceRuntimeCo
 
       if (Array.isArray(presenceRows) && presenceRows.length) {
         const profileIds = presenceRows
-          .map((row) => normalizeSupabaseInteger((row as any)?.profile_id))
+          .map((row) => normalizeSupabaseInteger(row.profile_id))
           .filter((profileId): profileId is number => typeof profileId === "number" && profileId > 0);
 
         if (profileIds.length) {
-          const profileRows = await fetchSupabaseRows("public_profiles", {
+          const profileRows = await fetchSupabaseRows<SupabaseProfileRow>("public_profiles", {
             select: "profile_id,firebase_uid,display_name,login,photo_url,roles,is_banned",
             profile_id: `in.(${profileIds.join(",")})`,
           });
 
           if (Array.isArray(profileRows)) {
-            const profileById = new Map<number, any>();
+            const profileById = new Map<number, SupabaseProfileRow>();
 
             profileRows.forEach((row) => {
-              const profileId = normalizeSupabaseInteger((row as any)?.profile_id);
+              const profileId = normalizeSupabaseInteger(row.profile_id);
 
               if (typeof profileId === "number" && profileId > 0) {
                 profileById.set(profileId, row);
               }
             });
 
-            return presenceRows
-              .map((presenceRow) => {
-                const profileId = normalizeSupabaseInteger((presenceRow as any)?.profile_id);
+            return presenceRows.flatMap((presenceRow) => {
+                const profileId = normalizeSupabaseInteger(presenceRow.profile_id);
 
                 if (typeof profileId !== "number" || profileId <= 0) {
-                  return null;
+                  return [];
                 }
 
                 const profileRow = profileById.get(profileId);
 
                 if (!profileRow || profileRow.is_banned === true) {
-                  return null;
+                  return [];
                 }
 
-                return {
+                return [{
                   uid:
                     typeof profileRow.firebase_uid === "string" ? profileRow.firebase_uid : null,
                   profileId,
@@ -503,18 +658,18 @@ export const createFirebasePresenceRuntime = (context: FirebasePresenceRuntimeCo
                     typeof profileRow.photo_url === "string"
                       ? profileRow.photo_url
                       : null,
+                  roles: Array.isArray(profileRow.roles) ? profileRow.roles : [],
                   accentRole: pickCommentAccentRole(
                     Array.isArray(profileRow.roles) ? profileRow.roles : []
                   ) ?? null,
                   presence: {
                     lastSeenAt:
-                      typeof (presenceRow as any)?.last_seen_at === "string"
-                        ? (presenceRow as any).last_seen_at
+                      typeof presenceRow.last_seen_at === "string"
+                        ? presenceRow.last_seen_at
                         : null,
                   },
-                };
-              })
-              .filter(Boolean) as any[];
+                }];
+              });
           }
         }
       }
@@ -524,10 +679,10 @@ export const createFirebasePresenceRuntime = (context: FirebasePresenceRuntimeCo
       const usersSnapshot = await getDocs(
         query(collection(db, "users"), where("presence.status", "==", "online"))
       );
-      const onlineUsers: any[] = [];
+      const onlineUsers: RuntimeUserSnapshot[] = [];
       const countedUserIds = new Set<string>();
 
-      usersSnapshot.forEach((userDoc: any) => {
+      usersSnapshot.forEach((userDoc) => {
         const details = userDoc.data();
 
         if (details?.isBanned === true) {
@@ -541,7 +696,7 @@ export const createFirebasePresenceRuntime = (context: FirebasePresenceRuntimeCo
       });
 
       const currentUser = auth.currentUser;
-      const currentSnapshot = (window as any).sakuraCurrentUserSnapshot;
+      const currentSnapshot = getRuntimeWindow().sakuraCurrentUserSnapshot;
       const localCurrentUid =
         currentUser && !currentUser.isAnonymous
           ? currentUser.uid
@@ -577,7 +732,7 @@ export const createFirebasePresenceRuntime = (context: FirebasePresenceRuntimeCo
               : null,
           photoURL: currentSnapshot?.photoURL ?? null,
           roles: Array.isArray(currentSnapshot?.roles) ? currentSnapshot.roles : [],
-          isBanned: currentSnapshot?.isBanned === true,
+          isBanned: Boolean(currentSnapshot?.isBanned),
           bannedAt: currentSnapshot?.bannedAt ?? null,
           verificationRequired: currentSnapshot?.verificationRequired ?? false,
           providerIds: Array.isArray(currentSnapshot?.providerIds)
@@ -612,7 +767,7 @@ export const createFirebasePresenceRuntime = (context: FirebasePresenceRuntimeCo
     runCachedOnlineUsersLookup(async () => {
       const onlineUsers = await getFreshOnlineUsers();
 
-      return onlineUsers.map((snapshot: any) => ({
+      return onlineUsers.map((snapshot) => ({
         uid: snapshot?.uid ?? null,
         profileId: typeof snapshot?.profileId === "number" ? snapshot.profileId : null,
         displayName: typeof snapshot?.displayName === "string" ? snapshot.displayName : null,
@@ -633,9 +788,9 @@ export const createFirebasePresenceRuntime = (context: FirebasePresenceRuntimeCo
       }));
     });
 
-  const syncPresence = async (user: any, options: Record<string, any> = {}) => {
+  const syncPresence = async (user: FirebaseUserLike | null, options: PresenceSyncOptions = {}) => {
     try {
-      const currentSnapshot = (window as any).sakuraCurrentUserSnapshot;
+      const currentSnapshot = getRuntimeWindow().sakuraCurrentUserSnapshot;
       const effectiveUid =
         user && !user.isAnonymous
           ? user.uid
@@ -671,7 +826,7 @@ export const createFirebasePresenceRuntime = (context: FirebasePresenceRuntimeCo
         lastVisit.status !== status ||
         Date.now() - lastPresenceAt > presenceVisitRecordCooldownMs ||
         lastPresenceSignature !== signature;
-      const presence = {
+      const presence: PresenceSnapshot = {
         status: resolvedOnline ? "online" : "offline",
         isOnline: resolvedOnline,
         currentPath,
@@ -689,7 +844,7 @@ export const createFirebasePresenceRuntime = (context: FirebasePresenceRuntimeCo
       lastPresenceSignature = signature;
       lastPresenceAt = Date.now();
 
-      const supabaseResponse = await callSupabasePresenceRpc(
+      const supabaseResponse = await callSupabasePresenceRpc<SupabasePresenceRpcResponse>(
         "sync_current_profile_presence_rpc",
         {
           target_status: presence.status,
@@ -745,12 +900,12 @@ export const createFirebasePresenceRuntime = (context: FirebasePresenceRuntimeCo
           );
         }
 
-        return (window as any).sakuraCurrentUserSnapshot ?? null;
+        return getRuntimeWindow().sakuraCurrentUserSnapshot ?? null;
       }
 
       const userRef = userRefFor(user.uid);
       const userSnapshot = await getDoc(userRef);
-      const existingData = userSnapshot.exists() ? userSnapshot.data() : {};
+      const existingData: RuntimeUserDetails = userSnapshot.exists() ? userSnapshot.data() : {};
 
       await setDoc(
         userRef,
@@ -785,7 +940,7 @@ export const createFirebasePresenceRuntime = (context: FirebasePresenceRuntimeCo
         throw error;
       }
 
-      const currentSnapshot = (window as any).sakuraCurrentUserSnapshot;
+      const currentSnapshot = getRuntimeWindow().sakuraCurrentUserSnapshot;
 
       if ((!user || user.isAnonymous) && !currentSnapshot) {
         return null;
@@ -822,7 +977,7 @@ export const createFirebasePresenceRuntime = (context: FirebasePresenceRuntimeCo
     }
   };
 
-  const startPresenceTracking = (user: any) => {
+  const startPresenceTracking = (user: FirebaseUserLike | null) => {
     stopPresenceTracking();
 
     const syncCurrentPresence = (source: string, forceVisit = false, visibility?: "visible" | "hidden") =>

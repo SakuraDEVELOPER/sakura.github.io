@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 
 export const AVATAR_FILE_ACCEPT =
   ".png,.jpg,.jpeg,.gif,.webp,.mp4,.webm";
@@ -106,41 +106,71 @@ export function AvatarMedia({
   loading,
   decoding,
 }: AvatarMediaProps) {
-  const [resolvedSrc, setResolvedSrc] = useState(src);
-  const [renderKey, setRenderKey] = useState(0);
-  const [hasLoadError, setHasLoadError] = useState(false);
-  const [isLoaded, setIsLoaded] = useState(false);
+  const [{ source, hasLoadError, isLoaded }, setLoadState] = useState(() => ({
+    source: src,
+    hasLoadError: false,
+    isLoaded: false,
+  }));
 
-  useEffect(() => {
-    let objectUrl: string | null = null;
-    setHasLoadError(false);
-    setIsLoaded(false);
-
+  const { resolvedSrc, revokeOnCleanup } = useMemo(() => {
     if (!isAnimatedAvatarSource(src)) {
-      setResolvedSrc(src);
-      setRenderKey((currentKey) => currentKey + 1);
-      return;
+      return {
+        resolvedSrc: src,
+        revokeOnCleanup: false,
+      };
     }
 
     try {
-      objectUrl = ANIMATED_DATA_URL_PATTERN.test(src.trim())
-        ? URL.createObjectURL(dataUrlToBlob(src))
-        : src;
+      return ANIMATED_DATA_URL_PATTERN.test(src.trim())
+        ? {
+            resolvedSrc: URL.createObjectURL(dataUrlToBlob(src)),
+            revokeOnCleanup: true,
+          }
+        : {
+            resolvedSrc: src,
+            revokeOnCleanup: false,
+          };
     } catch {
-      objectUrl = src;
+      return {
+        resolvedSrc: src,
+        revokeOnCleanup: false,
+      };
     }
-
-    setResolvedSrc(objectUrl ?? src);
-    setRenderKey((currentKey) => currentKey + 1);
-
-    return () => {
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
-    };
   }, [src]);
 
-  if (!resolvedSrc || hasLoadError) {
+  const renderKey = `${source === src ? source : src}:${resolvedSrc}`;
+  const resolvedHasLoadError = source === src ? hasLoadError : false;
+  const resolvedIsLoaded = source === src ? isLoaded : false;
+
+  useEffect(() => {
+    return () => {
+      if (revokeOnCleanup) {
+        URL.revokeObjectURL(resolvedSrc);
+      }
+    };
+  }, [resolvedSrc, revokeOnCleanup]);
+
+  const markLoaded = () => {
+    setLoadState((currentState) =>
+      currentState.source === src && currentState.isLoaded
+        ? currentState
+        : {
+            source: src,
+            hasLoadError: false,
+            isLoaded: true,
+          }
+    );
+  };
+
+  const markLoadError = () => {
+    setLoadState({
+      source: src,
+      hasLoadError: true,
+      isLoaded: false,
+    });
+  };
+
+  if (!resolvedSrc || resolvedHasLoadError) {
     return (
       <span
         role="img"
@@ -167,7 +197,7 @@ export function AvatarMedia({
           {initialsFromLabel(alt)}
         </span>
         <video
-          key={`${renderKey}:${resolvedSrc}`}
+          key={renderKey}
           src={resolvedSrc}
           aria-label={alt}
           title={alt}
@@ -178,17 +208,11 @@ export function AvatarMedia({
           preload="auto"
           disablePictureInPicture
           className={`absolute inset-0 h-full w-full object-cover transition duration-200 ${
-            isLoaded ? "opacity-100" : "opacity-0"
+            resolvedIsLoaded ? "opacity-100" : "opacity-0"
           }`}
-          onLoadedData={() => {
-            setIsLoaded(true);
-          }}
-          onCanPlay={() => {
-            setIsLoaded(true);
-          }}
-          onError={() => {
-            setHasLoadError(true);
-          }}
+          onLoadedData={markLoaded}
+          onCanPlay={markLoaded}
+          onError={markLoadError}
         />
       </span>
     );
@@ -206,7 +230,7 @@ export function AvatarMedia({
         {initialsFromLabel(alt)}
       </span>
       <img
-        key={`${renderKey}:${resolvedSrc}`}
+        key={renderKey}
         src={resolvedSrc}
         alt=""
         aria-label={alt}
@@ -214,14 +238,10 @@ export function AvatarMedia({
         loading={loading}
         decoding={isAnimatedAvatarSource(resolvedSrc) ? undefined : decoding}
         className={`absolute inset-0 h-full w-full object-cover transition duration-200 ${
-          isLoaded ? "opacity-100" : "opacity-0"
+          resolvedIsLoaded ? "opacity-100" : "opacity-0"
         }`}
-        onLoad={() => {
-          setIsLoaded(true);
-        }}
-        onError={() => {
-          setHasLoadError(true);
-        }}
+        onLoad={markLoaded}
+        onError={markLoadError}
       />
     </span>
   );
