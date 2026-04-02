@@ -47,6 +47,51 @@ const sakuraLeaves = Array.from({ length: 15 }, (_, index) => {
   };
 });
 
+function SakuraPetalIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className={className}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M12.07 3.18C16 5.64 18.58 8.98 18.58 12.44C18.58 16.26 15.72 19 11.89 19C8.35 19 5.72 16.69 5.72 13.39C5.72 9.35 8.42 5.86 12.07 3.18Z"
+        fill="currentColor"
+      />
+      <path
+        d="M12.07 3.18C9.23 6.53 8.26 10.39 9.12 14.78"
+        stroke="rgba(255,255,255,0.32)"
+        strokeLinecap="round"
+        strokeWidth="1.1"
+      />
+    </svg>
+  );
+}
+
+function SakuraLogoMark({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 32 32"
+      className={className}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <g fill="currentColor">
+        <ellipse cx="16" cy="7.2" rx="4.2" ry="6.2" />
+        <ellipse cx="16" cy="24.8" rx="4.2" ry="6.2" />
+        <ellipse cx="7.2" cy="16" rx="4.2" ry="6.2" transform="rotate(-90 7.2 16)" />
+        <ellipse cx="24.8" cy="16" rx="4.2" ry="6.2" transform="rotate(-90 24.8 16)" />
+        <ellipse cx="9.65" cy="9.65" rx="3.6" ry="5.4" transform="rotate(-45 9.65 9.65)" />
+      </g>
+      <circle cx="16" cy="16" r="3.1" fill="#FFD7E0" />
+      <circle cx="16" cy="16" r="1.15" fill="#111111" fillOpacity="0.22" />
+    </svg>
+  );
+}
+
 const showcaseSlides: ShowcaseSlide[] = [
   {
     id: "camera",
@@ -649,9 +694,9 @@ function SakuraBackground() {
             ease: "linear",
             delay: leaf.delay,
           }}
-          className="absolute text-xs text-[#ffb7c5]"
+          className="absolute text-[#ffb7c5]"
         >
-          ??
+          <SakuraPetalIcon className="h-3.5 w-3.5 drop-shadow-[0_0_10px_rgba(255,183,197,0.32)]" />
         </m.div>
       ))}
     </div>
@@ -1850,12 +1895,12 @@ export default function Home() {
         <nav className="grid grid-cols-1 gap-5 border-b border-[#1a1a1a] px-8 py-6 md:grid-cols-[1fr_auto_1fr] md:items-center">
           <div className="flex flex-wrap items-center gap-3 md:justify-self-start">
             <Link href="/" className="flex items-center gap-3 transition-opacity hover:opacity-90">
-            <span className="text-2xl text-[#ffb7c5] drop-shadow-[0_0_10px_rgba(255,183,197,0.5)]">
-              ??
-            </span>
-            <h1 className="text-xl font-black tracking-tighter uppercase text-white">
-              Sa<span className="text-[#ffb7c5]">kura</span>
-            </h1>
+              <span className="text-[#ffb7c5] drop-shadow-[0_0_14px_rgba(255,183,197,0.5)]">
+                <SakuraLogoMark className="h-8 w-8" />
+              </span>
+              <h1 className="text-xl font-black tracking-tighter uppercase text-white">
+                Sa<span className="text-[#ffb7c5]">kura</span>
+              </h1>
             </Link>
           </div>
 
