@@ -1359,6 +1359,44 @@
     }
   };
 
+  const cacheResolvedProfileSnapshot = (snapshot) => {
+    if (!snapshot || snapshot.isAnonymous) {
+      return snapshot;
+    }
+
+    if (typeof snapshot.profileId === "number" && snapshot.profileId > 0) {
+      writeRuntimeCacheEntry(
+        profileByIdRuntimeCache,
+        String(snapshot.profileId),
+        snapshot,
+        PROFILE_RUNTIME_CACHE_TTL_MS
+      );
+    }
+
+    const normalizedLogin = normalizeLogin(snapshot.login);
+    const normalizedDisplayName = normalizeProfileCommentAuthorName(snapshot.displayName);
+
+    if (normalizedLogin) {
+      writeRuntimeCacheEntry(
+        profileByAuthorRuntimeCache,
+        normalizedLogin,
+        snapshot,
+        PROFILE_RUNTIME_CACHE_TTL_MS
+      );
+    }
+
+    if (normalizedDisplayName) {
+      writeRuntimeCacheEntry(
+        profileByAuthorRuntimeCache,
+        normalizedDisplayName,
+        snapshot,
+        PROFILE_RUNTIME_CACHE_TTL_MS
+      );
+    }
+
+    return snapshot;
+  };
+
   const mapSupabasePresenceRow = (row) =>
     row
       ? {
@@ -1914,44 +1952,6 @@
       runtimePendingLookupCache.set(pendingKey, pendingLookup);
       return pendingLookup;
     };
-    function cacheResolvedProfileSnapshot(snapshot) {
-      if (!snapshot || snapshot.isAnonymous) {
-        return snapshot;
-      }
-
-      if (typeof snapshot.profileId === "number" && snapshot.profileId > 0) {
-        writeRuntimeCacheEntry(
-          profileByIdRuntimeCache,
-          String(snapshot.profileId),
-          snapshot,
-          PROFILE_RUNTIME_CACHE_TTL_MS
-        );
-      }
-
-      const normalizedLogin = normalizeLogin(snapshot.login);
-      const normalizedDisplayName = normalizeProfileCommentAuthorName(snapshot.displayName);
-
-      if (normalizedLogin) {
-        writeRuntimeCacheEntry(
-          profileByAuthorRuntimeCache,
-          normalizedLogin,
-          snapshot,
-          PROFILE_RUNTIME_CACHE_TTL_MS
-        );
-      }
-
-      if (normalizedDisplayName) {
-        writeRuntimeCacheEntry(
-          profileByAuthorRuntimeCache,
-          normalizedDisplayName,
-          snapshot,
-          PROFILE_RUNTIME_CACHE_TTL_MS
-        );
-      }
-
-      return snapshot;
-    }
-
     const findUserByLogin = async (loginLower) => {
       const snapshot = await getDocs(
         query(usersCollection, where("loginLower", "==", loginLower), limit(1))
