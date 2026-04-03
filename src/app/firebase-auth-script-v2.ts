@@ -93,6 +93,7 @@
   const PROFILE_LOOKUP_TIMEOUT_MS = 5000;
   const PROFILE_RUNTIME_CACHE_TTL_MS = 2 * 60 * 1000;
   const PROFILE_SEARCH_RUNTIME_CACHE_TTL_MS = 45 * 1000;
+  const PROFILE_COMMENTS_RUNTIME_CACHE_TTL_MS = 20 * 1000;
   const ONLINE_USERS_RUNTIME_CACHE_TTL_MS = 8 * 1000;
   const PRESENCE_ONLINE_WINDOW_MS = 90 * 1000;
   const PRESENCE_HEARTBEAT_INTERVAL_MS = 45 * 1000;
@@ -114,6 +115,7 @@
   const profileByIdRuntimeCache = new Map();
   const profileByAuthorRuntimeCache = new Map();
   const profilesByPrefixRuntimeCache = new Map();
+  const profileCommentsByIdRuntimeCache = new Map();
   const runtimePendingLookupCache = new Map();
 
   const createFirebaseError = (code, message) => {
@@ -3230,10 +3232,28 @@
         throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
       }
 
+      const commentsCacheKey = String(profileId);
+      const cachedComments = readRuntimeCacheEntry(
+        profileCommentsByIdRuntimeCache,
+        commentsCacheKey
+      );
+
+      if (cachedComments.hit) {
+        return cachedComments.value;
+      }
+
+      const cacheComments = (comments) =>
+        writeRuntimeCacheEntry(
+          profileCommentsByIdRuntimeCache,
+          commentsCacheKey,
+          comments,
+          PROFILE_COMMENTS_RUNTIME_CACHE_TTL_MS
+        );
+
       const supabaseFastComments = await fetchSupabaseCommentsByProfileId(profileId).catch(() => null);
 
-      if (supabaseFastComments && supabaseFastComments.length) {
-        return supabaseFastComments;
+      if (Array.isArray(supabaseFastComments)) {
+        return cacheComments(supabaseFastComments);
       }
 
       const readComments = async () => {
@@ -3262,7 +3282,9 @@
         const firestoreComments = await readComments();
         const supabaseComments = await fetchSupabaseCommentsByProfileId(profileId).catch(() => null);
 
-        return mergeProfileCommentsWithFallback(firestoreComments, supabaseComments);
+        return cacheComments(
+          mergeProfileCommentsWithFallback(firestoreComments, supabaseComments)
+        );
       } catch (error) {
         if (!isPermissionDeniedError(error)) {
           throw error;
@@ -3272,14 +3294,14 @@
       const supabaseComments = supabaseFastComments ?? await fetchSupabaseCommentsByProfileId(profileId);
 
       if (supabaseComments) {
-        return supabaseComments;
+        return cacheComments(supabaseComments);
       }
 
       await waitForAuthStateSettlement();
 
       if (auth.currentUser && !auth.currentUser.isAnonymous) {
         try {
-          return await readComments();
+          return cacheComments(await readComments());
         } catch (error) {
           if (!isPermissionDeniedError(error)) {
             throw error;
@@ -3294,13 +3316,13 @@
       }
 
       try {
-        return await readComments();
+        return cacheComments(await readComments());
       } catch (error) {
         if (isPermissionDeniedError(error)) {
           const fallbackSupabaseComments = await fetchSupabaseCommentsByProfileId(profileId);
 
           if (fallbackSupabaseComments) {
-            return fallbackSupabaseComments;
+            return cacheComments(fallbackSupabaseComments);
           }
 
           throw createFirebaseError(
@@ -3482,6 +3504,7 @@
         }
       }
 
+      profileCommentsByIdRuntimeCache.delete(String(profileId));
       return toStoredProfileComment(commentRef.id, displayCommentPayload);
     };
 
@@ -3545,6 +3568,10 @@
         }
 
         throw error;
+      }
+
+      if (typeof comment.profileId === "number" && comment.profileId > 0) {
+        profileCommentsByIdRuntimeCache.delete(String(comment.profileId));
       }
 
       return comment.id;
@@ -3651,6 +3678,10 @@
         }
 
         throw error;
+      }
+
+      if (typeof comment.profileId === "number" && comment.profileId > 0) {
+        profileCommentsByIdRuntimeCache.delete(String(comment.profileId));
       }
 
       return toStoredProfileComment(comment.id, {

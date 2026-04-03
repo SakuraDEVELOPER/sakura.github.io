@@ -485,7 +485,7 @@ function CommentMediaFrame({
     );
   }
 
-  return <img src={src} alt={alt} loading="lazy" className={className} />;
+  return <img src={src} alt={alt} loading="lazy" decoding="async" fetchPriority="low" className={className} />;
 }
 const normalizeUsernameDraft = (value: string | null | undefined) =>
   String(value ?? "")
