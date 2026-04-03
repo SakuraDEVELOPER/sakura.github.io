@@ -342,8 +342,9 @@ export function SiteOnlineBadge({
                             </span>
                           ) : null}
                           {typeof user.profileId === "number" ? (
-                            <span className="inline-flex items-center rounded-full border border-[#3a2a31] bg-[#140d11] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[#ffb7c5]">
-                              UID: {user.profileId}
+                            <span className="inline-flex items-center gap-1.5 text-[10px] text-[#b78a95]">
+                              <span aria-hidden="true" className="inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-[#ff9fbd] shadow-[0_0_10px_rgba(255,159,189,0.7)]" />
+                              <span className="whitespace-nowrap">UID: {user.profileId}</span>
                             </span>
                           ) : null}
                         </div>

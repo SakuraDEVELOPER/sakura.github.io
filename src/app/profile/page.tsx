@@ -2144,10 +2144,10 @@ export default function ProfilePage() {
               </span>
               {typeof previewProfile.profileId === "number" ? (
                 <span
-                  style={roleBadgeTextStyle}
-                  className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-[#3a2a31] bg-[#140d11] px-3 py-1 text-[10px] font-bold text-[#ffb7c5]"
+                  className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[10px] text-[#b78a95]"
                 >
-                  UID: {previewProfile.profileId}
+                  <span aria-hidden="true" className="inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-[#ff9fbd] shadow-[0_0_10px_rgba(255,159,189,0.7)]" />
+                  <span className="truncate">UID: {previewProfile.profileId}</span>
                 </span>
               ) : null}
             </span>
