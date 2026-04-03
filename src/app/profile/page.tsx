@@ -4378,7 +4378,7 @@ export default function ProfilePage() {
                                   <span className="h-1 w-1 rounded-full bg-current" />
                                 </span>
                               </button>
-                              {isCommentActionsMenuOpen ? <div className="absolute right-0 top-0 z-20 translate-x-[calc(100%+8px)] p-0 max-[900px]:right-0 max-[900px]:top-full max-[900px]:mt-2 max-[900px]:translate-x-0">
+                              {isCommentActionsMenuOpen ? <div className="absolute right-0 top-0 z-20 translate-x-[calc(100%+14px)] p-0 max-[900px]:right-0 max-[900px]:top-full max-[900px]:mt-2 max-[900px]:translate-x-0">
                                 <div className="flex min-w-[124px] flex-col gap-1.5">
                                   {isConfirmingCommentDelete ? <>
                                     <button type="button" onClick={() => handleCommentDelete(comment.id)} disabled={isDeletingComment || isSavingCommentUpdate} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">{isDeletingComment ? "Deleting..." : "Yes"}</button>
