@@ -1400,6 +1400,54 @@
       return null;
     }
   };
+  function readRuntimeCacheEntry(cache, key) {
+    if (!cache.has(key)) {
+      return { hit: false, value: null };
+    }
+
+    const cachedEntry = cache.get(key);
+
+    if (!cachedEntry || cachedEntry.expiresAt <= Date.now()) {
+      cache.delete(key);
+      return { hit: false, value: null };
+    }
+
+    return { hit: true, value: cachedEntry.value };
+  }
+  function writeRuntimeCacheEntry(cache, key, value, ttlMs) {
+    cache.set(key, {
+      value,
+      expiresAt: Date.now() + ttlMs,
+    });
+
+    return value;
+  }
+  async function runCachedLookup(cache, key, ttlMs, pendingKey, loader) {
+    const cachedEntry = readRuntimeCacheEntry(cache, key);
+
+    if (cachedEntry.hit) {
+      return cachedEntry.value;
+    }
+
+    if (runtimePendingLookupCache.has(pendingKey)) {
+      return runtimePendingLookupCache.get(pendingKey);
+    }
+
+    const pendingLookup = Promise.resolve()
+      .then(loader)
+      .then((value) => {
+        writeRuntimeCacheEntry(cache, key, value, ttlMs);
+        runtimePendingLookupCache.delete(pendingKey);
+        return value;
+      })
+      .catch((error) => {
+        runtimePendingLookupCache.delete(pendingKey);
+        throw error;
+      });
+
+    runtimePendingLookupCache.set(pendingKey, pendingLookup);
+    return pendingLookup;
+  }
 
   const cacheResolvedProfileSnapshot = (snapshot) => {
     if (!snapshot || snapshot.isAnonymous) {
@@ -1946,54 +1994,6 @@
 
       return actorSnapshot;
     };
-    function readRuntimeCacheEntry(cache, key) {
-      if (!cache.has(key)) {
-        return { hit: false, value: null };
-      }
-
-      const cachedEntry = cache.get(key);
-
-      if (!cachedEntry || cachedEntry.expiresAt <= Date.now()) {
-        cache.delete(key);
-        return { hit: false, value: null };
-      }
-
-      return { hit: true, value: cachedEntry.value };
-    }
-    function writeRuntimeCacheEntry(cache, key, value, ttlMs) {
-      cache.set(key, {
-        value,
-        expiresAt: Date.now() + ttlMs,
-      });
-
-      return value;
-    }
-    async function runCachedLookup(cache, key, ttlMs, pendingKey, loader) {
-      const cachedEntry = readRuntimeCacheEntry(cache, key);
-
-      if (cachedEntry.hit) {
-        return cachedEntry.value;
-      }
-
-      if (runtimePendingLookupCache.has(pendingKey)) {
-        return runtimePendingLookupCache.get(pendingKey);
-      }
-
-      const pendingLookup = Promise.resolve()
-        .then(loader)
-        .then((value) => {
-          writeRuntimeCacheEntry(cache, key, value, ttlMs);
-          runtimePendingLookupCache.delete(pendingKey);
-          return value;
-        })
-        .catch((error) => {
-          runtimePendingLookupCache.delete(pendingKey);
-          throw error;
-        });
-
-      runtimePendingLookupCache.set(pendingKey, pendingLookup);
-      return pendingLookup;
-    }
     const findUserByLogin = async (loginLower) => {
       const snapshot = await getDocs(
         query(usersCollection, where("loginLower", "==", loginLower), limit(1))
