@@ -175,6 +175,7 @@ declare global {
 const FIREBASE_AUTH_RUNTIME_VERSION = "2026-04-03-runtime-v2";
 const STALE_RUNTIME_RECOVERY_STORAGE_KEY = "sakura-stale-runtime-recovery-at";
 const STALE_RUNTIME_RECOVERY_COOLDOWN_MS = 20_000;
+const RUNTIME_RECOVER_QUERY_PARAM = "__runtime_recover";
 const STALE_RUNTIME_ERROR_PATTERNS = [
   /cacheResolvedProfileSnapshot is not defined/i,
   /AUTH_RUNTIME_INSTALLED_EVENT is not defined/i,
@@ -198,6 +199,24 @@ const getErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message : typeof error === "string" ? error : "";
 const isRecoverableStaleRuntimeError = (error: unknown) =>
   STALE_RUNTIME_ERROR_PATTERNS.some((pattern) => pattern.test(getErrorMessage(error)));
+const clearRuntimeRecoverQueryParam = () => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const nextUrl = new URL(window.location.href);
+
+  if (!nextUrl.searchParams.has(RUNTIME_RECOVER_QUERY_PARAM)) {
+    return;
+  }
+
+  nextUrl.searchParams.delete(RUNTIME_RECOVER_QUERY_PARAM);
+  window.history.replaceState(
+    window.history.state,
+    "",
+    `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`
+  );
+};
 const recoverFromStaleRuntime = () => {
   if (typeof window === "undefined") {
     return false;
@@ -229,7 +248,7 @@ const recoverFromStaleRuntime = () => {
   window.sakuraAuthStateSettled = false;
 
   const nextUrl = new URL(window.location.href);
-  nextUrl.searchParams.set("__runtime_recover", String(Date.now()));
+  nextUrl.searchParams.set(RUNTIME_RECOVER_QUERY_PARAM, String(Date.now()));
   window.location.replace(nextUrl.toString());
   return true;
 };
@@ -762,6 +781,8 @@ function HeaderAuth() {
     if (typeof window === "undefined") {
       return;
     }
+
+    clearRuntimeRecoverQueryParam();
 
     let unsubscribe: () => void = () => {};
 

@@ -107,6 +107,8 @@
   const PRESENCE_DIRTY_EVENT = "sakura-presence-dirty";
   const CURRENT_PROFILE_ID_STORAGE_KEY = "sakura-current-profile-id";
   const AUTH_SNAPSHOT_CACHE_STORAGE_KEY = "sakura-auth-snapshot-v1";
+  const GOOGLE_REDIRECT_INTENT_STORAGE_KEY = "sakura-google-redirect-intent-v1";
+  const GOOGLE_REDIRECT_INTENT_MAX_AGE_MS = 3 * 60 * 1000;
   const AVATAR_CONTENT_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4", "video/webm"]);
   const LOGIN_PATTERN = /^[A-Za-z\u0400-\u04FF0-9._-]+$/;
   const profileByIdRuntimeCache = new Map();
@@ -171,6 +173,46 @@
 
       window.localStorage?.removeItem(AUTH_SNAPSHOT_CACHE_STORAGE_KEY);
     } catch (error) {}
+  };
+  const rememberGoogleRedirectIntent = () => {
+    try {
+      window.sessionStorage?.setItem(
+        GOOGLE_REDIRECT_INTENT_STORAGE_KEY,
+        String(Date.now())
+      );
+    } catch (error) {}
+  };
+  const clearGoogleRedirectIntent = () => {
+    try {
+      window.sessionStorage?.removeItem(GOOGLE_REDIRECT_INTENT_STORAGE_KEY);
+    } catch (error) {}
+  };
+  const hasFreshGoogleRedirectIntent = () => {
+    try {
+      const rawStartedAt = window.sessionStorage?.getItem(
+        GOOGLE_REDIRECT_INTENT_STORAGE_KEY
+      );
+
+      if (!rawStartedAt) {
+        return false;
+      }
+
+      const startedAt = Number(rawStartedAt);
+
+      if (!Number.isFinite(startedAt) || startedAt <= 0) {
+        clearGoogleRedirectIntent();
+        return false;
+      }
+
+      if (Date.now() - startedAt > GOOGLE_REDIRECT_INTENT_MAX_AGE_MS) {
+        clearGoogleRedirectIntent();
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      return false;
+    }
   };
 
   if (!window.sakuraCurrentUserSnapshot) {
@@ -2749,6 +2791,7 @@
         return await finalizeGoogleSignIn(result.user);
       } catch (error) {
         if (shouldFallbackGooglePopupToRedirect(error)) {
+          rememberGoogleRedirectIntent();
           await signInWithRedirect(auth, provider);
           return null;
         }
@@ -4104,6 +4147,7 @@
 
     const redirectResultPromise = getRedirectResult(auth).catch((error) => {
       if (getErrorCode(error) !== "auth/no-auth-event") {
+        clearGoogleRedirectIntent();
         const message =
           error instanceof Error ? error.message : "Google redirect sign-in could not be completed.";
         window.dispatchEvent(new CustomEvent(AUTH_ERROR_EVENT, { detail: message }));
@@ -4297,6 +4341,33 @@
           markAuthStateSettled();
 
           if (!user) {
+            const redirectResult = await redirectResultPromise;
+
+            if (redirectResult?.user) {
+              const snapshot = await finalizeGoogleSignIn(redirectResult.user);
+              const allowedSnapshot = await enforceActiveSessionNotBanned(snapshot, {
+                throwError: false,
+              });
+
+              clearGoogleRedirectIntent();
+
+              if (!allowedSnapshot) {
+                callback(publishUserSnapshot(null));
+                return;
+              }
+
+              callback(allowedSnapshot);
+              startPresenceTracking(redirectResult.user);
+              return;
+            }
+
+            if (hasFreshGoogleRedirectIntent()) {
+              clearGoogleRedirectIntent();
+              emitAuthError(
+                "Google sign-in was not completed. Repeat login and allow popups/redirect in your browser."
+              );
+            }
+
             callback(publishUserSnapshot(null));
             return;
           }
@@ -4317,13 +4388,16 @@
             });
 
             if (!allowedSnapshot) {
+              clearGoogleRedirectIntent();
               callback(publishUserSnapshot(null));
               return;
             }
 
+            clearGoogleRedirectIntent();
             callback(allowedSnapshot);
             startPresenceTracking(user);
           } catch (error) {
+            clearGoogleRedirectIntent();
             await clearBrokenProfileSession(
               error instanceof Error
                 ? error.message
