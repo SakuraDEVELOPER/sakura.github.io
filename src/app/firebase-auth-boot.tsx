@@ -6,6 +6,7 @@ type FirebaseBootWindow = Window & {
   sakuraAuthStateSettled?: boolean;
   sakuraFirebaseAuth?: unknown;
   sakuraFirebaseAuthError?: string;
+  sakuraBootFirebaseAuth?: () => Promise<unknown> | unknown;
   sakuraStartFirebaseAuth?: () => Promise<unknown> | unknown;
   sakuraFirebaseRuntimeInjected?: boolean;
   sakuraFirebaseRuntimePromise?: Promise<void> | null;
@@ -93,18 +94,29 @@ const hasPersistedFirebaseSession = () => {
   return false;
 };
 
+const getAuthObjectRuntimeVersion = (auth: unknown) => {
+  if (!auth || typeof auth !== "object" || !("__runtimeVersion" in auth)) {
+    return null;
+  }
+
+  const runtimeVersion = (auth as { __runtimeVersion?: unknown }).__runtimeVersion;
+  return typeof runtimeVersion === "string" ? runtimeVersion : null;
+};
+
 const hasCurrentRuntime = (runtime: FirebaseBootWindow) =>
   Boolean(runtime.sakuraFirebaseAuth) &&
-  runtime.sakuraFirebaseRuntimeVersion === FIREBASE_AUTH_RUNTIME_VERSION;
+  runtime.sakuraFirebaseRuntimeVersion === FIREBASE_AUTH_RUNTIME_VERSION &&
+  getAuthObjectRuntimeVersion(runtime.sakuraFirebaseAuth) === FIREBASE_AUTH_RUNTIME_VERSION;
 
 const resetStaleRuntime = (runtime: FirebaseBootWindow) => {
-  if (runtime.sakuraFirebaseRuntimeVersion === FIREBASE_AUTH_RUNTIME_VERSION) {
+  if (hasCurrentRuntime(runtime)) {
     return;
   }
 
   delete runtime.sakuraFirebaseAuth;
   delete runtime.sakuraFirebaseAuthError;
   delete runtime.sakuraFirebaseRuntimeVersion;
+  delete runtime.sakuraStartFirebaseAuth;
   runtime.sakuraFirebaseRuntimeInjected = false;
   runtime.sakuraAuthStateSettled = false;
 };
@@ -227,6 +239,7 @@ export default function FirebaseAuthBoot() {
       void bootNow();
     };
 
+    runtime.sakuraBootFirebaseAuth = bootNow;
     runtime.sakuraStartFirebaseAuth = bootNow;
 
     if (shouldBootImmediately()) {

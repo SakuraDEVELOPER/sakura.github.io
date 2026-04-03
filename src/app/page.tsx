@@ -119,6 +119,7 @@ type AuthUserSnapshot = {
 };
 
 type FirebaseAuthBridge = {
+  __runtimeVersion?: string;
   login: (identifier: string, password: string) => Promise<AuthUserSnapshot | null>;
   loginWithGoogle: () => Promise<AuthUserSnapshot | null>;
   completeGoogleAccount: (credentials: {
@@ -163,6 +164,7 @@ declare global {
     loginWithGoogle?: () => Promise<AuthUserSnapshot | null>;
     sakuraCurrentUserSnapshot?: AuthUserSnapshot | null;
     sakuraAuthStateSettled?: boolean;
+    sakuraBootFirebaseAuth?: () => Promise<unknown> | unknown;
     sakuraStartFirebaseAuth?: () => Promise<unknown> | unknown;
     sakuraFirebaseAuth?: FirebaseAuthBridge;
     sakuraFirebaseAuthError?: string;
@@ -177,13 +179,14 @@ const requestFirebaseAuthBoot = () => {
     return;
   }
 
-  void window.sakuraStartFirebaseAuth?.();
+  void window.sakuraBootFirebaseAuth?.();
 };
 
 const hasCurrentFirebaseAuthRuntime = () =>
   typeof window !== "undefined" &&
   Boolean(window.sakuraFirebaseAuth) &&
-  window.sakuraFirebaseRuntimeVersion === FIREBASE_AUTH_RUNTIME_VERSION;
+  window.sakuraFirebaseRuntimeVersion === FIREBASE_AUTH_RUNTIME_VERSION &&
+  window.sakuraFirebaseAuth?.__runtimeVersion === FIREBASE_AUTH_RUNTIME_VERSION;
 
 const getAuthBridgeErrorMessage = (event: Event | undefined, fallback: string) => {
   if (typeof window !== "undefined" && window.sakuraFirebaseAuthError) {

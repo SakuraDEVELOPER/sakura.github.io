@@ -83,6 +83,7 @@ type MentionDraft = {
 };
 
 type Bridge = {
+  __runtimeVersion?: string;
   getProfileById: (profileId: number) => Promise<UserProfile | null>;
   getProfileByAuthorName: (authorName: string) => Promise<UserProfile | null>;
   getProfilesByLoginPrefix: (loginPrefix: string) => Promise<UserProfile[]>;
@@ -137,6 +138,7 @@ type RuntimeWindow = Window & {
   firebaseConfig?: { projectId?: string };
   sakuraCurrentUserSnapshot?: UserProfile | null;
   sakuraAuthStateSettled?: boolean;
+  sakuraBootFirebaseAuth?: () => Promise<unknown> | unknown;
   sakuraStartFirebaseAuth?: () => Promise<unknown> | unknown;
   sakuraFirebaseAuth?: Bridge;
   sakuraFirebaseAuthError?: string;
@@ -198,7 +200,8 @@ const restoreProfilePathScript = `
 const getWindowState = () => window as RuntimeWindow;
 const hasCurrentFirebaseAuthRuntime = (runtime: RuntimeWindow) =>
   Boolean(runtime.sakuraFirebaseAuth) &&
-  runtime.sakuraFirebaseRuntimeVersion === FIREBASE_AUTH_RUNTIME_VERSION;
+  runtime.sakuraFirebaseRuntimeVersion === FIREBASE_AUTH_RUNTIME_VERSION &&
+  runtime.sakuraFirebaseAuth?.__runtimeVersion === FIREBASE_AUTH_RUNTIME_VERSION;
 
 const getAuthBridgeErrorMessage = (event: Event | undefined, fallback: string) => {
   if (typeof window !== "undefined" && getWindowState().sakuraFirebaseAuthError) {
@@ -1274,7 +1277,7 @@ export default function ProfilePage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const runtime = getWindowState();
-    void runtime.sakuraStartFirebaseAuth?.();
+    void runtime.sakuraBootFirebaseAuth?.();
     let unsubscribe: () => void = () => {};
     const sync = () => {
       if (hasCurrentFirebaseAuthRuntime(runtime) && runtime.sakuraFirebaseAuth) {

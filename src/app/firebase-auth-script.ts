@@ -4114,6 +4114,7 @@
 
     window.sakuraFirebaseRuntimeVersion = AUTH_RUNTIME_VERSION;
     window.sakuraFirebaseAuth = {
+      __runtimeVersion: AUTH_RUNTIME_VERSION,
       register: async ({ login, displayName, email, password }) => {
         const credentials = await createUserWithEmailAndPassword(auth, email, password);
         const preferredLogin =
