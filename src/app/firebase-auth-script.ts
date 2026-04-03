@@ -1904,7 +1904,7 @@
 
       return actorSnapshot;
     };
-    const readRuntimeCacheEntry = (cache, key) => {
+    function readRuntimeCacheEntry(cache, key) {
       if (!cache.has(key)) {
         return { hit: false, value: null };
       }
@@ -1917,16 +1917,16 @@
       }
 
       return { hit: true, value: cachedEntry.value };
-    };
-    const writeRuntimeCacheEntry = (cache, key, value, ttlMs) => {
+    }
+    function writeRuntimeCacheEntry(cache, key, value, ttlMs) {
       cache.set(key, {
         value,
         expiresAt: Date.now() + ttlMs,
       });
 
       return value;
-    };
-    const runCachedLookup = async (cache, key, ttlMs, pendingKey, loader) => {
+    }
+    async function runCachedLookup(cache, key, ttlMs, pendingKey, loader) {
       const cachedEntry = readRuntimeCacheEntry(cache, key);
 
       if (cachedEntry.hit) {
@@ -1951,7 +1951,7 @@
 
       runtimePendingLookupCache.set(pendingKey, pendingLookup);
       return pendingLookup;
-    };
+    }
     const findUserByLogin = async (loginLower) => {
       const snapshot = await getDocs(
         query(usersCollection, where("loginLower", "==", loginLower), limit(1))
