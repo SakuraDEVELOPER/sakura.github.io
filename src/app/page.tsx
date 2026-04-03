@@ -2271,7 +2271,7 @@ function LegacyFeatureShowcase() {
                 type="button"
                 onClick={goToPrevious}
                 aria-label="Previous card"
-                className="absolute -left-2 z-10 flex h-12 w-12 items-center justify-center rounded-full border border-[#2b1b1e] bg-[#0d0d0d] text-[#ffb7c5] shadow-[0_0_20px_rgba(255,183,197,0.08)] transition hover:border-[#ffb7c5]/50 hover:bg-[#1a1012] md:-left-6"
+                className="absolute -left-4 z-10 flex h-12 w-12 items-center justify-center rounded-full border border-[#2b1b1e] bg-[#0d0d0d] text-[#ffb7c5] shadow-[0_0_20px_rgba(255,183,197,0.08)] transition hover:border-[#ffb7c5]/50 hover:bg-[#1a1012] md:-left-8"
               >
                 ←
               </button>
@@ -2337,7 +2337,7 @@ function LegacyFeatureShowcase() {
                 type="button"
                 onClick={goToNext}
                 aria-label="Next card"
-                className="absolute -right-2 z-10 flex h-12 w-12 items-center justify-center rounded-full border border-[#2b1b1e] bg-[#0d0d0d] text-[#ffb7c5] shadow-[0_0_20px_rgba(255,183,197,0.08)] transition hover:border-[#ffb7c5]/50 hover:bg-[#1a1012] md:-right-6"
+                className="absolute -right-4 z-10 flex h-12 w-12 items-center justify-center rounded-full border border-[#2b1b1e] bg-[#0d0d0d] text-[#ffb7c5] shadow-[0_0_20px_rgba(255,183,197,0.08)] transition hover:border-[#ffb7c5]/50 hover:bg-[#1a1012] md:-right-8"
               >
                 →
               </button>
@@ -2479,7 +2479,7 @@ function FeatureShowcase() {
               type="button"
               onClick={goToPrevious}
               aria-label="Previous card"
-              className="absolute -left-2 z-10 flex h-12 w-12 items-center justify-center rounded-full border border-[#ffb7c5]/20 bg-[#140f12] text-[#ffb7c5] shadow-[0_0_20px_rgba(255,183,197,0.08)] transition hover:border-[#ffb7c5]/55 hover:bg-[#1c1217] md:-left-6"
+              className="absolute -left-4 z-10 flex h-12 w-12 items-center justify-center rounded-full border border-[#ffb7c5]/20 bg-[#140f12] text-[#ffb7c5] shadow-[0_0_20px_rgba(255,183,197,0.08)] transition hover:border-[#ffb7c5]/55 hover:bg-[#1c1217] md:-left-8"
             >
               ←
             </button>
@@ -2536,7 +2536,7 @@ function FeatureShowcase() {
               type="button"
               onClick={goToNext}
               aria-label="Next card"
-              className="absolute -right-2 z-10 flex h-12 w-12 items-center justify-center rounded-full border border-[#ffb7c5]/20 bg-[#140f12] text-[#ffb7c5] shadow-[0_0_20px_rgba(255,183,197,0.08)] transition hover:border-[#ffb7c5]/55 hover:bg-[#1c1217] md:-right-6"
+              className="absolute -right-4 z-10 flex h-12 w-12 items-center justify-center rounded-full border border-[#ffb7c5]/20 bg-[#140f12] text-[#ffb7c5] shadow-[0_0_20px_rgba(255,183,197,0.08)] transition hover:border-[#ffb7c5]/55 hover:bg-[#1c1217] md:-right-8"
             >
               →
             </button>
