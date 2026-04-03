@@ -4349,7 +4349,7 @@ export default function ProfilePage() {
                             </div>
                             {resolvedCommentAuthorProfile ? renderProfileHoverPreview(resolvedCommentAuthorProfile, comment.authorName, "start") : null}
                           </div>
-                          <div className="flex shrink-0 items-start justify-end">
+                          <div className="-mt-1 flex shrink-0 items-start justify-end">
                             {canShowCommentActionsMenu ? <div data-comment-actions-menu className="relative">
                               <button
                                 type="button"
@@ -4366,10 +4366,10 @@ export default function ProfilePage() {
                                 aria-label={isCommentActionsMenuOpen ? "Close comment actions" : "Open comment actions"}
                                 aria-expanded={isCommentActionsMenuOpen}
                                 disabled={isCommentActionMenuBusy}
-                                className={`inline-flex h-7 w-7 items-center justify-center rounded-full border transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                                className={`inline-flex h-6 w-6 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-60 ${
                                   isCommentActionsMenuOpen
-                                    ? "border-[#ffb7c5]/45 bg-transparent text-[#ffb7c5] shadow-none"
-                                    : "border-[#2f2328] bg-transparent text-[#b78a95] hover:border-[#ffb7c5]/38 hover:text-[#ffb7c5]"
+                                    ? "bg-transparent text-[#ffb7c5]"
+                                    : "bg-transparent text-[#b78a95] hover:text-[#ffb7c5]"
                                 }`}
                               >
                                 <span className="inline-flex items-center gap-0.5">
