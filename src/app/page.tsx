@@ -177,6 +177,30 @@ const requestFirebaseAuthBoot = () => {
   void window.sakuraStartFirebaseAuth?.();
 };
 
+const getAuthBridgeErrorMessage = (event: Event | undefined, fallback: string) => {
+  if (typeof window !== "undefined" && window.sakuraFirebaseAuthError) {
+    return window.sakuraFirebaseAuthError;
+  }
+
+  if (event instanceof CustomEvent) {
+    if (typeof event.detail === "string" && event.detail) {
+      return event.detail;
+    }
+
+    if (
+      event.detail &&
+      typeof event.detail === "object" &&
+      "message" in event.detail &&
+      typeof event.detail.message === "string" &&
+      event.detail.message
+    ) {
+      return event.detail.message;
+    }
+  }
+
+  return fallback;
+};
+
 const AUTH_READY_EVENT = "sakura-auth-ready";
 const AUTH_ERROR_EVENT = "sakura-auth-error";
 const USER_UPDATE_EVENT = "sakura-user-update";
@@ -729,19 +753,17 @@ function HeaderAuth() {
       setIsVerificationModalOpen(true);
     };
 
-    const handleError = () => {
+    const handleError = (event: Event) => {
       setAuthLoadError(
-        window.sakuraFirebaseAuthError ??
+        getAuthBridgeErrorMessage(
+          event,
           "Firebase Auth module did not load. Проверьте соединение и настройки Firebase."
+        )
       );
     };
 
     const timeoutId = window.setTimeout(() => {
-      if (
-        !window.sakuraFirebaseAuth &&
-        !window.sakuraStartFirebaseAuth &&
-        !window.sakuraFirebaseAuthError
-      ) {
+      if (!window.sakuraFirebaseAuth && !window.sakuraFirebaseAuthError) {
         setAuthLoadError(
           "Firebase Auth module did not load. Проверьте соединение и настройки Firebase."
         );

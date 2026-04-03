@@ -3,6 +3,9 @@
 import { useEffect } from "react";
 
 type FirebaseBootWindow = Window & {
+  sakuraAuthStateSettled?: boolean;
+  sakuraFirebaseAuth?: unknown;
+  sakuraFirebaseAuthError?: string;
   sakuraStartFirebaseAuth?: () => Promise<unknown> | unknown;
   sakuraFirebaseRuntimeInjected?: boolean;
   sakuraFirebaseRuntimePromise?: Promise<void> | null;
@@ -10,11 +13,33 @@ type FirebaseBootWindow = Window & {
 };
 
 const getWindowState = () => window as FirebaseBootWindow;
+const AUTH_ERROR_EVENT = "sakura-auth-error";
+const AUTH_RUNTIME_INSTALLED_EVENT = "sakura-auth-runtime-installed";
+const AUTH_STATE_SETTLED_EVENT = "sakura-auth-state-settled";
+const AUTH_RUNTIME_INSTALL_TIMEOUT_MS = 4_000;
 const CHUNK_RELOAD_STORAGE_KEY = "sakura-chunk-reload-at";
 const CHUNK_RELOAD_COOLDOWN_MS = 20_000;
 const FIREBASE_AUTH_STORAGE_KEY_PREFIX = "firebase:authUser:";
 const AUTH_IDLE_PRELOAD_TIMEOUT_MS = 700;
 const AUTH_FALLBACK_PRELOAD_TIMEOUT_MS = 450;
+
+const getBootErrorMessage = (error: unknown) =>
+  error instanceof Error && error.message
+    ? error.message
+    : "Firebase Auth runtime did not start. Проверьте соединение и настройки Firebase.";
+
+const reportBootFailure = (runtime: FirebaseBootWindow, error: unknown) => {
+  const message = getBootErrorMessage(error);
+
+  runtime.sakuraFirebaseAuthError = message;
+  runtime.sakuraAuthStateSettled = true;
+  window.dispatchEvent(new CustomEvent(AUTH_STATE_SETTLED_EVENT));
+  window.dispatchEvent(
+    new CustomEvent(AUTH_ERROR_EVENT, {
+      detail: { message },
+    })
+  );
+};
 
 const isChunkLoadFailure = (error: unknown) => {
   if (!(error instanceof Error)) {
@@ -109,21 +134,56 @@ export default function FirebaseAuthBoot() {
     };
 
     const loadRuntime = async () => {
+      if (runtime.sakuraFirebaseAuth) {
+        return;
+      }
+
       if (!runtime.sakuraLoadFirebasePresenceRuntime) {
         runtime.sakuraLoadFirebasePresenceRuntime = () => import("./firebase-auth-presence-runtime");
       }
 
       if (!runtime.sakuraFirebaseRuntimeInjected && !runtime.sakuraFirebaseRuntimePromise) {
-        runtime.sakuraFirebaseRuntimePromise = import("./firebase-auth-script")
-          .then(async ({ default: firebaseModuleScript }) => {
-            if (!runtime.sakuraFirebaseRuntimeInjected) {
-              const script = document.createElement("script");
+        let injectedScript: HTMLScriptElement | null = null;
 
-              script.type = "module";
-              script.textContent = firebaseModuleScript;
-              document.body.appendChild(script);
-              runtime.sakuraFirebaseRuntimeInjected = true;
+        runtime.sakuraFirebaseRuntimePromise = import("./firebase-auth-script")
+          .then(({ default: firebaseModuleScript }) => {
+            delete runtime.sakuraFirebaseAuthError;
+            runtime.sakuraAuthStateSettled = false;
+
+            return new Promise<void>((resolve, reject) => {
+              const cleanup = () => {
+                window.clearTimeout(timeoutId);
+                window.removeEventListener(AUTH_RUNTIME_INSTALLED_EVENT, handleInstalled);
+              };
+              const handleInstalled = () => {
+                cleanup();
+                runtime.sakuraFirebaseRuntimeInjected = true;
+                resolve();
+              };
+              const timeoutId = window.setTimeout(() => {
+                cleanup();
+                reject(
+                  new Error(
+                    "Firebase Auth runtime did not start. Проверьте соединение и настройки Firebase."
+                  )
+                );
+              }, AUTH_RUNTIME_INSTALL_TIMEOUT_MS);
+
+              window.addEventListener(AUTH_RUNTIME_INSTALLED_EVENT, handleInstalled, { once: true });
+              injectedScript = document.createElement("script");
+              injectedScript.type = "module";
+              injectedScript.textContent = firebaseModuleScript;
+              document.body.appendChild(injectedScript);
+            });
+          })
+          .catch((error) => {
+            runtime.sakuraFirebaseRuntimeInjected = false;
+
+            if (injectedScript?.isConnected) {
+              injectedScript.remove();
             }
+
+            reportBootFailure(runtime, error);
           })
           .finally(() => {
             runtime.sakuraFirebaseRuntimePromise = null;
