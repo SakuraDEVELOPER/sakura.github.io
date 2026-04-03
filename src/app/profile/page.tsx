@@ -1120,6 +1120,9 @@ const profileNameOf = (user: Pick<UserProfile, "login" | "displayName" | "profil
   user.displayName?.trim() ||
   user.login?.trim() ||
   (typeof user.profileId === "number" ? `Profile #${user.profileId}` : "Sakura User");
+const profileSearchIdentityKey = (profile: UserProfile) =>
+  profile.uid ||
+  (typeof profile.profileId === "number" ? `profile:${profile.profileId}` : "");
 const nameOf = (user: UserProfile) =>
   profileNameOf(user);
 const createPendingCommentId = () =>
@@ -1293,6 +1296,12 @@ export default function ProfilePage() {
   const [isProfileThemePanelOpen, setIsProfileThemePanelOpen] = useState(false);
   const [previousProfileId, setPreviousProfileId] = useState<number | null | undefined>(undefined);
   const [nextProfileId, setNextProfileId] = useState<number | null | undefined>(undefined);
+  const [isHeaderProfileSearchOpen, setIsHeaderProfileSearchOpen] = useState(false);
+  const [headerProfileSearchQuery, setHeaderProfileSearchQuery] = useState("");
+  const [headerProfileSearchResults, setHeaderProfileSearchResults] = useState<UserProfile[]>([]);
+  const [headerProfileSearchError, setHeaderProfileSearchError] = useState<string | null>(null);
+  const [headerProfileSearchFeedback, setHeaderProfileSearchFeedback] = useState<string | null>(null);
+  const [isHeaderProfileSearchLoading, setIsHeaderProfileSearchLoading] = useState(false);
   const commentTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const profileThemeAudioRef = useRef<HTMLAudioElement | null>(null);
   const profileThemeAutoplayAttemptedRef = useRef<string | null>(null);
@@ -1302,6 +1311,7 @@ export default function ProfilePage() {
   const editingCommentMediaInputRef = useRef<HTMLInputElement | null>(null);
   const ownerUsernameInputRef = useRef<HTMLInputElement | null>(null);
   const adminUsernameInputRef = useRef<HTMLInputElement | null>(null);
+  const headerProfileSearchInputRef = useRef<HTMLInputElement | null>(null);
   const currentUserIdentitySignature = currentUser
     ? `${currentUser.uid}:${currentUser.isAnonymous ? "1" : "0"}:${currentUser.profileId ?? ""}`
     : "guest";
@@ -1323,6 +1333,16 @@ export default function ProfilePage() {
     element.style.height = "auto";
     element.style.height = `${element.scrollHeight}px`;
   };
+
+  useEffect(() => {
+    if (!isHeaderProfileSearchOpen) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      headerProfileSearchInputRef.current?.focus();
+    });
+  }, [isHeaderProfileSearchOpen]);
 
   useEffect(() => {
     setHasHydrated(true);
@@ -3475,6 +3495,97 @@ export default function ProfilePage() {
     }
   };
 
+  const toggleHeaderProfileSearch = () => {
+    setIsHeaderProfileSearchOpen((isOpen) => {
+      const nextIsOpen = !isOpen;
+
+      if (!nextIsOpen) {
+        setHeaderProfileSearchError(null);
+        setHeaderProfileSearchFeedback(null);
+      }
+
+      return nextIsOpen;
+    });
+  };
+
+  const handleHeaderProfileSearchSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const bridge = getWindowState().sakuraFirebaseAuth;
+    const rawQuery = headerProfileSearchQuery.trim();
+    const normalizedLookup = rawQuery.replace(/^@+/, "");
+
+    setHeaderProfileSearchError(null);
+    setHeaderProfileSearchFeedback(null);
+
+    if (!rawQuery) {
+      setHeaderProfileSearchResults([]);
+      setHeaderProfileSearchError("Enter UID, login, or username.");
+      return;
+    }
+
+    if (!bridge) {
+      setHeaderProfileSearchResults([]);
+      setHeaderProfileSearchError("Profile search is unavailable right now.");
+      return;
+    }
+
+    setIsHeaderProfileSearchLoading(true);
+
+    try {
+      const resultsByKey = new Map<string, UserProfile>();
+      const includeProfile = (profile: UserProfile | null) => {
+        if (!profile) {
+          return;
+        }
+
+        const identityKey = profileSearchIdentityKey(profile);
+
+        if (!identityKey || resultsByKey.has(identityKey)) {
+          return;
+        }
+
+        resultsByKey.set(identityKey, profile);
+      };
+
+      if (/^\d+$/.test(normalizedLookup)) {
+        const profileId = Number(normalizedLookup);
+
+        if (Number.isInteger(profileId) && profileId > 0) {
+          includeProfile(await bridge.getProfileById(profileId));
+        }
+      }
+
+      const authorQueries = Array.from(
+        new Set([rawQuery, normalizedLookup].filter((value) => value.length > 0))
+      );
+      const authorMatches = await Promise.all(
+        authorQueries.map((authorQuery) => bridge.getProfileByAuthorName(authorQuery))
+      );
+      authorMatches.forEach((profile) => includeProfile(profile));
+
+      if (normalizedLookup.length >= 2) {
+        const prefixMatches = await bridge.getProfilesByLoginPrefix(normalizedLookup);
+        prefixMatches.forEach((profile) => includeProfile(profile));
+      }
+
+      const resolvedResults = Array.from(resultsByKey.values()).slice(0, 8);
+      setHeaderProfileSearchResults(resolvedResults);
+
+      if (resolvedResults.length) {
+        setHeaderProfileSearchFeedback(
+          `Found ${resolvedResults.length} account${resolvedResults.length === 1 ? "" : "s"}.`
+        );
+      } else {
+        setHeaderProfileSearchFeedback(`No accounts found for "${rawQuery}".`);
+      }
+    } catch (error) {
+      setHeaderProfileSearchResults([]);
+      setHeaderProfileSearchError(getProfileActionErrorMessage(error, "Could not search accounts."));
+    } finally {
+      setIsHeaderProfileSearchLoading(false);
+    }
+  };
+
   const handleAvatarChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
     event.target.value = "";
@@ -4230,12 +4341,92 @@ export default function ProfilePage() {
               <div className="flex flex-wrap items-center justify-end gap-3">
                 <Link href="/" className="inline-flex items-center justify-center rounded-full border border-[#2a2a2a] bg-[#101010] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-gray-300 transition hover:border-[#4a4a4a] hover:text-white">Home</Link>
                 {visibleCurrentUser?.profileId && !isOwner ? <a href={profilePath(visibleCurrentUser.profileId)} className="inline-flex items-center justify-center rounded-full border border-[#2b1b1e] bg-[#1a1012] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white">My Profile</a> : null}
+                <button
+                  type="button"
+                  onClick={toggleHeaderProfileSearch}
+                  aria-expanded={isHeaderProfileSearchOpen}
+                  aria-controls="header-profile-search"
+                  aria-label="Search profiles"
+                  title="Search profiles"
+                  className={`inline-flex h-9 w-9 items-center justify-center rounded-full border bg-[#140d11] transition ${isHeaderProfileSearchOpen ? "border-[#ffb7c5]/50 text-[#ffd6df]" : "border-[#2b1b1e] text-[#ffb7c5] hover:border-[#ffb7c5]/40 hover:text-white"}`}
+                >
+                  <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5 fill-current">
+                    <path d="M11.9 10.8 15 13.9 13.9 15l-3.1-3.1a5.9 5.9 0 1 1 1.1-1.1ZM6.6 11A4.4 4.4 0 1 0 6.6 2a4.4 4.4 0 0 0 0 8.8Z" />
+                  </svg>
+                </button>
                 {visibleCurrentUser ? <button type="button" onClick={handleLogout} disabled={isLoggingOut} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">{isLoggingOut ? "Logging out..." : "Logout"}</button> : null}
                 <div className="lg:hidden">
                   <SiteOnlineBadge count={siteOnlineCount} profileHrefBuilder={profilePath} />
                 </div>
               </div>
             </nav>
+
+            {isHeaderProfileSearchOpen ? (
+              <div id="header-profile-search" className="mt-3 rounded-[24px] border border-[#24171b] bg-[radial-gradient(circle_at_top_left,rgba(255,183,197,0.1),transparent_62%),#090909] px-4 py-4">
+                <form onSubmit={handleHeaderProfileSearchSubmit} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                  <label className="min-w-0 flex-1">
+                    <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-[#b78a95]">Find Account</span>
+                    <input
+                      ref={headerProfileSearchInputRef}
+                      type="text"
+                      value={headerProfileSearchQuery}
+                      onChange={(event) => {
+                        const nextQuery = event.target.value;
+                        setHeaderProfileSearchQuery(nextQuery);
+                        setHeaderProfileSearchError(null);
+                        setHeaderProfileSearchFeedback(null);
+
+                        if (!nextQuery.trim()) {
+                          setHeaderProfileSearchResults([]);
+                        }
+                      }}
+                      className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-2.5 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55"
+                      placeholder="UID, login, or username"
+                    />
+                  </label>
+                  <button type="submit" disabled={isHeaderProfileSearchLoading} className="inline-flex h-[42px] shrink-0 items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-5 text-[11px] font-bold uppercase tracking-[0.16em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">
+                    {isHeaderProfileSearchLoading ? "..." : "Search"}
+                  </button>
+                </form>
+                {headerProfileSearchError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{headerProfileSearchError}</p> : null}
+                {!headerProfileSearchError && headerProfileSearchFeedback ? <p className="mt-3 text-xs leading-relaxed text-gray-500">{headerProfileSearchFeedback}</p> : null}
+                {headerProfileSearchResults.length ? (
+                  <div className="mt-3 space-y-2">
+                    {headerProfileSearchResults.map((candidateProfile, index) => {
+                      const candidateProfileId =
+                        typeof candidateProfile.profileId === "number" ? candidateProfile.profileId : null;
+                      const isNavigable = typeof candidateProfileId === "number";
+                      const candidateKey = profileSearchIdentityKey(candidateProfile) || `candidate-${index}`;
+                      const candidateBody = <>
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-semibold text-white">{profileNameOf(candidateProfile)}</span>
+                          <span className="block truncate text-xs text-gray-500">{candidateProfile.login ? `@${candidateProfile.login}` : "No login"}</span>
+                        </span>
+                        <span className="inline-flex shrink-0 items-center gap-1.5 text-[10px] text-[#b78a95]">
+                          <span aria-hidden="true" className="inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-[#ff9fbd] shadow-[0_0_10px_rgba(255,159,189,0.7)]" />
+                          <span className="whitespace-nowrap">{isNavigable ? `UID: ${candidateProfileId}` : "UID unavailable"}</span>
+                        </span>
+                      </>;
+
+                      return isNavigable ? (
+                        <a
+                          key={candidateKey}
+                          href={profilePath(candidateProfileId)}
+                          onClick={() => setIsHeaderProfileSearchOpen(false)}
+                          className="flex items-center justify-between gap-3 rounded-2xl border border-[#222] bg-[#0b0b0b] px-3 py-2.5 transition hover:border-[#ffb7c5]/35"
+                        >
+                          {candidateBody}
+                        </a>
+                      ) : (
+                        <div key={candidateKey} className="flex items-center justify-between gap-3 rounded-2xl border border-[#1e1e1e] bg-[#0b0b0b]/70 px-3 py-2.5 opacity-80">
+                          {candidateBody}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
 
             <div className="fixed right-8 top-[52px] z-40 hidden lg:flex">
               <SiteOnlineBadge
