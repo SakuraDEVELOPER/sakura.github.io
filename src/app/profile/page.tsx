@@ -4341,6 +4341,7 @@ export default function ProfilePage() {
               <div className="flex flex-wrap items-center justify-end gap-3">
                 <Link href="/" className="inline-flex items-center justify-center rounded-full border border-[#2a2a2a] bg-[#101010] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-gray-300 transition hover:border-[#4a4a4a] hover:text-white">Home</Link>
                 {visibleCurrentUser?.profileId && !isOwner ? <a href={profilePath(visibleCurrentUser.profileId)} className="inline-flex items-center justify-center rounded-full border border-[#2b1b1e] bg-[#1a1012] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white">My Profile</a> : null}
+                {visibleCurrentUser ? <button type="button" onClick={handleLogout} disabled={isLoggingOut} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">{isLoggingOut ? "Logging out..." : "Logout"}</button> : null}
                 <button
                   type="button"
                   onClick={toggleHeaderProfileSearch}
@@ -4348,18 +4349,30 @@ export default function ProfilePage() {
                   aria-controls="header-profile-search"
                   aria-label="Search profiles"
                   title="Search profiles"
-                  className={`inline-flex h-9 w-9 items-center justify-center rounded-full border bg-[#140d11] transition ${isHeaderProfileSearchOpen ? "border-[#ffb7c5]/50 text-[#ffd6df]" : "border-[#2b1b1e] text-[#ffb7c5] hover:border-[#ffb7c5]/40 hover:text-white"}`}
+                  className={`inline-flex h-9 w-9 items-center justify-center rounded-full border bg-[#140d11] transition md:hidden ${isHeaderProfileSearchOpen ? "border-[#ffb7c5]/50 text-[#ffd6df]" : "border-[#2b1b1e] text-[#ffb7c5] hover:border-[#ffb7c5]/40 hover:text-white"}`}
                 >
                   <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5 fill-current">
                     <path d="M11.9 10.8 15 13.9 13.9 15l-3.1-3.1a5.9 5.9 0 1 1 1.1-1.1ZM6.6 11A4.4 4.4 0 1 0 6.6 2a4.4 4.4 0 0 0 0 8.8Z" />
                   </svg>
                 </button>
-                {visibleCurrentUser ? <button type="button" onClick={handleLogout} disabled={isLoggingOut} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">{isLoggingOut ? "Logging out..." : "Logout"}</button> : null}
                 <div className="lg:hidden">
                   <SiteOnlineBadge count={siteOnlineCount} profileHrefBuilder={profilePath} />
                 </div>
               </div>
             </nav>
+            <button
+              type="button"
+              onClick={toggleHeaderProfileSearch}
+              aria-expanded={isHeaderProfileSearchOpen}
+              aria-controls="header-profile-search"
+              aria-label="Search profiles"
+              title="Search profiles"
+              className={`absolute -right-[48px] top-1/2 z-30 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border bg-[#140d11] transition md:inline-flex ${isHeaderProfileSearchOpen ? "border-[#ffb7c5]/50 text-[#ffd6df]" : "border-[#2b1b1e] text-[#ffb7c5] hover:border-[#ffb7c5]/40 hover:text-white"}`}
+            >
+              <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5 fill-current">
+                <path d="M11.9 10.8 15 13.9 13.9 15l-3.1-3.1a5.9 5.9 0 1 1 1.1-1.1ZM6.6 11A4.4 4.4 0 1 0 6.6 2a4.4 4.4 0 0 0 0 8.8Z" />
+              </svg>
+            </button>
 
             {isHeaderProfileSearchOpen ? (
               <div id="header-profile-search" className="mt-3 rounded-[24px] border border-[#24171b] bg-[radial-gradient(circle_at_top_left,rgba(255,183,197,0.1),transparent_62%),#090909] px-4 py-4">
