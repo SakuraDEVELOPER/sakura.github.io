@@ -145,7 +145,7 @@ type RuntimeWindow = Window & {
   sakuraFirebaseRuntimeVersion?: string;
 };
 
-const FIREBASE_AUTH_RUNTIME_VERSION = "2026-04-03-runtime-v1";
+const FIREBASE_AUTH_RUNTIME_VERSION = "2026-04-03-runtime-v2";
 const AUTH_READY_EVENT = "sakura-auth-ready";
 const AUTH_ERROR_EVENT = "sakura-auth-error";
 const AUTH_STATE_SETTLED_EVENT = "sakura-auth-state-settled";
@@ -179,6 +179,7 @@ const STALE_RUNTIME_RECOVERY_COOLDOWN_MS = 20_000;
 const STALE_RUNTIME_ERROR_PATTERNS = [
   /cacheResolvedProfileSnapshot is not defined/i,
   /AUTH_RUNTIME_INSTALLED_EVENT is not defined/i,
+  /writeRuntimeCacheEntry is not defined/i,
 ];
 const restoreProfilePathScript = `
   (function () {

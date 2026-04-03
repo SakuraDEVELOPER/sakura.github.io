@@ -172,12 +172,13 @@ declare global {
   }
 }
 
-const FIREBASE_AUTH_RUNTIME_VERSION = "2026-04-03-runtime-v1";
+const FIREBASE_AUTH_RUNTIME_VERSION = "2026-04-03-runtime-v2";
 const STALE_RUNTIME_RECOVERY_STORAGE_KEY = "sakura-stale-runtime-recovery-at";
 const STALE_RUNTIME_RECOVERY_COOLDOWN_MS = 20_000;
 const STALE_RUNTIME_ERROR_PATTERNS = [
   /cacheResolvedProfileSnapshot is not defined/i,
   /AUTH_RUNTIME_INSTALLED_EVENT is not defined/i,
+  /writeRuntimeCacheEntry is not defined/i,
 ];
 
 const requestFirebaseAuthBoot = () => {

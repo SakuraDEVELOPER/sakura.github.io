@@ -15,7 +15,7 @@ type FirebaseBootWindow = Window & {
 };
 
 const getWindowState = () => window as FirebaseBootWindow;
-const FIREBASE_AUTH_RUNTIME_VERSION = "2026-04-03-runtime-v1";
+const FIREBASE_AUTH_RUNTIME_VERSION = "2026-04-03-runtime-v2";
 const AUTH_ERROR_EVENT = "sakura-auth-error";
 const AUTH_RUNTIME_INSTALLED_EVENT = "sakura-auth-runtime-installed";
 const AUTH_STATE_SETTLED_EVENT = "sakura-auth-state-settled";
@@ -177,7 +177,7 @@ export default function FirebaseAuthBoot() {
       if (!runtime.sakuraFirebaseRuntimeInjected && !runtime.sakuraFirebaseRuntimePromise) {
         let injectedScript: HTMLScriptElement | null = null;
 
-        runtime.sakuraFirebaseRuntimePromise = import("./firebase-auth-script")
+        runtime.sakuraFirebaseRuntimePromise = import("./firebase-auth-script-v2")
           .then(({ default: firebaseModuleScript }) => {
             delete runtime.sakuraFirebaseAuthError;
             runtime.sakuraAuthStateSettled = false;
