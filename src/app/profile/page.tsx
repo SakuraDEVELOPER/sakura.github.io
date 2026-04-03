@@ -4204,11 +4204,11 @@ export default function ProfilePage() {
                     <div className="min-w-0">
                       <h1 style={profileHeadlineStyle} className="min-w-0 truncate text-3xl font-black uppercase tracking-tighter">{primaryName}</h1>
                       {hasUsername ? <p className="mt-2 text-sm font-medium text-[#c7d4cc]">@{activeProfile.login}</p> : isOwner ? <p className="mt-2 text-sm text-gray-500">Login not set yet.</p> : null}
-                      {typeof activeProfile.profileId === "number" ? <p className="mt-1.5 inline-flex max-w-full items-center gap-2 text-[11px] text-[#b78a95]">
+                      {typeof activeProfile.profileId === "number" ? <p className="mt-1.5 flex max-w-full items-center gap-2 text-[11px] text-[#b78a95]">
                         <span aria-hidden="true" className="inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-[#ff9fbd] shadow-[0_0_10px_rgba(255,159,189,0.7)]" />
                         <span className="truncate">ID: {activeProfile.profileId}</span>
                       </p> : null}
-                      <p className={`${typeof activeProfile.profileId === "number" ? "mt-1" : "mt-1.5"} inline-flex max-w-full items-center gap-2 text-[11px] text-[#b78a95]`}>
+                      <p className={`${typeof activeProfile.profileId === "number" ? "mt-1" : "mt-1.5"} flex max-w-full items-center gap-2 text-[11px] text-[#b78a95]`}>
                         <span aria-hidden="true" className="inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-[#ff9fbd] shadow-[0_0_10px_rgba(255,159,189,0.7)]" />
                         <span className="truncate">Account created {formatTime(activeProfile.creationTime)}</span>
                       </p>
