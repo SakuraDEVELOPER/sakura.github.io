@@ -2548,7 +2548,7 @@ function FeatureShowcase() {
   return (
     <section id="feature-showcase" className="px-10 pt-2 pb-12">
       <div className="mx-auto max-w-6xl">
-        <div className="grid items-stretch gap-6 lg:grid-cols-[0.85fr_1.15fr]">
+        <div className="grid items-stretch gap-6 lg:grid-cols-[0.85fr_1.15fr] lg:gap-10">
           <m.div
             key={`copy-${slide.id}`}
             initial={{ opacity: 0, y: 24 }}
@@ -2577,7 +2577,7 @@ function FeatureShowcase() {
             </div>
           </m.div>
 
-          <div className="relative flex items-center px-4 md:px-8">
+          <div className="relative flex items-center px-4 md:px-8 lg:ml-4">
             <button
               type="button"
               onClick={goToPrevious}
