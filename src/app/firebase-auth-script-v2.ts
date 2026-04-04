@@ -1373,8 +1373,17 @@
   const SUPABASE_REST_URL = SUPABASE_PUBLIC_URL
     ? SUPABASE_PUBLIC_URL.replace(/\\/+$/, "") + "/rest/v1"
     : "";
+  const SUPABASE_FUNCTIONS_URL = SUPABASE_PUBLIC_URL
+    ? SUPABASE_PUBLIC_URL.replace(/\\/+$/, "") + "/functions/v1"
+    : "";
+  const SUPABASE_FIREBASE_SYNC_FUNCTION_URL = SUPABASE_FUNCTIONS_URL
+    ? SUPABASE_FUNCTIONS_URL + "/firebase-sync"
+    : "";
   const SUPABASE_PUBLIC_READS_ENABLED = Boolean(
     SUPABASE_REST_URL && SUPABASE_PUBLIC_ANON_KEY
+  );
+  const SUPABASE_PROFILE_SYNC_ENABLED = Boolean(
+    SUPABASE_FIREBASE_SYNC_FUNCTION_URL && SUPABASE_PUBLIC_ANON_KEY
   );
   const resolveSupabaseStoragePublicUrl = (objectPath) => {
     const normalizedPath =
@@ -1505,6 +1514,93 @@
     } catch (error) {
       return null;
     }
+  };
+  const sanitizeSupabaseProfileSyncText = (value, maxLength = 2048) =>
+    typeof value === "string" && value.trim()
+      ? value.trim().slice(0, Math.max(1, Math.trunc(maxLength)))
+      : null;
+  const normalizeSupabaseProfileSyncInteger = (value) => {
+    if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+      return Math.trunc(value);
+    }
+
+    if (typeof value === "string" && /^\\d+$/.test(value.trim())) {
+      const parsedValue = Number(value);
+      return Number.isFinite(parsedValue) && parsedValue > 0 ? Math.trunc(parsedValue) : null;
+    }
+
+    return null;
+  };
+  const syncSupabaseProfileRecord = async (user, snapshot, source = "runtime") => {
+    if (!SUPABASE_PROFILE_SYNC_ENABLED || !user || user.isAnonymous) {
+      return null;
+    }
+
+    const idToken =
+      typeof user.getIdToken === "function" ? await user.getIdToken().catch(() => null) : null;
+
+    if (!idToken) {
+      return null;
+    }
+
+    const payload = {
+      source,
+      profile: {
+        uid: typeof snapshot?.uid === "string" && snapshot.uid ? snapshot.uid : user.uid,
+        profileId: normalizeSupabaseProfileSyncInteger(snapshot?.profileId),
+        email: sanitizeSupabaseProfileSyncText(snapshot?.email, 320),
+        emailVerified: snapshot?.emailVerified === true,
+        verificationRequired: snapshot?.verificationRequired === true,
+        verificationEmailSent: snapshot?.verificationEmailSent === true,
+        login: sanitizeSupabaseProfileSyncText(snapshot?.login, LOGIN_MAX_LENGTH),
+        displayName: sanitizeSupabaseProfileSyncText(
+          snapshot?.displayName,
+          DISPLAY_NAME_MAX_LENGTH
+        ),
+        photoURL: sanitizeSupabaseProfileSyncText(snapshot?.photoURL, 2048),
+        avatarPath: sanitizeSupabaseProfileSyncText(snapshot?.avatarPath, 1024),
+        avatarType: sanitizeSupabaseProfileSyncText(snapshot?.avatarType, 64),
+        avatarSize: normalizeSupabaseProfileSyncInteger(snapshot?.avatarSize),
+        roles: Array.isArray(snapshot?.roles)
+          ? snapshot.roles.filter((role) => typeof role === "string")
+          : [],
+        providerIds: Array.isArray(snapshot?.providerIds)
+          ? snapshot.providerIds.filter((providerId) => typeof providerId === "string")
+          : [],
+        creationTime: sanitizeSupabaseProfileSyncText(snapshot?.creationTime, 64),
+        lastSignInTime: sanitizeSupabaseProfileSyncText(snapshot?.lastSignInTime, 64),
+      },
+    };
+
+    const response = await fetch(SUPABASE_FIREBASE_SYNC_FUNCTION_URL, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_PUBLIC_ANON_KEY,
+        Authorization: "Bearer " + SUPABASE_PUBLIC_ANON_KEY,
+        "x-firebase-id-token": idToken,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      let errorMessage = "";
+
+      try {
+        errorMessage = await response.text();
+      } catch (error) {}
+
+      throw createFirebaseError(
+        "supabase/profile-sync-failed",
+        "Supabase profile sync failed with status " +
+          response.status +
+          (errorMessage ? ": " + errorMessage.slice(0, 220) : ".")
+      );
+    }
+
+    return response
+      .json()
+      .catch(() => null);
   };
   function readRuntimeCacheEntry(cache, key) {
     if (!cache.has(key)) {
@@ -2864,6 +2960,10 @@
         forceVisit: true,
       });
 
+      void syncSupabaseProfileRecord(user, allowedSnapshot, "google-complete").catch((error) => {
+        console.error("Failed to sync profile to Supabase after Google completion:", error);
+      });
+
       return allowedSnapshot;
     };
 
@@ -2878,6 +2978,11 @@
           source: "google-login",
           forceVisit: true,
         });
+
+        void syncSupabaseProfileRecord(user, allowedSnapshot, "google-login").catch((error) => {
+          console.error("Failed to sync profile to Supabase after Google login:", error);
+        });
+
         return allowedSnapshot;
       } catch (error) {
         if (isProfileRecordError(error)) {
@@ -4469,11 +4574,22 @@
           });
 
           const allowedSnapshot = await enforceActiveSessionNotBanned(snapshot);
-
-          return {
+          const registrationSnapshot = {
             ...allowedSnapshot,
             emailVerified: Boolean(credentials.user.emailVerified),
             verificationEmailSent,
+          };
+
+          void syncSupabaseProfileRecord(
+            credentials.user,
+            registrationSnapshot,
+            "register"
+          ).catch((error) => {
+            console.error("Failed to sync profile to Supabase after registration:", error);
+          });
+
+          return {
+            ...registrationSnapshot,
           };
         } catch (error) {
           const errorCode = getErrorCode(error);
@@ -4511,6 +4627,13 @@
             source: "login",
             forceVisit: true,
           });
+
+          void syncSupabaseProfileRecord(credentials.user, allowedSnapshot, "login").catch(
+            (error) => {
+              console.error("Failed to sync profile to Supabase after login:", error);
+            }
+          );
+
           return allowedSnapshot;
         } catch (error) {
           if (isProfileRecordError(error)) {
