@@ -507,6 +507,8 @@ const isEmailVerificationLockedForProfile = (user: UserProfile | null | undefine
       user.verificationRequired !== false
   );
 const AVATAR_ACTION_TIMEOUT_MS = 12000;
+const COMMENT_SUCCESS_DISMISS_MS = 2200;
+const COMMENT_DELETE_SUCCESS_DISMISS_MS = 900;
 const withAvatarActionTimeout = <T,>(promise: Promise<T>) =>
   Promise.race<T>([
     promise,
@@ -3214,6 +3216,24 @@ export default function ProfilePage() {
       setOpenCommentActionsMenuId(null);
     }
   }, [comments, openCommentActionsMenuId]);
+
+  useEffect(() => {
+    if (!commentSuccess) {
+      return;
+    }
+
+    const dismissDelayMs = commentSuccess.toLowerCase().startsWith("comment deleted")
+      ? COMMENT_DELETE_SUCCESS_DISMISS_MS
+      : COMMENT_SUCCESS_DISMISS_MS;
+
+    const timeoutId = window.setTimeout(() => {
+      setCommentSuccess(null);
+    }, dismissDelayMs);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [commentSuccess]);
 
   useEffect(() => {
     if (!openCommentActionsMenuId) {
