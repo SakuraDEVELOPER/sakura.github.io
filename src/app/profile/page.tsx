@@ -507,8 +507,9 @@ const isEmailVerificationLockedForProfile = (user: UserProfile | null | undefine
       user.verificationRequired !== false
   );
 const AVATAR_ACTION_TIMEOUT_MS = 12000;
-const COMMENT_SUCCESS_DISMISS_MS = 2200;
-const COMMENT_DELETE_SUCCESS_DISMISS_MS = 900;
+const COMMENT_SUCCESS_DISMISS_MS = 1200;
+const COMMENT_DELETE_SUCCESS_DISMISS_MS = 700;
+const COMMENT_ERROR_DISMISS_MS = 1600;
 const withAvatarActionTimeout = <T,>(promise: Promise<T>) =>
   Promise.race<T>([
     promise,
@@ -3234,6 +3235,20 @@ export default function ProfilePage() {
       window.clearTimeout(timeoutId);
     };
   }, [commentSuccess]);
+
+  useEffect(() => {
+    if (!commentError) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setCommentError(null);
+    }, COMMENT_ERROR_DISMISS_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [commentError]);
 
   useEffect(() => {
     if (!openCommentActionsMenuId) {
