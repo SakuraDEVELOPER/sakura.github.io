@@ -2313,7 +2313,8 @@ export default function ProfilePage() {
       typeof activeProfile.profileId === "number" &&
       visibleCurrentUser.profileId === activeProfile.profileId
   );
-  const shouldShowSubscriptionDetails = isOwner && isOwnProfileViewById;
+  const shouldShowSubscriptionDetails =
+    isOwner && isOwnProfileViewById && authReady && authStateSettled && !authError;
   const shouldShowVerificationBanner = Boolean(
     isOwner &&
       !activeProfile?.isBanned &&
