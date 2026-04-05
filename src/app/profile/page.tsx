@@ -110,6 +110,7 @@ type Bridge = {
   deleteProfileComment: (commentId: string) => Promise<string | null>;
   resendVerificationEmail: () => Promise<UserProfile | null>;
   sendPasswordReset: (identifier: string) => Promise<{ email: string }>;
+  deleteCurrentAccount: () => Promise<void>;
   refreshVerificationStatus: () => Promise<UserProfile | null>;
   updateDisplayName: (displayName: string) => Promise<UserProfile | null>;
   updateUsername: (username: string, currentPassword?: string) => Promise<UserProfile | null>;
@@ -160,6 +161,7 @@ const AUTH_ERROR_EVENT = "sakura-auth-error";
 const AUTH_STATE_SETTLED_EVENT = "sakura-auth-state-settled";
 const USER_UPDATE_EVENT = "sakura-user-update";
 const PRESENCE_DIRTY_EVENT = "sakura-presence-dirty";
+const FLOATING_UI_VISIBILITY_EVENT = "sakura-floating-ui-visibility";
 const PROFILE_PATH_STORAGE_KEY = "sakura-profile-path";
 const CURRENT_PROFILE_ID_STORAGE_KEY = "sakura-current-profile-id";
 const PROFILE_BUILD_MARKER = "role-colors-v61";
@@ -1425,6 +1427,11 @@ export default function ProfilePage() {
   const [isAdminVerificationSaving, setIsAdminVerificationSaving] = useState(false);
   const [adminVerificationError, setAdminVerificationError] = useState<string | null>(null);
   const [adminVerificationSuccess, setAdminVerificationSuccess] = useState<string | null>(null);
+  const [isAdminPasswordResetSending, setIsAdminPasswordResetSending] = useState(false);
+  const [adminPasswordResetError, setAdminPasswordResetError] = useState<string | null>(null);
+  const [adminPasswordResetSuccess, setAdminPasswordResetSuccess] = useState<string | null>(null);
+  const [isAccountDeleting, setIsAccountDeleting] = useState(false);
+  const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
   const [comments, setComments] = useState<ProfileComment[]>(bootstrap.comments);
   const [commentAuthorProfiles, setCommentAuthorProfiles] = useState<Record<number, UserProfile>>({});
   const [commentAuthorProfilesByCommentId, setCommentAuthorProfilesByCommentId] = useState<Record<string, UserProfile>>({});
@@ -3237,6 +3244,9 @@ export default function ProfilePage() {
       setVerificationSuccess(null);
       setAdminVerificationError(null);
       setAdminVerificationSuccess(null);
+      setAdminPasswordResetError(null);
+      setAdminPasswordResetSuccess(null);
+      setDeleteAccountError(null);
       setComments([]);
       setCommentAuthorProfiles({});
       setCommentAuthorProfilesByCommentId({});
@@ -3277,6 +3287,9 @@ export default function ProfilePage() {
     setVerificationSuccess(null);
     setAdminVerificationError(null);
     setAdminVerificationSuccess(null);
+    setAdminPasswordResetError(null);
+    setAdminPasswordResetSuccess(null);
+    setDeleteAccountError(null);
     setBanError(null);
     setBanSuccess(null);
     setDisplayNameInput(activeProfile.displayName ?? activeProfile.login ?? "");
@@ -3314,6 +3327,33 @@ export default function ProfilePage() {
       setIsAdminPanelOpen(false);
     }
   }, [canOpenAdminPanel]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.dispatchEvent(
+      new CustomEvent(FLOATING_UI_VISIBILITY_EVENT, {
+        detail: { hidden: isAdminPanelOpen },
+      })
+    );
+  }, [isAdminPanelOpen]);
+
+  useEffect(
+    () => () => {
+      if (typeof window === "undefined") {
+        return;
+      }
+
+      window.dispatchEvent(
+        new CustomEvent(FLOATING_UI_VISIBILITY_EVENT, {
+          detail: { hidden: false },
+        })
+      );
+    },
+    []
+  );
 
   useEffect(() => {
     if (!openCommentActionsMenuId) {
@@ -4403,6 +4443,66 @@ export default function ProfilePage() {
       setPasswordError(getProfileActionErrorMessage(error, "Could not send password reset email."));
     } finally {
       setIsPasswordResetSending(false);
+    }
+  };
+  const handleAdminPasswordResetRequest = async () => {
+    const bridge = getWindowState().sakuraFirebaseAuth;
+    const resetIdentifier = activeProfile?.email?.trim() || activeProfile?.login?.trim() || "";
+
+    if (!bridge || !canOpenAdminPanel || !activeProfile?.profileId) {
+      return;
+    }
+
+    if (!resetIdentifier) {
+      setAdminPasswordResetError("No email or login is available for password reset.");
+      setAdminPasswordResetSuccess(null);
+      return;
+    }
+
+    setAdminPasswordResetError(null);
+    setAdminPasswordResetSuccess(null);
+    setIsAdminPasswordResetSending(true);
+
+    try {
+      const resetResult = await bridge.sendPasswordReset(resetIdentifier);
+      setAdminPasswordResetSuccess(
+        `Reset link sent to ${resetResult.email}. Check Spam/Junk if it is not in Inbox.`
+      );
+    } catch (error) {
+      setAdminPasswordResetError(
+        getProfileActionErrorMessage(error, "Could not send password reset email.")
+      );
+    } finally {
+      setIsAdminPasswordResetSending(false);
+    }
+  };
+  const handleDeleteAccount = async () => {
+    const bridge = getWindowState().sakuraFirebaseAuth;
+
+    if (!bridge || !isAdminSelfTarget) {
+      return;
+    }
+
+    if (!window.confirm("Delete this account permanently? This action cannot be undone.")) {
+      return;
+    }
+
+    setDeleteAccountError(null);
+    setIsAccountDeleting(true);
+
+    try {
+      await bridge.deleteCurrentAccount();
+      setIsAdminPanelOpen(false);
+      router.replace("/");
+    } catch (error) {
+      setDeleteAccountError(
+        getProfileActionErrorMessage(
+          error,
+          "Could not delete account. Sign in again and retry."
+        )
+      );
+    } finally {
+      setIsAccountDeleting(false);
     }
   };
   const handleBanToggle = async () => {
@@ -5638,7 +5738,7 @@ export default function ProfilePage() {
       </div>
       {activeProfile ? (
         <>
-          {shouldPlayProfileThemeSong ? (
+          {shouldPlayProfileThemeSong && !isAdminPanelOpen ? (
             <div className="fixed bottom-6 left-6 z-40 flex flex-col items-start gap-3">
               {isProfileThemePanelOpen ? (
                 <div className="w-[min(88vw,272px)] rounded-[24px] border border-[#372028] bg-[radial-gradient(circle_at_top_left,rgba(255,183,197,0.18),transparent_54%),linear-gradient(180deg,rgba(22,13,17,0.98)_0%,rgba(8,8,9,0.98)_100%)] p-4 shadow-[0_0_38px_rgba(255,183,197,0.14)] backdrop-blur-md">
@@ -5740,7 +5840,7 @@ export default function ProfilePage() {
               </button>
             </div>
           ) : null}
-          <div className="fixed bottom-4 right-[104px] z-[121] flex flex-col items-end gap-2">
+          {!isAdminPanelOpen ? <div className="fixed bottom-4 right-[136px] z-[121] flex flex-col items-end gap-2">
             {canOpenAdminPanel ? (
               <button
                 type="button"
@@ -5755,7 +5855,7 @@ export default function ProfilePage() {
                 🌸
               </button>
             ) : null}
-          </div>
+          </div> : null}
           {canOpenAdminPanel && isAdminPanelOpen ? (
             <div className="fixed inset-0 z-50">
               <button
@@ -5899,6 +5999,48 @@ export default function ProfilePage() {
                       ) : null}
                       {adminVerificationError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{adminVerificationError}</p> : null}
                       {adminVerificationSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{adminVerificationSuccess}</p> : null}
+                    </section>
+
+                    <section className="rounded-[24px] border border-[#1d1d1d] bg-[#0d0d0d] p-5">
+                      <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">Password Recovery</p>
+                      <p className="mt-3 text-xs leading-relaxed text-gray-400">
+                        Send a reset link to the linked email address for this account.
+                      </p>
+                      <div className="mt-4 flex flex-wrap items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={handleAdminPasswordResetRequest}
+                          disabled={isAdminPasswordResetSending || isAccountDeleting}
+                          className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isAdminPasswordResetSending ? "Sending..." : "Send Reset Link"}
+                        </button>
+                      </div>
+                      {adminPasswordResetError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{adminPasswordResetError}</p> : null}
+                      {adminPasswordResetSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{adminPasswordResetSuccess}</p> : null}
+                    </section>
+
+                    <section className="rounded-[24px] border border-[#3b1e24] bg-[#0d0d0d] p-5">
+                      <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-[#ff9aa9]">Danger Zone</p>
+                      <p className="mt-3 text-xs leading-relaxed text-gray-400">
+                        Account deletion is available only for the current signed-in account.
+                      </p>
+                      <div className="mt-4 flex flex-wrap items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={handleDeleteAccount}
+                          disabled={!isAdminSelfTarget || isAccountDeleting || isAdminPasswordResetSending}
+                          className="inline-flex items-center justify-center rounded-full border border-[#ff5a54]/35 bg-[#ff5a54] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ff746f] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isAccountDeleting ? "Deleting..." : "Delete Account"}
+                        </button>
+                      </div>
+                      {!isAdminSelfTarget ? (
+                        <p className="mt-3 text-xs leading-relaxed text-gray-500">
+                          Open your own profile to use account deletion.
+                        </p>
+                      ) : null}
+                      {deleteAccountError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{deleteAccountError}</p> : null}
                     </section>
 
                     <section className="rounded-[24px] border border-[#1d1d1d] bg-[#0d0d0d] p-5">

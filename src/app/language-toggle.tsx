@@ -1,9 +1,38 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { setPreferredUiLocale, useUiLocale } from "@/lib/ui-locale";
+
+const FLOATING_UI_VISIBILITY_EVENT = "sakura-floating-ui-visibility";
 
 export default function LanguageToggle() {
   const locale = useUiLocale();
+  const [isHidden, setIsHidden] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const handleVisibilityEvent = (event: Event) => {
+      if (!(event instanceof CustomEvent)) {
+        return;
+      }
+
+      const hidden = Boolean(event.detail?.hidden);
+      setIsHidden(hidden);
+    };
+
+    window.addEventListener(FLOATING_UI_VISIBILITY_EVENT, handleVisibilityEvent as EventListener);
+
+    return () => {
+      window.removeEventListener(FLOATING_UI_VISIBILITY_EVENT, handleVisibilityEvent as EventListener);
+    };
+  }, []);
+
+  if (isHidden) {
+    return null;
+  }
 
   return (
     <div className="fixed right-4 bottom-4 z-[120]">

@@ -2889,6 +2889,44 @@ const firebaseModuleScript = `
       await sendPasswordResetEmail(auth, email);
       return { email };
     };
+    const deleteCurrentAccount = async () => {
+      const user = auth.currentUser;
+      const userId = user?.uid ?? null;
+
+      if (!user || user.isAnonymous) {
+        throw createFirebaseError("auth/no-current-user", "Sign in again to delete the account.");
+      }
+
+      try {
+        await deleteUser(user);
+      } catch (error) {
+        if (getErrorCode(error) === "auth/requires-recent-login") {
+          throw createFirebaseError(
+            "auth/requires-recent-login",
+            "Sign in again and retry account deletion."
+          );
+        }
+
+        throw error;
+      }
+
+      stopPresenceTracking();
+      publishUserSnapshot(null);
+
+      if (userId) {
+        try {
+          await deleteDoc(userRefFor(userId));
+        } catch (error) {
+          if (!isPermissionDeniedError(error)) {
+            console.error("Failed to cleanup profile record after account deletion:", error);
+          }
+        }
+      }
+
+      try {
+        await signOut(auth);
+      } catch {}
+    };
     const updateDisplayName = async (nextDisplayName) => {
       const user = auth.currentUser;
 
@@ -4733,6 +4771,7 @@ const firebaseModuleScript = `
       completeGoogleAccount,
       loginWithGoogle,
       sendPasswordReset,
+      deleteCurrentAccount,
       updatePassword: updatePasswordWithCurrent,
       updateDisplayName,
       updateUsername,
