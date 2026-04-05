@@ -275,11 +275,11 @@ const ROLE_CHIP_ORDER = new Map([
   ["support", 5],
   ["sponsor", 6],
   ["tester", 7],
-  ["user", 8],
+  ["subscriber", 8],
+  ["test period", 9],
+  ["user", 10],
 ]);
-const REMOVED_ROLE_NAMES = new Set([
-  "subscriber",
-]);
+const REMOVED_ROLE_NAMES = new Set<string>();
 
 function isUserLikeRole(role: string) {
   return /^u(?:[\s_-]*s)?[\s_-]*e[\s_-]*r$/i.test(role.trim());
@@ -354,6 +354,18 @@ function normalizeRoleName(role: string) {
     return "sponsor";
   }
 
+  if (compactRole === "subscriber") {
+    return "subscriber";
+  }
+
+  if (
+    compactRole === "testperiod" ||
+    compactRole === "trial" ||
+    compactRole === "trialperiod"
+  ) {
+    return "test period";
+  }
+
   if (compactRole === "user") {
     return "user";
   }
@@ -425,6 +437,24 @@ function roleChipStyle(role: string | null | undefined): CSSProperties {
   if (normalizedRole === "tester") {
     return {
       borderColor: "#ffffff",
+      backgroundColor: "#151515",
+      color: "#ffffff",
+      boxShadow: "0 0 18px rgba(255,255,255,0.2)",
+    };
+  }
+
+  if (normalizedRole === "subscriber") {
+    return {
+      borderColor: "#fb923c",
+      backgroundColor: "#1f1207",
+      color: "#ffe1c2",
+      boxShadow: "0 0 18px rgba(251,146,60,0.22)",
+    };
+  }
+
+  if (normalizedRole === "test period") {
+    return {
+      borderColor: "#e5e7eb",
       backgroundColor: "#151515",
       color: "#ffffff",
       boxShadow: "0 0 18px rgba(255,255,255,0.2)",

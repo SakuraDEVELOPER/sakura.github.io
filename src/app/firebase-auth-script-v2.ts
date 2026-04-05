@@ -1,4 +1,4 @@
-﻿const firebaseModuleScript = `
+const firebaseModuleScript = `
   (() => {
     const AUTH_RUNTIME_VERSION = "2026-04-03-runtime-v2";
     let loadPromise;
@@ -708,6 +708,14 @@
       return "subscriber";
     }
 
+    if (
+      compactRole === "testperiod" ||
+      compactRole === "trial" ||
+      compactRole === "trialperiod"
+    ) {
+      return "test period";
+    }
+
     if (compactRole === "user") {
       return "user";
     }
@@ -726,9 +734,7 @@
     return normalizedRole || cleanRoleLabel(role);
   };
 
-  const REMOVED_ROLE_NAMES = new Set([
-    "subscriber",
-  ]);
+  const REMOVED_ROLE_NAMES = new Set([]);
   const ROLE_SORT_ORDER = new Map([
     ["root", 0],
     ["co-owner", 1],
@@ -738,7 +744,9 @@
     ["support", 5],
     ["sponsor", 6],
     ["tester", 7],
-    ["user", 8],
+    ["subscriber", 8],
+    ["test period", 9],
+    ["user", 10],
   ]);
   const COMMENT_ACCENT_ROLE_ORDER = new Map([
     ["root", 0],
@@ -750,7 +758,8 @@
     ["sponsor", 6],
     ["tester", 7],
     ["subscriber", 8],
-    ["user", 9],
+    ["test period", 9],
+    ["user", 10],
   ]);
   const sortRoles = (roles) =>
     [...roles].sort((left, right) => {
@@ -906,7 +915,7 @@
   const canUseEnhancedAvatarMedia = (roles) =>
     normalizeRoles(roles).some((role) => {
       const normalizedRole = normalizeRoleName(role);
-      return normalizedRole && normalizedRole !== "user";
+      return normalizedRole && normalizedRole !== "user" && normalizedRole !== "test period";
     });
   const ensureAvatarUploadAllowedForRoles = (avatarType, roles) => {
     if (!PREMIUM_AVATAR_CONTENT_TYPES.has(avatarType ?? "")) {
@@ -916,7 +925,7 @@
     if (!canUseEnhancedAvatarMedia(roles)) {
       throw createFirebaseError(
         "avatar/upgrade-required",
-        "You need a profile upgrade to use GIFs and videos as your avatar. The user role supports static images only."
+        "You need a profile upgrade to use GIFs and videos as your avatar. User and Test Period roles support static images only."
       );
     }
   };
@@ -4882,3 +4891,4 @@
 `;
 
 export default firebaseModuleScript;
+

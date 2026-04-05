@@ -400,7 +400,7 @@ const getSupabaseCommentMediaUnavailableMessage = () =>
 const getSupabaseAvatarUnavailableMessage = () =>
   "Supabase avatar upload is not configured for this build yet. Add NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, and NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET to the deployed site build.";
 const USER_AVATAR_UPGRADE_MESSAGE =
-  "You need a profile upgrade to use GIFs and videos as your avatar. The user role supports static images only.";
+  "You need a profile upgrade to use GIFs and videos as your avatar. User and Test Period roles support static images only.";
 const toCommentMediaPayload = (
   uploadResult: SupabaseCommentMediaUploadResult
 ): CommentMediaPayload => ({
@@ -768,6 +768,14 @@ const normalizeRoleName = (role: string) => {
     return "subscriber";
   }
 
+  if (
+    compactRole === "testperiod" ||
+    compactRole === "trial" ||
+    compactRole === "trialperiod"
+  ) {
+    return "test period";
+  }
+
   if (compactRole === "banned" || compactRole === "ban") {
     return "banned";
   }
@@ -793,6 +801,10 @@ const formatRole = (role: string) => {
 
   if (normalizedRole === "subscriber") {
     return "subscriber";
+  }
+
+  if (normalizedRole === "test period") {
+    return "test period";
   }
 
   if (normalizedRole === "tester") {
@@ -838,6 +850,10 @@ const roleDisplayLabel = (role: string) => {
 
   if (normalizedRole === "subscriber") {
     return "Subscriber";
+  }
+
+  if (normalizedRole === "test period") {
+    return "Test Period";
   }
 
   if (normalizedRole === "banned") {
@@ -938,10 +954,19 @@ const roleBadgeStyle = (role: string): CSSProperties => {
 
   if (normalizedRole === "subscriber") {
     return {
-      borderColor: "#facc15",
-      backgroundColor: "#1e1806",
-      color: "#fff0ae",
-      boxShadow: "0 0 18px rgba(250,204,21,0.24)",
+      borderColor: "#fb923c",
+      backgroundColor: "#1f1207",
+      color: "#ffe1c2",
+      boxShadow: "0 0 18px rgba(251,146,60,0.24)",
+    };
+  }
+
+  if (normalizedRole === "test period") {
+    return {
+      borderColor: "#e5e7eb",
+      backgroundColor: "#151515",
+      color: "#ffffff",
+      boxShadow: "0 0 18px rgba(255,255,255,0.2)",
     };
   }
 
@@ -1080,7 +1105,11 @@ const roleCommentAuthorColor = (role: string | null | undefined) => {
   }
 
   if (normalizedRole === "subscriber") {
-    return "#facc15";
+    return "#fb923c";
+  }
+
+  if (normalizedRole === "test period") {
+    return "#f3f4f6";
   }
 
   return "#ffffff";
@@ -1097,9 +1126,7 @@ const COMMENT_MODERATOR_ROLE_NAMES = new Set([
   "support",
   "moderator",
 ]);
-const REMOVED_ROLE_NAMES = new Set([
-  "subscriber",
-]);
+const REMOVED_ROLE_NAMES = new Set<string>();
 const EDITABLE_ROLE_OPTIONS = [
   "root",
   "co-owner",
@@ -1109,6 +1136,8 @@ const EDITABLE_ROLE_OPTIONS = [
   "support",
   "sponsor",
   "tester",
+  "subscriber",
+  "test period",
   "user",
 ];
 const ROLE_DISPLAY_ORDER = new Map(
@@ -1125,7 +1154,8 @@ const COMMENT_AUTHOR_ROLE_ORDER = new Map([
   ["sponsor", 6],
   ["tester", 7],
   ["subscriber", 8],
-  ["user", 9],
+  ["test period", 9],
+  ["user", 10],
 ]);
 const sortRolesForDisplay = (roles: string[]) =>
   [...roles].sort((left, right) => {
@@ -1223,7 +1253,10 @@ const deriveVisibleProfileRoles = (
   return normalizeRoleSelection(profile?.roles ?? []);
 };
 const canUseEnhancedAvatarMediaForRoles = (roles: string[] | null | undefined) =>
-  normalizeRoleSelection(roles ?? []).some((role) => normalizeRoleName(role) !== "user");
+  normalizeRoleSelection(roles ?? []).some((role) => {
+    const normalizedRole = normalizeRoleName(role);
+    return normalizedRole !== "user" && normalizedRole !== "test period";
+  });
 const profileNameOf = (user: Pick<UserProfile, "login" | "displayName" | "profileId">) =>
   user.displayName?.trim() ||
   user.login?.trim() ||
@@ -2170,6 +2203,10 @@ export default function ProfilePage() {
     isOwner && visibleCurrentUser?.providerIds?.includes("password")
   );
   const profileRoles = deriveVisibleProfileRoles(activeProfile);
+  const normalizedProfileRoleSet = new Set(profileRoles.map((role) => normalizeRoleName(role)));
+  const hasSubscriberRole = normalizedProfileRoleSet.has("subscriber");
+  const hasTestPeriodRole = normalizedProfileRoleSet.has("test period");
+  const hasActiveSubscriptionRole = hasSubscriberRole || hasTestPeriodRole;
   const normalizedProfileRoles = profileRoles;
   const canUseEnhancedAvatarMedia = canUseEnhancedAvatarMediaForRoles(activeProfile?.roles);
   const topProfileRole = profileRoles[0] ?? null;
@@ -2177,11 +2214,29 @@ export default function ProfilePage() {
   const isCurrentAccountBanned = visibleCurrentUser?.isBanned === true;
   const subscriptionSummary = {
     title: "Cheat Access",
-    badgeRole: "root",
-    status: "Internal",
+    status: hasActiveSubscriptionRole ? "Active" : "Inactive",
     description: "Купите подписку что бы разблокировать все возможности игры с читом",
   };
-  const subscriptionBadgeStyle = roleBadgeStyle(subscriptionSummary.badgeRole);
+  const subscriptionBadgeStyle: CSSProperties =
+    subscriptionSummary.status === "Active"
+      ? {
+          borderColor: "#1f7a4d",
+          backgroundColor: "#0d1713",
+          color: "#8ce5b2",
+          boxShadow: "0 0 18px rgba(31,122,77,0.24)",
+        }
+      : {
+          borderColor: "#3a3a3a",
+          backgroundColor: "#111111",
+          color: "#a3a3a3",
+          boxShadow: "0 0 14px rgba(0,0,0,0.32)",
+        };
+  const subscriptionTestPeriodBadgeStyle: CSSProperties = {
+    borderColor: "#e5e7eb",
+    backgroundColor: "#151515",
+    color: "#ffffff",
+    boxShadow: "0 0 16px rgba(255,255,255,0.18)",
+  };
   const shouldShowVerificationBanner = Boolean(
     isOwner &&
       !activeProfile?.isBanned &&
@@ -5092,11 +5147,15 @@ export default function ProfilePage() {
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">Subscription</p>
-                      <p className="mt-2 text-sm leading-relaxed text-gray-400">Subscription Pricing</p>
                     </div>
-                    <span style={{ ...subscriptionBadgeStyle, ...roleBadgeTextStyle }} className="inline-flex shrink-0 rounded-full border px-3 py-1 text-[10px] font-bold">
-                      {subscriptionSummary.status}
-                    </span>
+                    <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                      <span style={{ ...subscriptionBadgeStyle, ...roleBadgeTextStyle }} className="inline-flex shrink-0 rounded-full border px-3 py-1 text-[10px] font-bold">
+                        {subscriptionSummary.status}
+                      </span>
+                      {hasTestPeriodRole ? <span style={{ ...subscriptionTestPeriodBadgeStyle, ...roleBadgeTextStyle }} className="inline-flex shrink-0 rounded-full border px-3 py-1 text-[10px] font-bold">
+                        Test Period
+                      </span> : null}
+                    </div>
                   </div>
                   <div className="mt-4 rounded-[22px] border border-[#24171b] bg-[radial-gradient(circle_at_top_left,rgba(255,183,197,0.08),transparent_62%),#090909] p-4">
                     <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-[#b78a95]">Current Subscription</p>
