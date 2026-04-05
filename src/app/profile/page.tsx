@@ -2158,56 +2158,13 @@ export default function ProfilePage() {
   const canUseEnhancedAvatarMedia = canUseEnhancedAvatarMediaForRoles(activeProfile?.roles);
   const topProfileRole = profileRoles[0] ?? null;
   const profileHeadlineStyle = roleHeadlineStyle(topProfileRole);
-  const normalizedProfileRoleSet = new Set(profileRoles.map((role) => normalizeRoleName(role)));
   const isCurrentAccountBanned = visibleCurrentUser?.isBanned === true;
-  const subscriptionSummary = activeProfile?.isBanned === true
-    ? {
-        title: "Account Banned",
-        badgeRole: "banned",
-        status: "Restricted",
-        description: "This account is blocked. Sign-in actions, profile changes, and new activity are disabled until it is unbanned.",
-      }
-    : normalizedProfileRoleSet.has("root")
-    ? {
-        title: "Cheat Access",
-        badgeRole: "root",
-        status: "Internal",
-        description: "Root access is active for this account. Profile tools and privileged controls are unlocked.",
-      }
-    : normalizedProfileRoleSet.has("co-owner")
-      ? {
-          title: "Co-Owner Access",
-          badgeRole: "co-owner",
-          status: "Priority",
-          description: "Co-owner access is active. Shared management and elevated profile controls are available.",
-        }
-      : normalizedProfileRoleSet.has("support")
-        ? {
-            title: "Support Access",
-            badgeRole: "support",
-            status: "Available",
-            description: "Support access is active. Staff-facing assistance tools and profile support workflows are available here.",
-          }
-      : normalizedProfileRoleSet.has("sponsor")
-        ? {
-            title: "Sponsor Access",
-            badgeRole: "sponsor",
-            status: "Active",
-            description: "Sponsor access is active for this account. Premium profile styling and future subscription perks can be surfaced here.",
-          }
-        : normalizedProfileRoleSet.has("moderator")
-          ? {
-              title: "Moderator Access",
-              badgeRole: "moderator",
-              status: "Enabled",
-              description: "Moderator access is active. Comment moderation and profile management tools stay available here.",
-            }
-          : {
-              title: "Free Access",
-              badgeRole: "user",
-              status: "Base",
-              description: "This account is currently on the free tier. Future subscription upgrades and perks can be shown in this block.",
-            };
+  const subscriptionSummary = {
+    title: "Cheat Access",
+    badgeRole: "root",
+    status: "Internal",
+    description: "Купите подписку что бы разблокировать все возможности игры с читом",
+  };
   const subscriptionBadgeStyle = roleBadgeStyle(subscriptionSummary.badgeRole);
   const shouldShowVerificationBanner = Boolean(
     isOwner &&
