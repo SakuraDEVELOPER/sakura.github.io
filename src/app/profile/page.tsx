@@ -2634,6 +2634,10 @@ useEffect(() => {
         typeof message.value === "object" && message.value
           ? (message.value as Record<string, unknown>)
           : null;
+      const numericValue =
+        typeof message.value === "number" && Number.isFinite(message.value)
+          ? message.value
+          : null;
       const details = info ?? data ?? value;
 
       if (profileThemeEmbedProvider === "youtube" || profileThemeEmbedProvider === "vk") {
@@ -2652,12 +2656,31 @@ useEffect(() => {
           }
         }
 
+        const infoPlaybackState =
+          details && typeof details.playerState === "number"
+            ? details.playerState
+            : null;
+
+        if (infoPlaybackState === 1) {
+          setProfileThemeIsPlaying(true);
+        } else if (infoPlaybackState === 2 || infoPlaybackState === 0) {
+          setProfileThemeIsPlaying(false);
+        }
+
         syncDuration(details?.duration ?? message.duration);
         syncCurrentTime(details?.currentTime ?? message.currentTime);
         return;
       }
 
       if (profileThemeEmbedProvider === "soundcloud") {
+        if (messageEventName === "getduration" && numericValue !== null) {
+          syncDuration(numericValue);
+        }
+
+        if (messageEventName === "getposition" && numericValue !== null) {
+          syncCurrentTime(numericValue);
+        }
+
         if (messageEventName === "play") {
           setProfileThemeIsPlaying(true);
         } else if (messageEventName === "pause" || messageEventName === "finish") {
@@ -2746,6 +2769,50 @@ useEffect(() => {
     profileThemeSongKey,
     profileThemeUsesEmbeddedPlayer,
     profileThemeVolume,
+    shouldPlayProfileThemeSong,
+  ]);
+
+  useEffect(() => {
+    if (
+      !profileThemeUsesEmbeddedPlayer ||
+      !profileThemeEmbedProvider ||
+      !shouldPlayProfileThemeSong
+    ) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      const frameWindow = profileThemeEmbedFrameRef.current?.contentWindow;
+
+      if (!frameWindow) {
+        return;
+      }
+
+      if (profileThemeEmbedProvider === "soundcloud") {
+        frameWindow.postMessage(JSON.stringify({ method: "getPosition" }), "*");
+        frameWindow.postMessage(JSON.stringify({ method: "getDuration" }), "*");
+        return;
+      }
+
+      if (profileThemeEmbedProvider === "youtube" || profileThemeEmbedProvider === "vk") {
+        frameWindow.postMessage(
+          JSON.stringify({ event: "command", func: "getCurrentTime", args: [] }),
+          "*"
+        );
+        frameWindow.postMessage(
+          JSON.stringify({ event: "command", func: "getDuration", args: [] }),
+          "*"
+        );
+      }
+    }, 1000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [
+    profileThemeEmbedProvider,
+    profileThemeSongKey,
+    profileThemeUsesEmbeddedPlayer,
     shouldPlayProfileThemeSong,
   ]);
 
