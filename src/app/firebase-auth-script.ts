@@ -117,6 +117,8 @@ const firebaseModuleScript = `
     "forever-young",
     "cyberpunk",
   ]);
+  const PROFILE_THEME_EXTERNAL_URL_PREFIX = "url:";
+  const PROFILE_THEME_EXTERNAL_URL_MAX_LENGTH = 1024;
   const profileByIdRuntimeCache = new Map();
   const profileByAuthorRuntimeCache = new Map();
   const profilesByPrefixRuntimeCache = new Map();
@@ -567,7 +569,7 @@ const firebaseModuleScript = `
     typeof value === "string"
       ? value.trim().replace(/\\s+/g, " ").slice(0, DISPLAY_NAME_MAX_LENGTH)
       : "";
-  const normalizeProfileThemeSongKey = (value) => {
+  const normalizeProfileThemePresetKey = (value) => {
     const normalizedKey =
       typeof value === "string"
         ? value
@@ -583,6 +585,133 @@ const firebaseModuleScript = `
     }
 
     return PROFILE_THEME_SONG_KEYS.has(normalizedKey) ? normalizedKey : null;
+  };
+
+  const parseProfileThemeExternalUrl = (value) => {
+    const trimmedValue = typeof value === "string" ? value.trim() : "";
+
+    if (!trimmedValue) {
+      return null;
+    }
+
+    const candidateValue =
+      /^https?:\/\//i.test(trimmedValue) || /^spotify:/i.test(trimmedValue)
+        ? trimmedValue
+        : /^[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?:[\\/:?#]|$)/.test(trimmedValue)
+          ? "https://" + trimmedValue
+          : trimmedValue;
+
+    try {
+      return new URL(candidateValue);
+    } catch (error) {
+      return null;
+    }
+  };
+
+  const buildExternalProfileThemeSongKey = (sourceUrl) => {
+    const normalizedSourceUrl = typeof sourceUrl === "string" ? sourceUrl.trim() : "";
+
+    if (!normalizedSourceUrl || normalizedSourceUrl.length > PROFILE_THEME_EXTERNAL_URL_MAX_LENGTH) {
+      return null;
+    }
+
+    return PROFILE_THEME_EXTERNAL_URL_PREFIX + normalizedSourceUrl;
+  };
+
+  const resolveExternalProfileThemeSongKey = (value) => {
+    const rawValue = typeof value === "string" ? value.trim() : "";
+
+    if (!rawValue) {
+      return null;
+    }
+
+    const externalCandidate = rawValue.toLowerCase().startsWith(PROFILE_THEME_EXTERNAL_URL_PREFIX)
+      ? rawValue.slice(PROFILE_THEME_EXTERNAL_URL_PREFIX.length).trim()
+      : rawValue;
+    const parsedUrl = parseProfileThemeExternalUrl(externalCandidate);
+
+    if (!parsedUrl) {
+      return null;
+    }
+
+    const host = parsedUrl.hostname.toLowerCase().replace(/^www\./, "");
+    const pathSegments = parsedUrl.pathname.split("/").filter(Boolean);
+
+    if (host === "youtu.be" || host === "youtube.com" || host === "m.youtube.com" || host === "music.youtube.com") {
+      let videoId = "";
+
+      if (host === "youtu.be") {
+        videoId = pathSegments[0] ?? "";
+      } else if ((pathSegments[0] ?? "").toLowerCase() === "watch") {
+        videoId = parsedUrl.searchParams.get("v") ?? "";
+      } else if (["shorts", "embed", "live"].includes((pathSegments[0] ?? "").toLowerCase())) {
+        videoId = pathSegments[1] ?? "";
+      } else {
+        videoId = parsedUrl.searchParams.get("v") ?? "";
+      }
+
+      const sanitizedVideoId = videoId.replace(/[^A-Za-z0-9_-]/g, "");
+
+      if (sanitizedVideoId.length >= 6) {
+        return buildExternalProfileThemeSongKey("https://www.youtube.com/watch?v=" + sanitizedVideoId);
+      }
+    }
+
+    if (host === "open.spotify.com") {
+      const entityType = (pathSegments[0] ?? "").toLowerCase();
+      const entityId = (pathSegments[1] ?? "").trim();
+      const supportedEntityTypes = new Set(["track", "album", "playlist", "episode", "show"]);
+
+      if (supportedEntityTypes.has(entityType) && entityId) {
+        return buildExternalProfileThemeSongKey("https://open.spotify.com/" + entityType + "/" + entityId);
+      }
+    }
+
+    if (host === "soundcloud.com" || host === "m.soundcloud.com" || host === "on.soundcloud.com") {
+      return buildExternalProfileThemeSongKey("https://" + host + parsedUrl.pathname + parsedUrl.search);
+    }
+
+    if (host === "music.yandex.ru" || host === "music.yandex.com") {
+      const firstSegment = (pathSegments[0] ?? "").toLowerCase();
+
+      if (firstSegment === "album" && pathSegments[1]) {
+        const albumId = pathSegments[1];
+
+        if ((pathSegments[2] ?? "").toLowerCase() === "track" && pathSegments[3]) {
+          return buildExternalProfileThemeSongKey("https://music.yandex.ru/album/" + albumId + "/track/" + pathSegments[3]);
+        }
+
+        return buildExternalProfileThemeSongKey("https://music.yandex.ru/album/" + albumId);
+      }
+
+      if (firstSegment === "users" && pathSegments[1] && (pathSegments[2] ?? "").toLowerCase() === "playlists" && pathSegments[3]) {
+        return buildExternalProfileThemeSongKey("https://music.yandex.ru/users/" + pathSegments[1] + "/playlists/" + pathSegments[3]);
+      }
+    }
+
+    if (host === "vk.com" || host === "m.vk.com" || host === "vkvideo.ru" || host === "m.vkvideo.ru") {
+      const isVideoExt = (pathSegments[0] ?? "").toLowerCase() === "video_ext.php";
+      const oid = parsedUrl.searchParams.get("oid");
+      const id = parsedUrl.searchParams.get("id");
+
+      if (isVideoExt && oid && id) {
+        return buildExternalProfileThemeSongKey("https://vk.com/video" + oid + "_" + id);
+      }
+
+      return buildExternalProfileThemeSongKey("https://vk.com" + parsedUrl.pathname + parsedUrl.search);
+    }
+
+    return null;
+  };
+
+  const normalizeProfileThemeSongKey = (value) => {
+    const presetKey = normalizeProfileThemePresetKey(value);
+
+    if (presetKey) {
+      return presetKey;
+    }
+
+    return resolveExternalProfileThemeSongKey(value);
   };
 
   const normalizeLogin = (value) => sanitizeLogin(value).toLocaleLowerCase();
@@ -4087,7 +4216,7 @@ const firebaseModuleScript = `
       const normalizedThemeSongKey = normalizeProfileThemeSongKey(nextThemeSongKey);
 
       if (typeof nextThemeSongKey === "string" && nextThemeSongKey.trim() && !normalizedThemeSongKey) {
-        throw createFirebaseError("profile/invalid-theme-song", "Select a valid profile track.");
+        throw createFirebaseError("profile/invalid-theme-song", "Select a valid profile track key or supported music URL.");
       }
 
       try {

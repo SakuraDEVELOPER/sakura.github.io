@@ -90,6 +90,15 @@ type MentionDraft = {
   query: string;
 };
 
+type ProfileThemeSelection = {
+  key: string;
+  title: string;
+  src?: string;
+  embedUrl?: string;
+  sourceUrl?: string;
+  embedHeight?: number;
+};
+
 type Bridge = {
   __runtimeVersion?: string;
   getProfileById: (profileId: number) => Promise<UserProfile | null>;
@@ -241,7 +250,9 @@ const restoreProfilePathScript = `
 `;
 
 const getWindowState = () => window as RuntimeWindow;
-const normalizeProfileThemeSongKey = (value: unknown): string | null => {
+const PROFILE_THEME_EXTERNAL_URL_PREFIX = "url:";
+const PROFILE_THEME_EXTERNAL_URL_MAX_LENGTH = 1024;
+const normalizeProfileThemePresetKey = (value: unknown): string | null => {
   const normalizedKey =
     typeof value === "string"
       ? value
@@ -257,6 +268,191 @@ const normalizeProfileThemeSongKey = (value: unknown): string | null => {
   }
 
   return PROFILE_THEME_BY_KEY.has(normalizedKey) ? normalizedKey : null;
+};
+const parseProfileThemeExternalUrl = (value: string): URL | null => {
+  const trimmedValue = value.trim();
+
+  if (!trimmedValue) {
+    return null;
+  }
+
+  const candidateValue =
+    /^https?:\/\//i.test(trimmedValue) || /^spotify:/i.test(trimmedValue)
+      ? trimmedValue
+      : /^[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?:[/:?#]|$)/.test(trimmedValue)
+        ? `https://${trimmedValue}`
+        : trimmedValue;
+
+  try {
+    return new URL(candidateValue);
+  } catch {
+    return null;
+  }
+};
+const resolveExternalProfileThemeSongSelection = (
+  value: string
+): ProfileThemeSelection | null => {
+  const rawValue = value.trim();
+  const externalCandidate = rawValue.toLowerCase().startsWith(PROFILE_THEME_EXTERNAL_URL_PREFIX)
+    ? rawValue.slice(PROFILE_THEME_EXTERNAL_URL_PREFIX.length).trim()
+    : rawValue;
+  const parsedUrl = parseProfileThemeExternalUrl(externalCandidate);
+
+  if (!parsedUrl) {
+    return null;
+  }
+
+  const host = parsedUrl.hostname.toLowerCase().replace(/^www\./, "");
+  const pathSegments = parsedUrl.pathname.split("/").filter(Boolean);
+  const buildSelection = (
+    title: string,
+    sourceUrl: string,
+    embedUrl: string,
+    embedHeight: number
+  ): ProfileThemeSelection | null => {
+    const normalizedSourceUrl = sourceUrl.trim();
+
+    if (!normalizedSourceUrl || normalizedSourceUrl.length > PROFILE_THEME_EXTERNAL_URL_MAX_LENGTH) {
+      return null;
+    }
+
+    return {
+      key: `${PROFILE_THEME_EXTERNAL_URL_PREFIX}${normalizedSourceUrl}`,
+      title,
+      sourceUrl: normalizedSourceUrl,
+      embedUrl,
+      embedHeight,
+    };
+  };
+
+  if (host === "youtu.be" || host === "youtube.com" || host === "m.youtube.com" || host === "music.youtube.com") {
+    let videoId = "";
+
+    if (host === "youtu.be") {
+      videoId = pathSegments[0] ?? "";
+    } else if ((pathSegments[0] ?? "").toLowerCase() === "watch") {
+      videoId = parsedUrl.searchParams.get("v") ?? "";
+    } else if (["shorts", "embed", "live"].includes((pathSegments[0] ?? "").toLowerCase())) {
+      videoId = pathSegments[1] ?? "";
+    } else {
+      videoId = parsedUrl.searchParams.get("v") ?? "";
+    }
+
+    const sanitizedVideoId = videoId.replace(/[^A-Za-z0-9_-]/g, "");
+
+    if (sanitizedVideoId.length >= 6) {
+      const sourceUrl = `https://www.youtube.com/watch?v=${sanitizedVideoId}`;
+      const embedUrl = `https://www.youtube-nocookie.com/embed/${sanitizedVideoId}?autoplay=1&rel=0`;
+      return buildSelection("YouTube", sourceUrl, embedUrl, 168);
+    }
+  }
+
+  if (host === "open.spotify.com") {
+    const entityType = (pathSegments[0] ?? "").toLowerCase();
+    const entityId = (pathSegments[1] ?? "").trim();
+    const supportedEntityTypes = new Set(["track", "album", "playlist", "episode", "show"]);
+
+    if (supportedEntityTypes.has(entityType) && entityId) {
+      const sourceUrl = `https://open.spotify.com/${entityType}/${entityId}`;
+      const embedUrl = `https://open.spotify.com/embed/${entityType}/${entityId}?utm_source=generator`;
+      const title =
+        entityType === "track"
+          ? "Spotify Track"
+          : entityType === "episode"
+            ? "Spotify Episode"
+            : "Spotify";
+      const embedHeight = entityType === "track" || entityType === "episode" ? 152 : 352;
+      return buildSelection(title, sourceUrl, embedUrl, embedHeight);
+    }
+  }
+
+  if (host === "soundcloud.com" || host === "m.soundcloud.com" || host === "on.soundcloud.com") {
+    const sourceUrl = `https://${host}${parsedUrl.pathname}${parsedUrl.search}`;
+    const embedUrl = `https://w.soundcloud.com/player/?url=${encodeURIComponent(sourceUrl)}&auto_play=true&hide_related=false&show_comments=false&show_user=true&show_reposts=false&visual=false`;
+    return buildSelection("SoundCloud", sourceUrl, embedUrl, 166);
+  }
+
+  if (host === "music.yandex.ru" || host === "music.yandex.com") {
+    const firstSegment = (pathSegments[0] ?? "").toLowerCase();
+
+    if (firstSegment === "album" && pathSegments[1]) {
+      const albumId = pathSegments[1];
+
+      if ((pathSegments[2] ?? "").toLowerCase() === "track" && pathSegments[3]) {
+        const trackId = pathSegments[3];
+        const sourceUrl = `https://music.yandex.ru/album/${albumId}/track/${trackId}`;
+        const embedUrl = `https://music.yandex.ru/iframe/#track/${trackId}/${albumId}`;
+        return buildSelection("Yandex Music", sourceUrl, embedUrl, 168);
+      }
+
+      const sourceUrl = `https://music.yandex.ru/album/${albumId}`;
+      const embedUrl = `https://music.yandex.ru/iframe/#album/${albumId}`;
+      return buildSelection("Yandex Music", sourceUrl, embedUrl, 352);
+    }
+
+    if (firstSegment === "users" && pathSegments[1] && (pathSegments[2] ?? "").toLowerCase() === "playlists" && pathSegments[3]) {
+      const owner = pathSegments[1];
+      const playlistId = pathSegments[3];
+      const sourceUrl = `https://music.yandex.ru/users/${owner}/playlists/${playlistId}`;
+      const embedUrl = `https://music.yandex.ru/iframe/#playlist/${owner}/${playlistId}`;
+      return buildSelection("Yandex Music", sourceUrl, embedUrl, 352);
+    }
+  }
+
+  if (host === "vk.com" || host === "m.vk.com" || host === "vkvideo.ru" || host === "m.vkvideo.ru") {
+    const isVideoExt = (pathSegments[0] ?? "").toLowerCase() === "video_ext.php";
+    const oid = parsedUrl.searchParams.get("oid");
+    const id = parsedUrl.searchParams.get("id");
+    const hash = parsedUrl.searchParams.get("hash");
+
+    if (isVideoExt && oid && id) {
+      const embedBase = `https://vk.com/video_ext.php?oid=${encodeURIComponent(oid)}&id=${encodeURIComponent(id)}`;
+      const embedUrl = hash
+        ? `${embedBase}&hash=${encodeURIComponent(hash)}&autoplay=1`
+        : `${embedBase}&autoplay=1`;
+      const sourceUrl = `https://vk.com/video${oid}_${id}`;
+      return buildSelection("VK", sourceUrl, embedUrl, 168);
+    }
+
+    const sourceUrl = `https://vk.com${parsedUrl.pathname}${parsedUrl.search}`;
+    return buildSelection("VK", sourceUrl, sourceUrl, 168);
+  }
+
+  return null;
+};
+const resolveProfileThemeSongSelection = (value: unknown): ProfileThemeSelection | null => {
+  const presetKey = normalizeProfileThemePresetKey(value);
+
+  if (presetKey) {
+    const presetSelection = PROFILE_THEME_BY_KEY.get(presetKey);
+
+    if (!presetSelection) {
+      return null;
+    }
+
+    return {
+      key: presetSelection.key,
+      title: presetSelection.title,
+      src: presetSelection.src,
+    };
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  return resolveExternalProfileThemeSongSelection(value);
+};
+const normalizeProfileThemeSongKey = (value: unknown): string | null =>
+  resolveProfileThemeSongSelection(value)?.key ?? null;
+const getAdminThemeSongInputValue = (value: string | null): string => {
+  if (!value) {
+    return "";
+  }
+
+  return value.toLowerCase().startsWith(PROFILE_THEME_EXTERNAL_URL_PREFIX)
+    ? value.slice(PROFILE_THEME_EXTERNAL_URL_PREFIX.length)
+    : value;
 };
 const hasCurrentFirebaseAuthRuntime = (runtime: RuntimeWindow) =>
   Boolean(runtime.sakuraFirebaseAuth) &&
@@ -2167,23 +2363,31 @@ export default function ProfilePage() {
       : activeProfile?.presence ?? null;
   const profileThemeProfileId =
     typeof activeProfile?.profileId === "number" ? activeProfile.profileId : null;
-  const profileThemeStoredSongKey = normalizeProfileThemeSongKey(activeProfile?.themeSongKey);
+  const profileThemeStoredSelection =
+    typeof profileThemeProfileId === "number"
+      ? resolveProfileThemeSongSelection(activeProfile?.themeSongKey)
+      : null;
   const profileThemeDefaultSongKey =
     typeof profileThemeProfileId === "number"
       ? PROFILE_THEME_DEFAULT_KEY_BY_PROFILE_ID.get(profileThemeProfileId) ?? null
       : null;
-  const profileThemeResolvedSongKey = profileThemeStoredSongKey ?? profileThemeDefaultSongKey;
-  const profileThemeSelection = profileThemeResolvedSongKey
-    ? PROFILE_THEME_BY_KEY.get(profileThemeResolvedSongKey) ?? null
-    : null;
-  const profileThemeSongSrc =
-    typeof profileThemeProfileId === "number" ? profileThemeSelection?.src ?? null : null;
+  const profileThemeDefaultSelection =
+    typeof profileThemeProfileId === "number" && profileThemeDefaultSongKey
+      ? resolveProfileThemeSongSelection(profileThemeDefaultSongKey)
+      : null;
+  const profileThemeSelection = profileThemeStoredSelection ?? profileThemeDefaultSelection;
+  const profileThemeSongSrc = profileThemeSelection?.src ?? null;
+  const profileThemeEmbedUrl = profileThemeSelection?.embedUrl ?? null;
+  const profileThemeSourceUrl = profileThemeSelection?.sourceUrl ?? null;
+  const profileThemeEmbedHeight = profileThemeSelection?.embedHeight ?? 168;
+  const profileThemeUsesEmbeddedPlayer = Boolean(profileThemeEmbedUrl);
+  const profileThemeUsesNativeAudio = Boolean(profileThemeSongSrc);
   const profileThemeTitle = profileThemeSelection?.title ?? null;
   const profileThemeSongKey =
-    profileThemeProfileId && profileThemeResolvedSongKey
-      ? `${profileThemeProfileId}:${profileThemeResolvedSongKey}`
+    profileThemeProfileId && profileThemeSelection
+      ? `${profileThemeProfileId}:${profileThemeSelection.key}`
       : null;
-  const shouldPlayProfileThemeSong = Boolean(profileThemeSongSrc);
+  const shouldPlayProfileThemeSong = Boolean(profileThemeSongSrc || profileThemeEmbedUrl);
 
   useEffect(() => {
     const audio = profileThemeAudioRef.current;
@@ -2204,6 +2408,17 @@ export default function ProfilePage() {
       profileThemeAutoplayAttemptedRef.current = null;
       return;
     }
+
+    if (!profileThemeUsesNativeAudio) {
+      audio.pause();
+      audio.currentTime = 0;
+      setProfileThemeIsPlaying(true);
+      setProfileThemeCurrentTime(0);
+      setProfileThemeDuration(0);
+      profileThemeAutoplayAttemptedRef.current = profileThemeSongKey;
+      return;
+    }
+
     audio.volume = profileThemeVolume;
 
     if (profileThemeAutoplayAttemptedRef.current !== profileThemeSongKey) {
@@ -2219,22 +2434,27 @@ export default function ProfilePage() {
       setProfileThemeCurrentTime(0);
       setProfileThemeDuration(0);
     };
-  }, [profileThemeSongKey, profileThemeSongSrc, shouldPlayProfileThemeSong]);
+  }, [
+    profileThemeSongKey,
+    profileThemeSongSrc,
+    profileThemeUsesNativeAudio,
+    profileThemeVolume,
+    shouldPlayProfileThemeSong,
+  ]);
 
   useEffect(() => {
     const audio = profileThemeAudioRef.current;
 
-    if (!audio) {
+    if (!audio || !profileThemeUsesNativeAudio) {
       return;
     }
 
     audio.volume = profileThemeVolume;
-  }, [profileThemeVolume]);
-
+  }, [profileThemeUsesNativeAudio, profileThemeVolume]);
   useEffect(() => {
     const audio = profileThemeAudioRef.current;
 
-    if (!audio) {
+    if (!audio || !profileThemeUsesNativeAudio) {
       return;
     }
 
@@ -2293,7 +2513,7 @@ export default function ProfilePage() {
       audio.removeEventListener("durationchange", syncAudioStateImmediate);
       audio.removeEventListener("ended", syncAudioStateImmediate);
     };
-  }, [profileThemeSongSrc]);
+  }, [profileThemeSongSrc, profileThemeUsesNativeAudio]);
 
   const isActiveProfileOnline = isPresenceOnlineNow(activePresence);
   const hasUsername = Boolean(activeProfile?.login?.trim());
@@ -3394,10 +3614,12 @@ export default function ProfilePage() {
     setAdminSubscriptionError(null);
     setAdminSubscriptionSuccess(null);
     setAdminThemeSongInput(
-      normalizeProfileThemeSongKey(activeProfile.themeSongKey) ??
-        (typeof activeProfile.profileId === "number"
-          ? PROFILE_THEME_DEFAULT_KEY_BY_PROFILE_ID.get(activeProfile.profileId) ?? ""
-          : "")
+      getAdminThemeSongInputValue(
+        normalizeProfileThemeSongKey(activeProfile.themeSongKey) ??
+          (typeof activeProfile.profileId === "number"
+            ? PROFILE_THEME_DEFAULT_KEY_BY_PROFILE_ID.get(activeProfile.profileId) ?? ""
+            : "")
+      )
     );
     setAdminThemeSongError(null);
     setAdminThemeSongSuccess(null);
@@ -4647,7 +4869,7 @@ export default function ProfilePage() {
     const normalizedThemeSongKey = normalizeProfileThemeSongKey(adminThemeSongInput);
 
     if (adminThemeSongInput.trim() && !normalizedThemeSongKey) {
-      setAdminThemeSongError("Select a valid profile track.");
+      setAdminThemeSongError("Select a valid profile track key or supported music URL.");
       setAdminThemeSongSuccess(null);
       return;
     }
@@ -4664,10 +4886,12 @@ export default function ProfilePage() {
 
       applyUpdatedProfileSnapshot(snapshot);
       setAdminThemeSongInput(
-        normalizeProfileThemeSongKey(snapshot?.themeSongKey) ??
-          (typeof activeProfile.profileId === "number"
-            ? PROFILE_THEME_DEFAULT_KEY_BY_PROFILE_ID.get(activeProfile.profileId) ?? ""
-            : "")
+        getAdminThemeSongInputValue(
+          normalizeProfileThemeSongKey(snapshot?.themeSongKey) ??
+            (typeof activeProfile.profileId === "number"
+              ? PROFILE_THEME_DEFAULT_KEY_BY_PROFILE_ID.get(activeProfile.profileId) ?? ""
+              : "")
+        )
       );
       setAdminThemeSongSuccess(
         normalizedThemeSongKey ? "Profile music updated." : "Profile music reset to default."
@@ -5159,7 +5383,7 @@ export default function ProfilePage() {
   const handleProfileThemeToggle = async () => {
     const audio = profileThemeAudioRef.current;
 
-    if (!audio || !shouldPlayProfileThemeSong) {
+    if (!audio || !shouldPlayProfileThemeSong || !profileThemeUsesNativeAudio) {
       return;
     }
 
@@ -5218,7 +5442,7 @@ export default function ProfilePage() {
       />
       <audio
         ref={profileThemeAudioRef}
-        src={profileThemeSongSrc ?? undefined}
+        src={profileThemeUsesNativeAudio ? profileThemeSongSrc ?? undefined : undefined}
         preload="auto"
         aria-hidden="true"
         className="hidden"
@@ -6021,9 +6245,33 @@ export default function ProfilePage() {
                           : "border-[#2d2d2d] bg-[#111111] text-gray-400"
                       }`}
                     >
-                      {profileThemeIsPlaying ? "Playing" : "Paused"}
+                      {profileThemeUsesEmbeddedPlayer ? "Embedded" : profileThemeIsPlaying ? "Playing" : "Paused"}
                     </span>
                   </div>
+                  {profileThemeUsesEmbeddedPlayer && profileThemeEmbedUrl ? (
+                    <div className="mt-4 overflow-hidden rounded-[20px] border border-[#2a181d] bg-[linear-gradient(180deg,rgba(18,11,14,0.96)_0%,rgba(11,11,12,0.96)_100%)] p-1.5 shadow-[inset_0_1px_0_rgba(255,183,197,0.04)]">
+                      <iframe
+                        src={profileThemeEmbedUrl}
+                        title={profileThemeTitle ?? "Profile Theme"}
+                        loading="lazy"
+                        referrerPolicy="strict-origin-when-cross-origin"
+                        allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+                        allowFullScreen
+                        style={{ height: profileThemeEmbedHeight }}
+                        className="w-full rounded-[16px] border-0 bg-black"
+                      />
+                      {profileThemeSourceUrl ? (
+                        <a
+                          href={profileThemeSourceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-2 inline-flex items-center rounded-full border border-[#3a2a31] bg-[#140d11] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/45 hover:text-white"
+                        >
+                          Open Source
+                        </a>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <div className="mt-4 rounded-[20px] border border-[#2a181d] bg-[linear-gradient(180deg,rgba(18,11,14,0.96)_0%,rgba(11,11,12,0.96)_100%)] p-3 shadow-[inset_0_1px_0_rgba(255,183,197,0.04)]">
                     <div className="flex items-center gap-3">
                       <button
@@ -6031,8 +6279,9 @@ export default function ProfilePage() {
                         onClick={() => {
                           void handleProfileThemeToggle();
                         }}
+                        disabled={profileThemeUsesEmbeddedPlayer}
                         aria-label={profileThemeIsPlaying ? "Pause music" : "Play music"}
-                        className={`inline-flex h-10 min-w-10 shrink-0 items-center justify-center rounded-full border transition ${
+                        className={`inline-flex h-10 min-w-10 shrink-0 items-center justify-center rounded-full border transition disabled:cursor-not-allowed disabled:opacity-50 ${
                           profileThemeIsPlaying
                             ? "border-[#ffb7c5]/45 bg-[#ffb7c5] text-black shadow-[0_0_22px_rgba(255,183,197,0.22)] hover:bg-[#ffc8d3]"
                             : "border-[#ffb7c5]/35 bg-[linear-gradient(180deg,#241118_0%,#140d11_100%)] text-[#ffb7c5] shadow-[0_0_18px_rgba(255,183,197,0.16)] hover:border-[#ffb7c5]/60 hover:text-white"
@@ -6431,23 +6680,29 @@ export default function ProfilePage() {
                     <section className="rounded-[24px] border border-[#1d1d1d] bg-[#0d0d0d] p-5">
                       <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Profile Music", "Profile Music")}</p>
                       <label className="mt-4 block">
-                        <span className="mb-2 block text-xs text-gray-500">{t("Theme track", "Theme track")}</span>
-                        <select
+                        <span className="mb-2 block text-xs text-gray-500">{t("Theme track / URL", "Theme track / URL")}</span>
+                        <input
+                          type="text"
+                          list="profile-theme-track-options"
                           value={adminThemeSongInput}
                           onChange={(event) => {
                             setAdminThemeSongInput(event.target.value);
                             setAdminThemeSongError(null);
                             setAdminThemeSongSuccess(null);
                           }}
-                          className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition focus:border-[#ffb7c5]/55"
-                        >
-                          <option value="">{t("Default by profile", "Default by profile")}</option>
+                          className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55"
+                          placeholder="where-is-my-mind or https://..."
+                        />
+                        <datalist id="profile-theme-track-options">
                           {PROFILE_THEME_OPTIONS.map((themeOption) => (
                             <option key={themeOption.key} value={themeOption.key}>
                               {themeOption.title}
                             </option>
                           ))}
-                        </select>
+                        </datalist>
+                        <p className="mt-2 text-xs leading-relaxed text-gray-500">
+                          YouTube, VK, Spotify, SoundCloud, Yandex Music URLs are supported.
+                        </p>
                       </label>
                       <div className="mt-4 flex flex-wrap items-center gap-3">
                         <button
