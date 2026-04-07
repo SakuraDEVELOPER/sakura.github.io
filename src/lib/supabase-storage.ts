@@ -31,6 +31,14 @@ const ALLOWED_PROFILE_THEME_AUDIO_TYPES = new Set([
 ]);
 const MAX_AVATAR_UPLOAD_BYTES = 50 * 1024 * 1024;
 const MAX_PROFILE_THEME_AUDIO_UPLOAD_BYTES = 50 * 1024 * 1024;
+const PROFILE_THEME_AUDIO_CONTENT_TYPE_FALLBACKS = new Map<string, string[]>([
+  ["audio/mpeg", ["audio/mp3"]],
+  ["audio/mp3", ["audio/mpeg"]],
+  ["audio/wav", ["audio/x-wav"]],
+  ["audio/x-wav", ["audio/wav"]],
+  ["audio/mp4", ["audio/x-m4a"]],
+  ["audio/x-m4a", ["audio/mp4"]],
+]);
 
 export type SupabaseCommentMediaUploadResult = {
   bucket: string;
@@ -128,7 +136,31 @@ export function validateSupabaseProfileThemeAudioFile(file: File) {
   }
 }
 
-async function uploadStorageObject(file: File, objectPath: string): Promise<SupabaseCommentMediaUploadResult> {
+const resolveProfileThemeAudioContentTypes = (file: File) => {
+  const normalizedType = file.type.trim().toLowerCase();
+  const fallbacks = PROFILE_THEME_AUDIO_CONTENT_TYPE_FALLBACKS.get(normalizedType) ?? [];
+  const contentTypes = [normalizedType, ...fallbacks]
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+
+  return Array.from(new Set(contentTypes));
+};
+
+const isUnsupportedStorageMimeTypeError = (error: unknown) => {
+  const message =
+    typeof error === "object" && error && "message" in error
+      ? String((error as { message?: unknown }).message ?? "")
+      : error instanceof Error
+        ? error.message
+        : "";
+  return /mime type/i.test(message) && /not supported/i.test(message);
+};
+
+async function uploadStorageObject(
+  file: File,
+  objectPath: string,
+  contentType = file.type
+): Promise<SupabaseCommentMediaUploadResult> {
   if (!isSupabaseConfigured || !supabase) {
     throw new Error("Supabase is not configured for this build.");
   }
@@ -136,7 +168,7 @@ async function uploadStorageObject(file: File, objectPath: string): Promise<Supa
     .from(supabaseCommentMediaBucket)
     .upload(objectPath, file, {
       cacheControl: "3600",
-      contentType: file.type,
+      contentType,
       upsert: false,
     });
 
@@ -152,7 +184,7 @@ async function uploadStorageObject(file: File, objectPath: string): Promise<Supa
     bucket: supabaseCommentMediaBucket,
     path: objectPath,
     publicUrl,
-    contentType: file.type,
+    contentType,
     size: file.size,
     reused: false,
   };
@@ -179,7 +211,30 @@ export async function uploadSupabaseProfileThemeAudio(
   userId: string
 ): Promise<SupabaseCommentMediaUploadResult> {
   validateSupabaseProfileThemeAudioFile(file);
-  return uploadStorageObject(file, await buildObjectPath(file, "profile-music", userId));
+  const objectPath = await buildObjectPath(file, "profile-music", userId);
+  const contentTypes = resolveProfileThemeAudioContentTypes(file);
+  let lastError: unknown = null;
+
+  for (let index = 0; index < contentTypes.length; index += 1) {
+    const contentType = contentTypes[index];
+
+    try {
+      return await uploadStorageObject(file, objectPath, contentType);
+    } catch (error) {
+      lastError = error;
+      const hasNextAttempt = index < contentTypes.length - 1;
+
+      if (!hasNextAttempt || !isUnsupportedStorageMimeTypeError(error)) {
+        throw error;
+      }
+    }
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
+
+  throw new Error("Could not upload profile music.");
 }
 
 export async function uploadSupabaseCommentMediaTest(file: File) {
