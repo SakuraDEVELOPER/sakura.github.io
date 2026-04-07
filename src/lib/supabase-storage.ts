@@ -17,7 +17,20 @@ const ALLOWED_AVATAR_MEDIA_TYPES = new Set([
   "video/mp4",
   "video/webm",
 ]);
+const ALLOWED_PROFILE_THEME_AUDIO_TYPES = new Set([
+  "audio/mpeg",
+  "audio/mp3",
+  "audio/wav",
+  "audio/x-wav",
+  "audio/ogg",
+  "audio/aac",
+  "audio/flac",
+  "audio/mp4",
+  "audio/x-m4a",
+  "audio/webm",
+]);
 const MAX_AVATAR_UPLOAD_BYTES = 50 * 1024 * 1024;
+const MAX_PROFILE_THEME_AUDIO_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 export type SupabaseCommentMediaUploadResult = {
   bucket: string;
@@ -48,6 +61,23 @@ function inferFileExtension(file: File) {
     case "video/mp4":
       return "mp4";
     case "video/webm":
+      return "webm";
+    case "audio/mpeg":
+    case "audio/mp3":
+      return "mp3";
+    case "audio/wav":
+    case "audio/x-wav":
+      return "wav";
+    case "audio/ogg":
+      return "ogg";
+    case "audio/aac":
+      return "aac";
+    case "audio/flac":
+      return "flac";
+    case "audio/mp4":
+    case "audio/x-m4a":
+      return "m4a";
+    case "audio/webm":
       return "webm";
     default: {
       const nameParts = file.name.split(".");
@@ -85,6 +115,16 @@ export function validateSupabaseAvatarFile(file: File) {
 
   if (file.size <= 0 || file.size > MAX_AVATAR_UPLOAD_BYTES) {
     throw new Error("The selected avatar exceeds the 50 MB limit.");
+  }
+}
+
+export function validateSupabaseProfileThemeAudioFile(file: File) {
+  if (!ALLOWED_PROFILE_THEME_AUDIO_TYPES.has(file.type)) {
+    throw new Error("Profile music must be MP3, WAV, OGG, AAC, FLAC, M4A, or WEBM audio.");
+  }
+
+  if (file.size <= 0 || file.size > MAX_PROFILE_THEME_AUDIO_UPLOAD_BYTES) {
+    throw new Error("The selected track exceeds the 50 MB limit.");
   }
 }
 
@@ -132,6 +172,14 @@ export async function uploadSupabaseAvatarMedia(
 ): Promise<SupabaseCommentMediaUploadResult> {
   validateSupabaseAvatarFile(file);
   return uploadStorageObject(file, await buildObjectPath(file, "avatars", userId));
+}
+
+export async function uploadSupabaseProfileThemeAudio(
+  file: File,
+  userId: string
+): Promise<SupabaseCommentMediaUploadResult> {
+  validateSupabaseProfileThemeAudioFile(file);
+  return uploadStorageObject(file, await buildObjectPath(file, "profile-music", userId));
 }
 
 export async function uploadSupabaseCommentMediaTest(file: File) {

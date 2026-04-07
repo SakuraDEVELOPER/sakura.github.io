@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 /* eslint-disable @next/next/no-img-element */
 
 import Link from "next/link";
@@ -12,6 +12,7 @@ import {
   deleteSupabaseStorageObject,
   uploadSupabaseAvatarMedia,
   uploadSupabaseCommentMedia,
+  uploadSupabaseProfileThemeAudio,
   type SupabaseCommentMediaUploadResult,
 } from "@/lib/supabase-storage";
 import {
@@ -99,7 +100,7 @@ type ProfileThemeSelection = {
   embedUrl?: string;
   sourceUrl?: string;
   embedHeight?: number;
-  embedProvider?: "youtube" | "spotify" | "soundcloud" | "yandex" | "vk";
+  embedProvider?: "youtube" | "soundcloud" | "yandex" | "vk";
 };
 
 type Bridge = {
@@ -216,6 +217,7 @@ const COMMENT_MENTION_PATTERN = /@([A-Za-z\u0400-\u04FF0-9._-]{3,24})/g;
 const COMMENT_MENTION_DRAFT_PATTERN = /(^|[\s([{"'`])@([A-Za-z\u0400-\u04FF0-9._-]{2,24})$/;
 const COMMENT_MENTION_TOKEN_CHARACTER_PATTERN = /[A-Za-z\u0400-\u04FF0-9._-]/;
 const COMMENT_MEDIA_FILE_ACCEPT = ".png,.jpg,.jpeg,.webp,.gif,.mp4,.webm";
+const PROFILE_THEME_AUDIO_FILE_ACCEPT = ".mp3,.wav,.ogg,.aac,.flac,.m4a,.webm,audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/ogg,audio/aac,audio/flac,audio/mp4,audio/x-m4a,audio/webm";
 const PRESENCE_ACTIVE_WINDOW_MS = 90 * 1000;
 const SITE_ONLINE_COUNT_REFRESH_INTERVAL_MS = 20 * 1000;
 const SITE_ONLINE_COUNT_REFRESH_DEBOUNCE_MS = 280;
@@ -261,6 +263,7 @@ const restoreProfilePathScript = `
 const getWindowState = () => window as RuntimeWindow;
 const PROFILE_THEME_EXTERNAL_URL_PREFIX = "url:";
 const PROFILE_THEME_EXTERNAL_URL_MAX_LENGTH = 1024;
+const PROFILE_THEME_AUDIO_URL_PATH_PATTERN = /\.(?:mp3|wav|ogg|aac|flac|m4a|webm)(?:$|[?#])/i;
 const normalizeProfileThemePresetKey = (value: unknown): string | null => {
   const normalizedKey =
     typeof value === "string"
@@ -286,7 +289,7 @@ const parseProfileThemeExternalUrl = (value: string): URL | null => {
   }
 
   const candidateValue =
-    /^https?:\/\//i.test(trimmedValue) || /^spotify:/i.test(trimmedValue)
+    /^https?:\/\//i.test(trimmedValue)
       ? trimmedValue
       : /^[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?:[/:?#]|$)/.test(trimmedValue)
         ? `https://${trimmedValue}`
@@ -298,6 +301,10 @@ const parseProfileThemeExternalUrl = (value: string): URL | null => {
     return null;
   }
 };
+const resolveNormalizedProfileThemeExternalSourceUrl = (parsedUrl: URL) =>
+  `${parsedUrl.protocol}//${parsedUrl.host}${parsedUrl.pathname}${parsedUrl.search}`;
+const isProfileThemeAudioFileUrl = (parsedUrl: URL) =>
+  PROFILE_THEME_AUDIO_URL_PATH_PATTERN.test(`${parsedUrl.pathname}${parsedUrl.search}`);
 const resolveExternalProfileThemeSongSelection = (
   value: string
 ): ProfileThemeSelection | null => {
@@ -312,13 +319,15 @@ const resolveExternalProfileThemeSongSelection = (
   }
 
   const host = parsedUrl.hostname.toLowerCase().replace(/^www\./, "");
-  const pathSegments = parsedUrl.pathname.split("/").filter(Boolean);
   const buildSelection = (
     title: string,
     sourceUrl: string,
-    embedUrl: string,
-    embedHeight: number,
-    embedProvider: "youtube" | "spotify" | "soundcloud" | "yandex" | "vk"
+    options: {
+      src?: string;
+      embedUrl?: string;
+      embedHeight?: number;
+      embedProvider?: "soundcloud";
+    } = {}
   ): ProfileThemeSelection | null => {
     const normalizedSourceUrl = sourceUrl.trim();
 
@@ -330,107 +339,29 @@ const resolveExternalProfileThemeSongSelection = (
       key: `${PROFILE_THEME_EXTERNAL_URL_PREFIX}${normalizedSourceUrl}`,
       title,
       sourceUrl: normalizedSourceUrl,
-      embedUrl,
-      embedHeight,
-      embedProvider,
+      src: options.src,
+      embedUrl: options.embedUrl,
+      embedHeight: options.embedHeight,
+      embedProvider: options.embedProvider,
     };
   };
-
-  if (host === "youtu.be" || host === "youtube.com" || host === "m.youtube.com" || host === "music.youtube.com") {
-    let videoId = "";
-
-    if (host === "youtu.be") {
-      videoId = pathSegments[0] ?? "";
-    } else if ((pathSegments[0] ?? "").toLowerCase() === "watch") {
-      videoId = parsedUrl.searchParams.get("v") ?? "";
-    } else if (["shorts", "embed", "live"].includes((pathSegments[0] ?? "").toLowerCase())) {
-      videoId = pathSegments[1] ?? "";
-    } else {
-      videoId = parsedUrl.searchParams.get("v") ?? "";
-    }
-
-    const sanitizedVideoId = videoId.replace(/[^A-Za-z0-9_-]/g, "");
-
-    if (sanitizedVideoId.length >= 6) {
-      const sourceUrl = `https://www.youtube.com/watch?v=${sanitizedVideoId}`;
-      const originQuery =
-        typeof window !== "undefined" && window.location.origin
-          ? `&origin=${encodeURIComponent(window.location.origin)}`
-          : "";
-      const embedUrl = `https://www.youtube-nocookie.com/embed/${sanitizedVideoId}?autoplay=1&rel=0&enablejsapi=1&playsinline=1${originQuery}`;
-      return buildSelection("YouTube", sourceUrl, embedUrl, 168, "youtube");
-    }
-  }
-
-  if (host === "open.spotify.com") {
-    const entityType = (pathSegments[0] ?? "").toLowerCase();
-    const entityId = (pathSegments[1] ?? "").trim();
-    const supportedEntityTypes = new Set(["track", "album", "playlist", "episode", "show"]);
-
-    if (supportedEntityTypes.has(entityType) && entityId) {
-      const sourceUrl = `https://open.spotify.com/${entityType}/${entityId}`;
-      const embedUrl = `https://open.spotify.com/embed/${entityType}/${entityId}?utm_source=generator`;
-      const title =
-        entityType === "track"
-          ? "Spotify Track"
-          : entityType === "episode"
-            ? "Spotify Episode"
-            : "Spotify";
-      const embedHeight = entityType === "track" || entityType === "episode" ? 152 : 352;
-      return buildSelection(title, sourceUrl, embedUrl, embedHeight, "spotify");
-    }
-  }
 
   if (host === "soundcloud.com" || host === "m.soundcloud.com" || host === "on.soundcloud.com") {
     const sourceUrl = `https://${host}${parsedUrl.pathname}${parsedUrl.search}`;
     const embedUrl = `https://w.soundcloud.com/player/?url=${encodeURIComponent(sourceUrl)}&auto_play=true&enable_api=true&hide_related=true&show_teaser=false&show_comments=false&show_user=true&show_reposts=false&visual=false`;
-    return buildSelection("SoundCloud", sourceUrl, embedUrl, 166, "soundcloud");
+    return buildSelection("SoundCloud", sourceUrl, {
+      embedUrl,
+      embedHeight: 166,
+      embedProvider: "soundcloud",
+    });
   }
 
-  if (host === "music.yandex.ru" || host === "music.yandex.com") {
-    const firstSegment = (pathSegments[0] ?? "").toLowerCase();
+  const sourceUrl = resolveNormalizedProfileThemeExternalSourceUrl(parsedUrl);
 
-    if (firstSegment === "album" && pathSegments[1]) {
-      const albumId = pathSegments[1];
-
-      if ((pathSegments[2] ?? "").toLowerCase() === "track" && pathSegments[3]) {
-        const trackId = pathSegments[3];
-        const sourceUrl = `https://music.yandex.ru/album/${albumId}/track/${trackId}`;
-        const embedUrl = `https://music.yandex.ru/iframe/#track/${trackId}/${albumId}`;
-        return buildSelection("Yandex Music", sourceUrl, embedUrl, 168, "yandex");
-      }
-
-      const sourceUrl = `https://music.yandex.ru/album/${albumId}`;
-      const embedUrl = `https://music.yandex.ru/iframe/#album/${albumId}`;
-      return buildSelection("Yandex Music", sourceUrl, embedUrl, 352, "yandex");
-    }
-
-    if (firstSegment === "users" && pathSegments[1] && (pathSegments[2] ?? "").toLowerCase() === "playlists" && pathSegments[3]) {
-      const owner = pathSegments[1];
-      const playlistId = pathSegments[3];
-      const sourceUrl = `https://music.yandex.ru/users/${owner}/playlists/${playlistId}`;
-      const embedUrl = `https://music.yandex.ru/iframe/#playlist/${owner}/${playlistId}`;
-      return buildSelection("Yandex Music", sourceUrl, embedUrl, 352, "yandex");
-    }
-  }
-
-  if (host === "vk.com" || host === "m.vk.com" || host === "vkvideo.ru" || host === "m.vkvideo.ru") {
-    const isVideoExt = (pathSegments[0] ?? "").toLowerCase() === "video_ext.php";
-    const oid = parsedUrl.searchParams.get("oid");
-    const id = parsedUrl.searchParams.get("id");
-    const hash = parsedUrl.searchParams.get("hash");
-
-    if (isVideoExt && oid && id) {
-      const embedBase = `https://vk.com/video_ext.php?oid=${encodeURIComponent(oid)}&id=${encodeURIComponent(id)}`;
-      const embedUrl = hash
-        ? `${embedBase}&hash=${encodeURIComponent(hash)}&autoplay=1`
-        : `${embedBase}&autoplay=1`;
-      const sourceUrl = `https://vk.com/video${oid}_${id}`;
-      return buildSelection("VK", sourceUrl, embedUrl, 168, "vk");
-    }
-
-    const sourceUrl = `https://vk.com${parsedUrl.pathname}${parsedUrl.search}`;
-    return buildSelection("VK", sourceUrl, sourceUrl, 168, "vk");
+  if (isProfileThemeAudioFileUrl(parsedUrl)) {
+    return buildSelection("Uploaded Audio", sourceUrl, {
+      src: sourceUrl,
+    });
   }
 
   return null;
@@ -648,6 +579,8 @@ const getSupabaseCommentMediaUnavailableMessage = () =>
   "Supabase media upload is not configured for this build yet. Add NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, and NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET to the deployed site build.";
 const getSupabaseAvatarUnavailableMessage = () =>
   "Supabase avatar upload is not configured for this build yet. Add NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, and NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET to the deployed site build.";
+const getSupabaseThemeMusicUnavailableMessage = () =>
+  "Supabase music upload is not configured for this build yet. Add NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, and NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET to the deployed site build.";
 const USER_AVATAR_UPGRADE_MESSAGE =
   "You need a profile upgrade to use GIFs and videos as your avatar. User and Test Period roles support static images only.";
 const toCommentMediaPayload = (
@@ -1685,6 +1618,7 @@ export default function ProfilePage() {
   const router = useRouter();
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const adminAvatarInputRef = useRef<HTMLInputElement | null>(null);
+  const adminThemeSongFileInputRef = useRef<HTMLInputElement | null>(null);
   const [bootstrap] = useState(() => EMPTY_BOOTSTRAP);
   const [authReady, setAuthReady] = useState(bootstrap.authReady);
   const [authStateSettled, setAuthStateSettled] = useState(bootstrap.authStateSettled);
@@ -1747,6 +1681,7 @@ export default function ProfilePage() {
   const [adminHwidSuccess, setAdminHwidSuccess] = useState<string | null>(null);
   const [adminThemeSongInput, setAdminThemeSongInput] = useState("");
   const [isAdminThemeSongSaving, setIsAdminThemeSongSaving] = useState(false);
+  const [isAdminThemeSongUploading, setIsAdminThemeSongUploading] = useState(false);
   const [adminThemeSongError, setAdminThemeSongError] = useState<string | null>(null);
   const [adminThemeSongSuccess, setAdminThemeSongSuccess] = useState<string | null>(null);
   const [isAccountDeleting, setIsAccountDeleting] = useState(false);
@@ -1785,8 +1720,6 @@ export default function ProfilePage() {
   const [profileThemeCurrentTime, setProfileThemeCurrentTime] = useState(0);
   const [profileThemeDuration, setProfileThemeDuration] = useState(0);
   const [profileThemeVolume, setProfileThemeVolume] = useState(0.34);
-  const [profileThemeEmbedReloadToken, setProfileThemeEmbedReloadToken] = useState(0);
-  const [isSpotifyMiniPlayerVisible, setIsSpotifyMiniPlayerVisible] = useState(false);
   const [isProfileThemePanelOpen, setIsProfileThemePanelOpen] = useState(false);
   const [previousProfileId, setPreviousProfileId] = useState<number | null | undefined>(undefined);
   const [nextProfileId, setNextProfileId] = useState<number | null | undefined>(undefined);
@@ -2478,19 +2411,8 @@ useEffect(() => {
       : null;
   const shouldPlayProfileThemeSong = Boolean(profileThemeSongSrc || profileThemeEmbedUrl);
   const profileThemeActiveEmbedUrl =
-    profileThemeUsesEmbeddedPlayer && profileThemeEmbedUrl
-      ? profileThemeEmbedProvider === "spotify" && profileThemeEmbedReloadToken > 0
-        ? `${profileThemeEmbedUrl}${profileThemeEmbedUrl.includes("?") ? "&" : "?"}autoplay=1&sakura_play=${profileThemeEmbedReloadToken}`
-        : profileThemeEmbedUrl
-      : null;
-  const isSpotifyThemeEmbed =
-    profileThemeUsesEmbeddedPlayer && profileThemeEmbedProvider === "spotify";
-  const shouldRenderHiddenThemeEmbed =
-    Boolean(profileThemeActiveEmbedUrl) && profileThemeEmbedProvider !== "spotify";
-  const profileThemeSpotifyMiniEmbedUrl =
-    isSpotifyThemeEmbed && profileThemeEmbedUrl
-      ? `${profileThemeEmbedUrl}${profileThemeEmbedUrl.includes("?") ? "&" : "?"}autoplay=1&sakura_mini=${profileThemeEmbedReloadToken || 0}`
-      : null;
+    profileThemeUsesEmbeddedPlayer && profileThemeEmbedUrl ? profileThemeEmbedUrl : null;
+  const shouldRenderHiddenThemeEmbed = Boolean(profileThemeActiveEmbedUrl);
   const profileThemeDisplayedDuration = profileThemeUsesEmbeddedPlayer
     ? profileThemeDuration > 0
       ? profileThemeDuration
@@ -2500,11 +2422,6 @@ useEffect(() => {
     profileThemeCurrentTime,
     profileThemeDisplayedDuration || profileThemeCurrentTime
   );
-  useEffect(() => {
-    if (!isSpotifyThemeEmbed || !shouldPlayProfileThemeSong) {
-      setIsSpotifyMiniPlayerVisible(false);
-    }
-  }, [isSpotifyThemeEmbed, profileThemeSongKey, shouldPlayProfileThemeSong]);
 
   useEffect(() => {
     const audio = profileThemeAudioRef.current;
@@ -4011,6 +3928,7 @@ useEffect(() => {
       setAdminHwidError(null);
       setAdminHwidSuccess(null);
       setAdminThemeSongInput("");
+      setIsAdminThemeSongUploading(false);
       setAdminThemeSongError(null);
       setAdminThemeSongSuccess(null);
       setDeleteAccountError(null);
@@ -4073,6 +3991,7 @@ useEffect(() => {
             : "")
       )
     );
+    setIsAdminThemeSongUploading(false);
     setAdminThemeSongError(null);
     setAdminThemeSongSuccess(null);
     setDeleteAccountError(null);
@@ -5380,6 +5299,45 @@ useEffect(() => {
       setIsAdminPasswordResetSending(false);
     }
   };
+  const handleAdminThemeSongUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    event.target.value = "";
+
+    if (!file || !activeProfile) {
+      return;
+    }
+
+    if (!isSupabaseConfigured) {
+      setAdminThemeSongError(getSupabaseThemeMusicUnavailableMessage());
+      setAdminThemeSongSuccess(null);
+      return;
+    }
+
+    const targetUid = activeProfile.uid || visibleCurrentUser?.uid;
+
+    if (!targetUid) {
+      setAdminThemeSongError("Could not resolve the target account for music upload.");
+      setAdminThemeSongSuccess(null);
+      return;
+    }
+
+    setAdminThemeSongError(null);
+    setAdminThemeSongSuccess(null);
+    setIsAdminThemeSongUploading(true);
+
+    try {
+      const uploadedTrack = await uploadSupabaseProfileThemeAudio(file, targetUid);
+      setAdminThemeSongInput(uploadedTrack.publicUrl);
+      setAdminThemeSongSuccess("Track uploaded. Click Save Music to apply.");
+    } catch (error) {
+      setAdminThemeSongError(
+        getProfileActionErrorMessage(error, "Could not upload profile music.")
+      );
+    } finally {
+      setIsAdminThemeSongUploading(false);
+    }
+  };
+
   const handleAdminThemeSongSave = async () => {
     const bridge = getWindowState().sakuraFirebaseAuth;
 
@@ -5396,7 +5354,7 @@ useEffect(() => {
     const normalizedThemeSongKey = normalizeProfileThemeSongKey(adminThemeSongInput);
 
     if (adminThemeSongInput.trim() && !normalizedThemeSongKey) {
-      setAdminThemeSongError("Select a valid profile track key or supported music URL.");
+      setAdminThemeSongError("Select a valid profile track key, SoundCloud URL, or direct audio URL.");
       setAdminThemeSongSuccess(null);
       return;
     }
@@ -5963,17 +5921,6 @@ useEffect(() => {
       const nextIsPlaying = !profileThemeIsPlaying;
       setProfileThemeIsPlaying(nextIsPlaying);
 
-      if (profileThemeEmbedProvider === "spotify") {
-        if (nextIsPlaying) {
-          const nextToken = Date.now();
-          setProfileThemeCurrentTime(0);
-          setProfileThemeEmbedReloadToken(nextToken);
-          setIsSpotifyMiniPlayerVisible(true);
-        } else {
-          setIsSpotifyMiniPlayerVisible(false);
-        }
-        return;
-      }
 
       postProfileThemeEmbedCommand(nextIsPlaying ? "play" : "pause");
       return;
@@ -6878,29 +6825,6 @@ useEffect(() => {
                         Source: {profileThemeTitle ?? "External"}
                       </p>
                       <div className="mt-2 flex flex-wrap items-center gap-2">
-                        {isSpotifyThemeEmbed ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setIsSpotifyMiniPlayerVisible((currentValue) => {
-                                const nextValue = !currentValue;
-
-                                if (nextValue) {
-                                  setProfileThemeEmbedReloadToken(Date.now());
-                                  setProfileThemeCurrentTime(0);
-                                  setProfileThemeIsPlaying(true);
-                                } else {
-                                  setProfileThemeIsPlaying(false);
-                                }
-
-                                return nextValue;
-                              });
-                            }}
-                            className="inline-flex items-center rounded-full border border-[#3a2a31] bg-[#140d11] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/45 hover:text-white"
-                          >
-                            {isSpotifyMiniPlayerVisible ? "Hide Spotify" : "Spotify Mini"}
-                          </button>
-                        ) : null}
                         {profileThemeSourceUrl ? (
                           <a
                             href={profileThemeSourceUrl}
@@ -6912,20 +6836,6 @@ useEffect(() => {
                           </a>
                         ) : null}
                       </div>
-                      {isSpotifyThemeEmbed &&
-                      isSpotifyMiniPlayerVisible &&
-                      profileThemeSpotifyMiniEmbedUrl ? (
-                        <iframe
-                          ref={profileThemeEmbedFrameRef}
-                          src={profileThemeSpotifyMiniEmbedUrl}
-                          title={`${profileThemeTitle ?? "Spotify"} mini`}
-                          loading="lazy"
-                          referrerPolicy="strict-origin-when-cross-origin"
-                          allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-                          style={{ height: Math.max(152, Math.min(profileThemeEmbedHeight, 352)) }}
-                          className="mt-2 w-full rounded-[14px] border-0 bg-black"
-                        />
-                      ) : null}
                     </div>
                   ) : null}
                   <div className="mt-4 rounded-[20px] border border-[#2a181d] bg-[linear-gradient(180deg,rgba(18,11,14,0.96)_0%,rgba(11,11,12,0.96)_100%)] p-3 shadow-[inset_0_1px_0_rgba(255,183,197,0.04)]">
@@ -7406,14 +7316,29 @@ useEffect(() => {
                           ))}
                         </datalist>
                         <p className="mt-2 text-xs leading-relaxed text-gray-500">
-                          YouTube, VK, Spotify, SoundCloud, Yandex Music URLs are supported.
+                          SoundCloud URLs and direct audio links are supported.
                         </p>
+                        <input
+                          ref={adminThemeSongFileInputRef}
+                          type="file"
+                          accept={PROFILE_THEME_AUDIO_FILE_ACCEPT}
+                          onChange={handleAdminThemeSongUpload}
+                          className="hidden"
+                        />
                       </label>
                       <div className="mt-4 flex flex-wrap items-center gap-3">
                         <button
                           type="button"
+                          onClick={() => adminThemeSongFileInputRef.current?.click()}
+                          disabled={isAdminThemeSongSaving || isAdminThemeSongUploading}
+                          className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isAdminThemeSongUploading ? t("Uploading...", "Uploading...") : t("Upload Music", "Upload Music")}
+                        </button>
+                        <button
+                          type="button"
                           onClick={handleAdminThemeSongSave}
-                          disabled={isAdminThemeSongSaving}
+                          disabled={isAdminThemeSongSaving || isAdminThemeSongUploading}
                           className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {isAdminThemeSongSaving ? t("Saving...", "Saving...") : t("Save Music", "Save Music")}
