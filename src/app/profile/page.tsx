@@ -43,6 +43,8 @@ type UserProfile = {
   roles: string[];
   isBanned?: boolean;
   bannedAt?: string | null;
+  hwid?: string | null;
+  subscriptionUntil?: string | null;
   providerIds: string[];
   creationTime: string | null;
   lastSignInTime: string | null;
@@ -129,6 +131,11 @@ type Bridge = {
   adminUpdateProfileDisplayName: (profileId: number, displayName: string) => Promise<UserProfile | null>;
   adminUpdateProfileLogin: (profileId: number, login: string) => Promise<UserProfile | null>;
   adminUpdateProfileThemeSong: (profileId: number, themeSongKey: string) => Promise<UserProfile | null>;
+  adminUpdateProfileSubscriptionUntil?: (
+    profileId: number,
+    subscriptionUntil: string | null
+  ) => Promise<UserProfile | null>;
+  adminResetProfileHwid?: (profileId: number) => Promise<UserProfile | null>;
   adminSetProfileBan: (profileId: number, isBanned: boolean) => Promise<UserProfile | null>;
   adminSetProfileEmailVerification: (profileId: number, isVerified: boolean) => Promise<UserProfile | null>;
   updateProfileRoles: (profileId: number, roles: string[]) => Promise<UserProfile | null>;
@@ -953,6 +960,65 @@ const formatTime = (value: string | null, locale: UiLocale) => {
     ...(browserTimeZone ? { timeZone: browserTimeZone } : {}),
   }).format(parsedDate);
 };
+const resolveProfileSubscriptionUntil = (profile: UserProfile | null | undefined) => {
+  const value = typeof profile?.subscriptionUntil === "string" ? profile.subscriptionUntil.trim() : "";
+
+  if (!value) {
+    return null;
+  }
+
+  const parsedDate = new Date(value);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return null;
+  }
+
+  return parsedDate.toISOString();
+};
+const toDateTimeLocalInputValue = (value: string | null) => {
+  if (!value) {
+    return "";
+  }
+
+  const parsedDate = new Date(value);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "";
+  }
+
+  const pad = (candidate: number) => String(candidate).padStart(2, "0");
+
+  return (
+    String(parsedDate.getFullYear()) +
+    "-" +
+    pad(parsedDate.getMonth() + 1) +
+    "-" +
+    pad(parsedDate.getDate()) +
+    "T" +
+    pad(parsedDate.getHours()) +
+    ":" +
+    pad(parsedDate.getMinutes())
+  );
+};
+const parseDateTimeLocalInputValue = (value: string): string | null => {
+  const trimmedValue = value.trim();
+
+  if (!trimmedValue) {
+    return null;
+  }
+
+  const parsedDate = new Date(trimmedValue);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return null;
+  }
+
+  return parsedDate.toISOString();
+};
+const resolveProfileHwid = (profile: UserProfile | null | undefined) => {
+  const value = typeof profile?.hwid === "string" ? profile.hwid.trim() : "";
+  return value || null;
+};
 const isUserLikeRole = (role: string) => /^u(?:[\s_-]*s)?[\s_-]*e[\s_-]*r$/i.test(role.trim());
 const toCompactRoleToken = (role: string) =>
   role
@@ -1672,6 +1738,13 @@ export default function ProfilePage() {
   const [isAdminSubscriptionSaving, setIsAdminSubscriptionSaving] = useState(false);
   const [adminSubscriptionError, setAdminSubscriptionError] = useState<string | null>(null);
   const [adminSubscriptionSuccess, setAdminSubscriptionSuccess] = useState<string | null>(null);
+  const [adminSubscriptionUntilInput, setAdminSubscriptionUntilInput] = useState("");
+  const [isAdminSubscriptionUntilSaving, setIsAdminSubscriptionUntilSaving] = useState(false);
+  const [adminSubscriptionUntilError, setAdminSubscriptionUntilError] = useState<string | null>(null);
+  const [adminSubscriptionUntilSuccess, setAdminSubscriptionUntilSuccess] = useState<string | null>(null);
+  const [isAdminHwidResetting, setIsAdminHwidResetting] = useState(false);
+  const [adminHwidError, setAdminHwidError] = useState<string | null>(null);
+  const [adminHwidSuccess, setAdminHwidSuccess] = useState<string | null>(null);
   const [adminThemeSongInput, setAdminThemeSongInput] = useState("");
   const [isAdminThemeSongSaving, setIsAdminThemeSongSaving] = useState(false);
   const [adminThemeSongError, setAdminThemeSongError] = useState<string | null>(null);
@@ -2927,6 +3000,11 @@ useEffect(() => {
     subscriptionSummary.status === "active"
       ? t("Active", "Активна")
       : t("Inactive", "Неактивна");
+  const profileSubscriptionUntil = resolveProfileSubscriptionUntil(activeProfile);
+  const profileSubscriptionUntilLabel = profileSubscriptionUntil
+    ? formatTime(profileSubscriptionUntil, locale)
+    : t("Not set", "Not set");
+  const profileHwid = resolveProfileHwid(activeProfile);
   const isOwnProfileViewById = Boolean(
     visibleCurrentUser &&
       typeof visibleCurrentUser.profileId === "number" &&
@@ -3927,6 +4005,11 @@ useEffect(() => {
       setAdminPasswordResetSuccess(null);
       setAdminSubscriptionError(null);
       setAdminSubscriptionSuccess(null);
+      setAdminSubscriptionUntilInput("");
+      setAdminSubscriptionUntilError(null);
+      setAdminSubscriptionUntilSuccess(null);
+      setAdminHwidError(null);
+      setAdminHwidSuccess(null);
       setAdminThemeSongInput("");
       setAdminThemeSongError(null);
       setAdminThemeSongSuccess(null);
@@ -3975,6 +4058,13 @@ useEffect(() => {
     setAdminPasswordResetSuccess(null);
     setAdminSubscriptionError(null);
     setAdminSubscriptionSuccess(null);
+    setAdminSubscriptionUntilInput(
+      toDateTimeLocalInputValue(resolveProfileSubscriptionUntil(activeProfile))
+    );
+    setAdminSubscriptionUntilError(null);
+    setAdminSubscriptionUntilSuccess(null);
+    setAdminHwidError(null);
+    setAdminHwidSuccess(null);
     setAdminThemeSongInput(
       getAdminThemeSongInputValue(
         normalizeProfileThemeSongKey(activeProfile.themeSongKey) ??
@@ -4984,6 +5074,81 @@ useEffect(() => {
       );
     } finally {
       setIsAdminSubscriptionSaving(false);
+    }
+  };
+
+  const handleAdminSubscriptionUntilSave = async () => {
+    const bridge = getWindowState().sakuraFirebaseAuth;
+
+    if (!bridge || !activeProfile?.profileId || !canManageRoleAssignments) {
+      return;
+    }
+
+    if (typeof bridge.adminUpdateProfileSubscriptionUntil !== "function") {
+      setAdminSubscriptionUntilError("Subscription end date update is unavailable in the current runtime.");
+      setAdminSubscriptionUntilSuccess(null);
+      return;
+    }
+
+    const nextSubscriptionUntil = parseDateTimeLocalInputValue(adminSubscriptionUntilInput);
+
+    if (adminSubscriptionUntilInput.trim() && !nextSubscriptionUntil) {
+      setAdminSubscriptionUntilError("Enter a valid subscription end date.");
+      setAdminSubscriptionUntilSuccess(null);
+      return;
+    }
+
+    setAdminSubscriptionUntilError(null);
+    setAdminSubscriptionUntilSuccess(null);
+    setIsAdminSubscriptionUntilSaving(true);
+
+    try {
+      const snapshot = await bridge.adminUpdateProfileSubscriptionUntil(
+        activeProfile.profileId,
+        nextSubscriptionUntil
+      );
+
+      applyUpdatedProfileSnapshot(snapshot);
+      setAdminSubscriptionUntilInput(toDateTimeLocalInputValue(nextSubscriptionUntil));
+      setAdminSubscriptionUntilSuccess(
+        nextSubscriptionUntil
+          ? t("Subscription end date saved.", "Subscription end date saved.")
+          : t("Subscription end date cleared.", "Subscription end date cleared.")
+      );
+    } catch (error) {
+      setAdminSubscriptionUntilError(
+        error instanceof Error ? error.message : "Could not update subscription end date."
+      );
+    } finally {
+      setIsAdminSubscriptionUntilSaving(false);
+    }
+  };
+
+  const handleAdminResetHwid = async () => {
+    const bridge = getWindowState().sakuraFirebaseAuth;
+
+    if (!bridge || !activeProfile?.profileId || !canManageRoleAssignments) {
+      return;
+    }
+
+    if (typeof bridge.adminResetProfileHwid !== "function") {
+      setAdminHwidError("HWID reset is unavailable in the current runtime.");
+      setAdminHwidSuccess(null);
+      return;
+    }
+
+    setAdminHwidError(null);
+    setAdminHwidSuccess(null);
+    setIsAdminHwidResetting(true);
+
+    try {
+      const snapshot = await bridge.adminResetProfileHwid(activeProfile.profileId);
+      applyUpdatedProfileSnapshot(snapshot);
+      setAdminHwidSuccess(t("HWID reset completed.", "HWID reset completed."));
+    } catch (error) {
+      setAdminHwidError(error instanceof Error ? error.message : "Could not reset HWID.");
+    } finally {
+      setIsAdminHwidResetting(false);
     }
   };
 
@@ -6210,6 +6375,8 @@ useEffect(() => {
                       <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-[#b78a95]">{t("Current Subscription", "Текущая подписка")}</p>
                       <p className="mt-3 text-lg font-bold text-white">{subscriptionSummary.title}</p>
                       <p className="mt-3 text-xs leading-relaxed text-gray-400">{subscriptionSummary.description}</p>
+                      <p className="mt-3 text-xs uppercase tracking-[0.22em] text-[#b78a95]">{t("Sub Until", "Sub Until")}</p>
+                      <p className="mt-2 text-sm font-semibold text-white">{profileSubscriptionUntilLabel}</p>
                       <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-gray-400">
                         <span>{t("Payment method", "Способ оплаты")}:</span>
                         <a
@@ -6984,6 +7151,56 @@ useEffect(() => {
                       ) : null}
                       {adminSubscriptionError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{adminSubscriptionError}</p> : null}
                       {adminSubscriptionSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{adminSubscriptionSuccess}</p> : null}
+                    </section>
+
+                    <section className="rounded-[24px] border border-[#1d1d1d] bg-[#0d0d0d] p-5">
+                      <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Sub Until & HWID", "Sub Until & HWID")}</p>
+                      <div className="mt-4">
+                        <p className="text-xs uppercase tracking-[0.22em] text-gray-500">{t("Sub Until", "Sub Until")}</p>
+                        <p className="mt-2 text-sm font-semibold text-white">{profileSubscriptionUntilLabel}</p>
+                        <label className="mt-3 block">
+                          <input
+                            type="datetime-local"
+                            value={adminSubscriptionUntilInput}
+                            onChange={(event) => {
+                              setAdminSubscriptionUntilInput(event.target.value);
+                              setAdminSubscriptionUntilError(null);
+                              setAdminSubscriptionUntilSuccess(null);
+                            }}
+                            className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55"
+                          />
+                        </label>
+                        <div className="mt-4 flex flex-wrap items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={handleAdminSubscriptionUntilSave}
+                            disabled={isAdminSubscriptionUntilSaving || isAdminHwidResetting}
+                            className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {isAdminSubscriptionUntilSaving ? t("Saving...", "Saving...") : t("Save Sub Until", "Save Sub Until")}
+                          </button>
+                        </div>
+                        {adminSubscriptionUntilError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{adminSubscriptionUntilError}</p> : null}
+                        {adminSubscriptionUntilSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{adminSubscriptionUntilSuccess}</p> : null}
+                      </div>
+                      <div className="mt-6">
+                        <p className="text-xs uppercase tracking-[0.22em] text-gray-500">HWID</p>
+                        <p className="mt-2 break-all rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-xs text-gray-300">
+                          {profileHwid ?? t("Not set", "Not set")}
+                        </p>
+                        <div className="mt-4 flex flex-wrap items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={handleAdminResetHwid}
+                            disabled={isAdminHwidResetting || isAdminSubscriptionUntilSaving || !profileHwid}
+                            className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {isAdminHwidResetting ? t("Resetting...", "Resetting...") : t("Reset HWID", "Reset HWID")}
+                          </button>
+                        </div>
+                        {adminHwidError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{adminHwidError}</p> : null}
+                        {adminHwidSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{adminHwidSuccess}</p> : null}
+                      </div>
                     </section>
 
                     <section className="rounded-[24px] border border-[#1d1d1d] bg-[#0d0d0d] p-5">
