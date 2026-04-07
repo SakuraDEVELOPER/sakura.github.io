@@ -400,6 +400,52 @@ const getAdminThemeSongInputValue = (value: string | null): string => {
     ? value.slice(PROFILE_THEME_EXTERNAL_URL_PREFIX.length)
     : value;
 };
+const SUPABASE_STORAGE_BUCKET =
+  process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET?.trim() || "comment-media";
+const resolveSupabasePublicObjectPath = (value: string | null | undefined): string | null => {
+  const rawValue = typeof value === "string" ? value.trim() : "";
+
+  if (!rawValue) {
+    return null;
+  }
+
+  try {
+    const parsedUrl = new URL(rawValue);
+    const pathSegments = parsedUrl.pathname.split("/").filter(Boolean);
+    const storageIndex = pathSegments.findIndex(
+      (segment) => segment === "storage"
+    );
+
+    if (storageIndex < 0) {
+      return null;
+    }
+
+    const expectedPrefix = pathSegments.slice(storageIndex, storageIndex + 5);
+    if (
+      expectedPrefix[0] !== "storage" ||
+      expectedPrefix[1] !== "v1" ||
+      expectedPrefix[2] !== "object" ||
+      expectedPrefix[3] !== "public"
+    ) {
+      return null;
+    }
+
+    const encodedBucket = expectedPrefix[4] ?? "";
+    const decodedBucket = decodeURIComponent(encodedBucket);
+    if (decodedBucket !== SUPABASE_STORAGE_BUCKET) {
+      return null;
+    }
+
+    const objectSegments = pathSegments.slice(storageIndex + 5);
+    if (!objectSegments.length) {
+      return null;
+    }
+
+    return objectSegments.map((segment) => decodeURIComponent(segment)).join("/");
+  } catch {
+    return null;
+  }
+};
 const hasCurrentFirebaseAuthRuntime = (runtime: RuntimeWindow) =>
   Boolean(runtime.sakuraFirebaseAuth) &&
   runtime.sakuraFirebaseRuntimeVersion === FIREBASE_AUTH_RUNTIME_VERSION &&
@@ -876,13 +922,13 @@ const redirectToLocalProfile = (requestedProfileId: number, currentProfileId: nu
 const resolveDateTimeLocale = (locale: UiLocale) => (locale === "ru" ? "ru-RU" : "en-US");
 const formatTime = (value: string | null, locale: UiLocale) => {
   if (!value) {
-    return locale === "ru" ? "Недоступно" : "Not available";
+    return locale === "ru" ? "Р В РЎСљР В Р’ВµР В РўвЂР В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋРЎвЂњР В РЎвЂ”Р В Р вЂ¦Р В РЎвЂў" : "Not available";
   }
 
   const parsedDate = new Date(value);
 
   if (Number.isNaN(parsedDate.getTime())) {
-    return locale === "ru" ? "Недоступно" : "Not available";
+    return locale === "ru" ? "Р В РЎСљР В Р’ВµР В РўвЂР В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋРЎвЂњР В РЎвЂ”Р В Р вЂ¦Р В РЎвЂў" : "Not available";
   }
 
   const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -1682,6 +1728,7 @@ export default function ProfilePage() {
   const [adminThemeSongInput, setAdminThemeSongInput] = useState("");
   const [isAdminThemeSongSaving, setIsAdminThemeSongSaving] = useState(false);
   const [isAdminThemeSongUploading, setIsAdminThemeSongUploading] = useState(false);
+  const [isAdminThemeSongDeleting, setIsAdminThemeSongDeleting] = useState(false);
   const [adminThemeSongError, setAdminThemeSongError] = useState<string | null>(null);
   const [adminThemeSongSuccess, setAdminThemeSongSuccess] = useState<string | null>(null);
   const [isAccountDeleting, setIsAccountDeleting] = useState(false);
@@ -2890,7 +2937,7 @@ useEffect(() => {
       ? t("Sakura Cheat Dota 2", "Sakura Cheat Dota 2")
       : t(
           "Buy a subscription to unlock all cheat features in the game.",
-          "Купите подписку, чтобы разблокировать все возможности чита в игре."
+          "Р В РЎв„ўР РЋРЎвЂњР В РЎвЂ”Р В РЎвЂР РЋРІР‚С™Р В Р’Вµ Р В РЎвЂ”Р В РЎвЂўР В РўвЂР В РЎвЂ”Р В РЎвЂР РЋР С“Р В РЎвЂќР РЋРЎвЂњ, Р РЋРІР‚РЋР РЋРІР‚С™Р В РЎвЂўР В Р’В±Р РЋРІР‚в„– Р РЋР вЂљР В Р’В°Р В Р’В·Р В Р’В±Р В Р’В»Р В РЎвЂўР В РЎвЂќР В РЎвЂР РЋР вЂљР В РЎвЂўР В Р вЂ Р В Р’В°Р РЋРІР‚С™Р РЋР Р‰ Р В Р вЂ Р РЋР С“Р В Р’Вµ Р В Р вЂ Р В РЎвЂўР В Р’В·Р В РЎВР В РЎвЂўР В Р’В¶Р В Р вЂ¦Р В РЎвЂўР РЋР С“Р РЋРІР‚С™Р В РЎвЂ Р РЋРІР‚РЋР В РЎвЂР РЋРІР‚С™Р В Р’В° Р В Р вЂ  Р В РЎвЂР В РЎвЂ“Р РЋР вЂљР В Р’Вµ."
         ),
   };
   const subscriptionBadgeStyle: CSSProperties =
@@ -2915,8 +2962,8 @@ useEffect(() => {
   };
   const subscriptionStatusLabel =
     subscriptionSummary.status === "active"
-      ? t("Active", "Активна")
-      : t("Inactive", "Неактивна");
+      ? t("Active", "Р В РЎвЂ™Р В РЎвЂќР РЋРІР‚С™Р В РЎвЂР В Р вЂ Р В Р вЂ¦Р В Р’В°")
+      : t("Inactive", "Р В РЎСљР В Р’ВµР В Р’В°Р В РЎвЂќР РЋРІР‚С™Р В РЎвЂР В Р вЂ Р В Р вЂ¦Р В Р’В°");
   const profileSubscriptionUntil = resolveProfileSubscriptionUntil(activeProfile);
   const profileSubscriptionUntilLabel = profileSubscriptionUntil
     ? formatTime(profileSubscriptionUntil, locale)
@@ -3929,6 +3976,7 @@ useEffect(() => {
       setAdminHwidSuccess(null);
       setAdminThemeSongInput("");
       setIsAdminThemeSongUploading(false);
+      setIsAdminThemeSongDeleting(false);
       setAdminThemeSongError(null);
       setAdminThemeSongSuccess(null);
       setDeleteAccountError(null);
@@ -3992,6 +4040,7 @@ useEffect(() => {
       )
     );
     setIsAdminThemeSongUploading(false);
+    setIsAdminThemeSongDeleting(false);
     setAdminThemeSongError(null);
     setAdminThemeSongSuccess(null);
     setDeleteAccountError(null);
@@ -4985,7 +5034,7 @@ useEffect(() => {
       }
 
       setAdminSubscriptionSuccess(
-        t("Active subscription granted.", "Активная подписка выдана.")
+        t("Active subscription granted.", "Р В РЎвЂ™Р В РЎвЂќР РЋРІР‚С™Р В РЎвЂР В Р вЂ Р В Р вЂ¦Р В Р’В°Р РЋР РЏ Р В РЎвЂ”Р В РЎвЂўР В РўвЂР В РЎвЂ”Р В РЎвЂР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ Р РЋРІР‚в„–Р В РўвЂР В Р’В°Р В Р вЂ¦Р В Р’В°.")
       );
     } catch (error) {
       setAdminSubscriptionError(
@@ -5096,7 +5145,7 @@ useEffect(() => {
       setVerificationSuccess(
         t(
           "Verification email sent. Check Spam/Junk if it is not in Inbox.",
-          "Письмо подтверждения отправлено. Проверьте папку Спам, если его нет во входящих."
+          "Р В РЎСџР В РЎвЂР РЋР С“Р РЋР Р‰Р В РЎВР В РЎвЂў Р В РЎвЂ”Р В РЎвЂўР В РўвЂР РЋРІР‚С™Р В Р вЂ Р В Р’ВµР РЋР вЂљР В Р’В¶Р В РўвЂР В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р В РЎвЂўР РЋРІР‚С™Р В РЎвЂ”Р РЋР вЂљР В Р’В°Р В Р вЂ Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂў. Р В РЎСџР РЋР вЂљР В РЎвЂўР В Р вЂ Р В Р’ВµР РЋР вЂљР РЋР Р‰Р РЋРІР‚С™Р В Р’Вµ Р В РЎвЂ”Р В Р’В°Р В РЎвЂ”Р В РЎвЂќР РЋРЎвЂњ Р В Р Р‹Р В РЎвЂ”Р В Р’В°Р В РЎВ, Р В Р’ВµР РЋР С“Р В Р’В»Р В РЎвЂ Р В Р’ВµР В РЎвЂ“Р В РЎвЂў Р В Р вЂ¦Р В Р’ВµР РЋРІР‚С™ Р В Р вЂ Р В РЎвЂў Р В Р вЂ Р РЋРІР‚В¦Р В РЎвЂўР В РўвЂР РЋР РЏР РЋРІР‚В°Р В РЎвЂР РЋРІР‚В¦."
         )
       );
     } catch (error) {
@@ -5259,7 +5308,7 @@ useEffect(() => {
       setPasswordSuccess(
         t(
           `Password reset email sent to ${resetResult.email}. Check Spam/Junk if it is not in Inbox.`,
-          `Письмо для сброса пароля отправлено на ${resetResult.email}. Проверьте папку Спам, если его нет во входящих.`
+          `Р В РЎСџР В РЎвЂР РЋР С“Р РЋР Р‰Р В РЎВР В РЎвЂў Р В РўвЂР В Р’В»Р РЋР РЏ Р РЋР С“Р В Р’В±Р РЋР вЂљР В РЎвЂўР РЋР С“Р В Р’В° Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В РЎвЂўР В Р’В»Р РЋР РЏ Р В РЎвЂўР РЋРІР‚С™Р В РЎвЂ”Р РЋР вЂљР В Р’В°Р В Р вЂ Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂў Р В Р вЂ¦Р В Р’В° ${resetResult.email}. Р В РЎСџР РЋР вЂљР В РЎвЂўР В Р вЂ Р В Р’ВµР РЋР вЂљР РЋР Р‰Р РЋРІР‚С™Р В Р’Вµ Р В РЎвЂ”Р В Р’В°Р В РЎвЂ”Р В РЎвЂќР РЋРЎвЂњ Р В Р Р‹Р В РЎвЂ”Р В Р’В°Р В РЎВ, Р В Р’ВµР РЋР С“Р В Р’В»Р В РЎвЂ Р В Р’ВµР В РЎвЂ“Р В РЎвЂў Р В Р вЂ¦Р В Р’ВµР РЋРІР‚С™ Р В Р вЂ Р В РЎвЂў Р В Р вЂ Р РЋРІР‚В¦Р В РЎвЂўР В РўвЂР РЋР РЏР РЋРІР‚В°Р В РЎвЂР РЋРІР‚В¦.`
         )
       );
     } catch (error) {
@@ -5389,6 +5438,70 @@ useEffect(() => {
       setIsAdminThemeSongSaving(false);
     }
   };
+  const handleAdminThemeSongDelete = async () => {
+    const bridge = getWindowState().sakuraFirebaseAuth;
+
+    if (!bridge || !canOpenAdminPanel || !activeProfile?.profileId) {
+      return;
+    }
+
+    if (typeof bridge.adminUpdateProfileThemeSong !== "function") {
+      setAdminThemeSongError("Profile music update is unavailable in the current runtime.");
+      setAdminThemeSongSuccess(null);
+      return;
+    }
+
+    setAdminThemeSongError(null);
+    setAdminThemeSongSuccess(null);
+    setIsAdminThemeSongDeleting(true);
+
+    const currentThemeSongRaw =
+      typeof activeProfile.themeSongKey === "string" ? activeProfile.themeSongKey : "";
+    const candidateUrls = [
+      getAdminThemeSongInputValue(adminThemeSongInput),
+      getAdminThemeSongInputValue(currentThemeSongRaw),
+    ];
+    const candidatePaths = Array.from(
+      new Set(
+        candidateUrls
+          .map((url) => resolveSupabasePublicObjectPath(url))
+          .filter((value): value is string => Boolean(value))
+          .filter((value) => value.startsWith("profile-music/"))
+      )
+    );
+
+    try {
+      const snapshot = await bridge.adminUpdateProfileThemeSong(activeProfile.profileId, "");
+      applyUpdatedProfileSnapshot(snapshot);
+      setAdminThemeSongInput(
+        getAdminThemeSongInputValue(
+          normalizeProfileThemeSongKey(snapshot?.themeSongKey) ??
+            (typeof activeProfile.profileId === "number"
+              ? PROFILE_THEME_DEFAULT_KEY_BY_PROFILE_ID.get(activeProfile.profileId) ?? ""
+              : "")
+        )
+      );
+
+      if (candidatePaths.length > 0) {
+        await Promise.all(
+          candidatePaths.map((path) =>
+            deleteSupabaseStorageObject(path).catch((cleanupError) => {
+              console.error("Failed to delete profile music object:", cleanupError);
+            })
+          )
+        );
+      }
+
+      setAdminThemeSongSuccess("Profile track deleted.");
+    } catch (error) {
+      setAdminThemeSongError(
+        getProfileActionErrorMessage(error, "Could not delete profile music.")
+      );
+    } finally {
+      setIsAdminThemeSongDeleting(false);
+    }
+  };
+
   const handleDeleteAccount = async () => {
     const bridge = getWindowState().sakuraFirebaseAuth;
 
@@ -6033,7 +6146,7 @@ useEffect(() => {
               <div className="flex flex-wrap items-center justify-end gap-3">
                 <Link href="/" className="inline-flex items-center justify-center rounded-full border border-[#2a2a2a] bg-[#101010] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-gray-300 transition hover:border-[#4a4a4a] hover:text-white">Home</Link>
                 {visibleCurrentUser?.profileId && !isOwner ? <a href={profilePath(visibleCurrentUser.profileId)} className="inline-flex items-center justify-center rounded-full border border-[#2b1b1e] bg-[#1a1012] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white">My Profile</a> : null}
-                {visibleCurrentUser ? <button type="button" onClick={handleLogout} disabled={isLoggingOut} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">{isLoggingOut ? t("Logging out...", "Выход...") : t("Logout", "Выход")}</button> : null}
+                {visibleCurrentUser ? <button type="button" onClick={handleLogout} disabled={isLoggingOut} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">{isLoggingOut ? t("Logging out...", "Р В РІР‚в„ўР РЋРІР‚в„–Р РЋРІР‚В¦Р В РЎвЂўР В РўвЂ...") : t("Logout", "Р В РІР‚в„ўР РЋРІР‚в„–Р РЋРІР‚В¦Р В РЎвЂўР В РўвЂ")}</button> : null}
                 <div className="lg:hidden">
                   <SiteOnlineBadge count={siteOnlineCount} profileHrefBuilder={profilePath} />
                 </div>
@@ -6277,19 +6390,19 @@ useEffect(() => {
                 <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
                   <div className="flex shrink-0 flex-col items-center gap-3">
                   {hasActiveProfileAvatar ? <AvatarMedia src={activeProfileAvatarUrl ?? ""} alt={primaryName} loading="eager" decoding="async" className="h-[104px] w-[104px] rounded-[30px] border border-[#2c2023] object-cover shadow-[0_0_30px_rgba(255,183,197,0.14)]" /> : <div className="flex h-[104px] w-[104px] items-center justify-center rounded-[30px] border border-[#2c2023] bg-[#1a1012] text-2xl font-black uppercase text-[#ffb7c5] shadow-[0_0_30px_rgba(255,183,197,0.14)]">{initials}</div>}
-                  <span style={{ minWidth: 104, height: 30 }} className={`inline-flex shrink-0 items-center justify-center rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${isActiveProfileOnline ? "border-[#1f3b2f] bg-[#0d1713] text-[#8ce5b2]" : "border-[#312228] bg-[#140d11] text-[#ffb7c5]"}`}>{isActiveProfileOnline ? t("Online", "Онлайн") : t("Offline", "Оффлайн")}</span>
+                  <span style={{ minWidth: 104, height: 30 }} className={`inline-flex shrink-0 items-center justify-center rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${isActiveProfileOnline ? "border-[#1f3b2f] bg-[#0d1713] text-[#8ce5b2]" : "border-[#312228] bg-[#140d11] text-[#ffb7c5]"}`}>{isActiveProfileOnline ? t("Online", "Р В РЎвЂєР В Р вЂ¦Р В Р’В»Р В Р’В°Р В РІвЂћвЂ“Р В Р вЂ¦") : t("Offline", "Р В РЎвЂєР РЋРІР‚С›Р РЋРІР‚С›Р В Р’В»Р В Р’В°Р В РІвЂћвЂ“Р В Р вЂ¦")}</span>
                   </div>
                   <div className="flex min-w-0 flex-1 flex-col sm:min-h-[146px]">
                     <div className="min-w-0">
                       <h1 style={profileHeadlineStyle} className="min-w-0 truncate text-3xl font-black uppercase tracking-tighter">{primaryName}</h1>
-                      {hasUsername ? <p className="mt-1 text-sm font-medium text-[#c7d4cc]">@{activeProfile.login}</p> : isOwner ? <p className="mt-1 text-sm text-gray-500">{t("Login not set yet.", "Логин ещё не задан.")}</p> : null}
+                      {hasUsername ? <p className="mt-1 text-sm font-medium text-[#c7d4cc]">@{activeProfile.login}</p> : isOwner ? <p className="mt-1 text-sm text-gray-500">{t("Login not set yet.", "Р В РІР‚С”Р В РЎвЂўР В РЎвЂ“Р В РЎвЂР В Р вЂ¦ Р В Р’ВµР РЋРІР‚В°Р РЋРІР‚В Р В Р вЂ¦Р В Р’Вµ Р В Р’В·Р В Р’В°Р В РўвЂР В Р’В°Р В Р вЂ¦.")}</p> : null}
                       {typeof activeProfile.profileId === "number" ? <p className="mt-1 flex max-w-full items-center gap-2 text-[11px] text-[#b78a95]">
                         <span aria-hidden="true" className="inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-[#ff9fbd] shadow-[0_0_10px_rgba(255,159,189,0.7)]" />
                         <span className="truncate">UID: {activeProfile.profileId}</span>
                       </p> : null}
                       <p className={`${typeof activeProfile.profileId === "number" ? "mt-0.5" : "mt-1"} flex max-w-full items-center gap-2 text-[11px] text-[#b78a95]`}>
                         <span aria-hidden="true" className="inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-[#ff9fbd] shadow-[0_0_10px_rgba(255,159,189,0.7)]" />
-                        <span className="truncate">{t("Account created", "Аккаунт создан")} {formatTime(activeProfile.creationTime, locale)}</span>
+                        <span className="truncate">{t("Account created", "Р В РЎвЂ™Р В РЎвЂќР В РЎвЂќР В Р’В°Р РЋРЎвЂњР В Р вЂ¦Р РЋРІР‚С™ Р РЋР С“Р В РЎвЂўР В Р’В·Р В РўвЂР В Р’В°Р В Р вЂ¦")} {formatTime(activeProfile.creationTime, locale)}</span>
                       </p>
                     </div>
                     <div className="mt-3 flex flex-wrap items-center gap-3 sm:mt-auto">
@@ -6306,26 +6419,26 @@ useEffect(() => {
                 >
                   <div className="flex items-center justify-between gap-4">
                     <div>
-                      <p className="font-mono text-[10px] uppercase leading-none tracking-[0.4em] text-[#ffb7c5]">{t("Subscription", "Подписка")}</p>
+                      <p className="font-mono text-[10px] uppercase leading-none tracking-[0.4em] text-[#ffb7c5]">{t("Subscription", "Р В РЎСџР В РЎвЂўР В РўвЂР В РЎвЂ”Р В РЎвЂР РЋР С“Р В РЎвЂќР В Р’В°")}</p>
                     </div>
                     <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                       <span style={{ ...subscriptionBadgeStyle, ...roleBadgeTextStyle }} className="inline-flex h-[24px] shrink-0 items-center rounded-full border px-3 text-[10px] font-bold leading-none">
                         {subscriptionStatusLabel}
                       </span>
                       {hasTestPeriodRole ? <span style={{ ...subscriptionTestPeriodBadgeStyle, ...roleBadgeTextStyle }} className="inline-flex h-[24px] shrink-0 items-center rounded-full border px-3 text-[10px] font-bold leading-none">
-                        {t("Test Period", "Тестовый период")}
+                        {t("Test Period", "Р В РЎС›Р В Р’ВµР РЋР С“Р РЋРІР‚С™Р В РЎвЂўР В Р вЂ Р РЋРІР‚в„–Р В РІвЂћвЂ“ Р В РЎвЂ”Р В Р’ВµР РЋР вЂљР В РЎвЂР В РЎвЂўР В РўвЂ")}
                       </span> : null}
                     </div>
                   </div>
                   {shouldShowSubscriptionDetails ? (
                     <div className="mt-4 rounded-[22px] border border-[#24171b] bg-[radial-gradient(circle_at_top_left,rgba(255,183,197,0.08),transparent_62%),#090909] p-4">
-                      <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-[#b78a95]">{t("Current Subscription", "Текущая подписка")}</p>
+                      <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-[#b78a95]">{t("Current Subscription", "Р В РЎС›Р В Р’ВµР В РЎвЂќР РЋРЎвЂњР РЋРІР‚В°Р В Р’В°Р РЋР РЏ Р В РЎвЂ”Р В РЎвЂўР В РўвЂР В РЎвЂ”Р В РЎвЂР РЋР С“Р В РЎвЂќР В Р’В°")}</p>
                       <p className="mt-3 text-lg font-bold text-white">{subscriptionSummary.title}</p>
                       <p className="mt-3 text-xs leading-relaxed text-gray-400">{subscriptionSummary.description}</p>
                       <p className="mt-3 text-xs uppercase tracking-[0.22em] text-[#b78a95]">{t("Sub Until", "Sub Until")}</p>
                       <p className="mt-2 text-sm font-semibold text-white">{profileSubscriptionUntilLabel}</p>
                       <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-gray-400">
-                        <span>{t("Payment method", "Способ оплаты")}:</span>
+                        <span>{t("Payment method", "Р В Р Р‹Р В РЎвЂ”Р В РЎвЂўР РЋР С“Р В РЎвЂўР В Р’В± Р В РЎвЂўР В РЎвЂ”Р В Р’В»Р В Р’В°Р РЋРІР‚С™Р РЋРІР‚в„–")}:</span>
                         <a
                           href={FUNPAY_SUBSCRIPTION_URL}
                           target="_blank"
@@ -6350,7 +6463,7 @@ useEffect(() => {
                             disabled
                             className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black opacity-70"
                           >
-                            {t("Download", "Скачать")}
+                            {t("Download", "Р В Р Р‹Р В РЎвЂќР В Р’В°Р РЋРІР‚РЋР В Р’В°Р РЋРІР‚С™Р РЋР Р‰")}
                           </button>
                         </div>
                       ) : null}
@@ -6366,10 +6479,10 @@ useEffect(() => {
                 <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">Profile Navigator</p>
                 <div className="mt-4 flex flex-wrap items-center gap-3">
                   {previousProfileId ? <a href={profilePath(previousProfileId)} className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/45 hover:text-white">
-                    в†ђ Previous
+                    Р В Р вЂ Р Р†Р вЂљР’В Р РЋРІР‚в„ў Previous
                   </a> : null}
                   {nextProfileId ? <a href={profilePath(nextProfileId)} className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/45 hover:text-white">
-                    Next в†’
+                    Next Р В Р вЂ Р Р†Р вЂљР’В Р Р†Р вЂљРІвЂћСћ
                   </a> : null}
                   {!previousProfileId && !nextProfileId ? <p className="text-xs leading-relaxed text-gray-500">No adjacent accounts found nearby.</p> : null}
                 </div>
@@ -6407,7 +6520,7 @@ useEffect(() => {
               */}
               {isOwner && activeProfile && (!isProfileControlsOpen || activeProfile.isBanned) ? <div className="rounded-[32px] border border-[#201517] bg-[radial-gradient(circle_at_top,rgba(255,183,197,0.14),transparent_72%),linear-gradient(180deg,#0d0d0d_0%,#090909_100%)] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">{t("Profile Settings", "Настройки профиля")}</p>
+                  <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">{t("Profile Settings", "Р В РЎСљР В Р’В°Р РЋР С“Р РЋРІР‚С™Р РЋР вЂљР В РЎвЂўР В РІвЂћвЂ“Р В РЎвЂќР В РЎвЂ Р В РЎвЂ”Р РЋР вЂљР В РЎвЂўР РЋРІР‚С›Р В РЎвЂР В Р’В»Р РЋР РЏ")}</p>
                   {!activeProfile.isBanned ? <button type="button" onClick={() => setIsProfileControlsOpen(true)} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/45 hover:text-white">
                     Manage Account
                   </button> : null}
@@ -6418,7 +6531,7 @@ useEffect(() => {
               </div> : null}
 
               {(!isOwner || !isProfileControlsOpen || activeProfile?.isBanned) ? <div className="rounded-[32px] border border-[#201517] bg-[#0d0d0d] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
-                <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">{t("Profile Comments", "Комментарии профиля")}</p>
+                <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">{t("Profile Comments", "Р В РЎв„ўР В РЎвЂўР В РЎВР В РЎВР В Р’ВµР В Р вЂ¦Р РЋРІР‚С™Р В Р’В°Р РЋР вЂљР В РЎвЂР В РЎвЂ Р В РЎвЂ”Р РЋР вЂљР В РЎвЂўР РЋРІР‚С›Р В РЎвЂР В Р’В»Р РЋР РЏ")}</p>
                 {visibleCurrentUser && !isCurrentAccountBanned && !isCurrentAccountVerificationLocked ? (
                   <form onSubmit={handleCommentSubmit} className="mt-5">
                     <label className="block">
@@ -6439,7 +6552,7 @@ useEffect(() => {
                         className="w-full resize-none overflow-hidden rounded-2xl border border-[#232323] bg-[#090909] px-4 py-2.5 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55"
                         placeholder={t(
                           `Write something for ${primaryName}...`,
-                          `Напишите что-нибудь для ${primaryName}...`
+                          `Р В РЎСљР В Р’В°Р В РЎвЂ”Р В РЎвЂР РЋРІвЂљВ¬Р В РЎвЂР РЋРІР‚С™Р В Р’Вµ Р РЋРІР‚РЋР РЋРІР‚С™Р В РЎвЂў-Р В Р вЂ¦Р В РЎвЂР В Р’В±Р РЋРЎвЂњР В РўвЂР РЋР Р‰ Р В РўвЂР В Р’В»Р РЋР РЏ ${primaryName}...`
                         )}
                       />
                     </label>
@@ -6480,7 +6593,7 @@ useEffect(() => {
                   <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">Recent Messages</p>
                   {isCommentsLoading ? <p className="mt-4 text-sm text-gray-500">Loading comments...</p> : null}
                   {!isCommentsLoading && commentsError ? <p className="mt-4 text-sm leading-relaxed text-[#ff9aa9]">{commentsError}</p> : null}
-                  {!isCommentsLoading && !commentsError && !comments.length ? <p className="mt-4 text-sm text-gray-500">{t("No comments yet.", "Пока нет комментариев.")}</p> : null}
+                  {!isCommentsLoading && !commentsError && !comments.length ? <p className="mt-4 text-sm text-gray-500">{t("No comments yet.", "Р В РЎСџР В РЎвЂўР В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’ВµР РЋРІР‚С™ Р В РЎвЂќР В РЎвЂўР В РЎВР В РЎВР В Р’ВµР В Р вЂ¦Р РЋРІР‚С™Р В Р’В°Р РЋР вЂљР В РЎвЂР В Р’ВµР В Р вЂ .")}</p> : null}
                   {!isCommentsLoading && !commentsError && comments.length ? <div className="mt-4 flex flex-col gap-3">
                     {comments.map((comment, commentIndex) => {
                       const isDeletingComment = deletingCommentId === comment.id;
@@ -6639,86 +6752,86 @@ useEffect(() => {
               <div className="flex flex-col gap-6">
               {isOwner && activeProfile && isProfileControlsOpen && !activeProfile.isBanned ? <div className="rounded-[32px] border border-[#201517] bg-[#0d0d0d] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">{t("Profile Name", "Имя профиля")}</p>
+                  <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">{t("Profile Name", "Р В Р’ВР В РЎВР РЋР РЏ Р В РЎвЂ”Р РЋР вЂљР В РЎвЂўР РЋРІР‚С›Р В РЎвЂР В Р’В»Р РЋР РЏ")}</p>
                   <button type="button" onClick={() => setIsProfileControlsOpen(false)} className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white">
-                    {t("Back", "Назад")}
+                    {t("Back", "Р В РЎСљР В Р’В°Р В Р’В·Р В Р’В°Р В РўвЂ")}
                   </button>
                 </div>
                 <div className="mt-5">
                   <label className="block">
-                    <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Name", "Имя")}</span>
+                    <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Name", "Р В Р’ВР В РЎВР РЋР РЏ")}</span>
                     <input type="text" value={displayNameInput} maxLength={48} autoComplete="nickname" onChange={(event) => {
                       setDisplayNameInput(event.target.value);
                       setDisplayNameError(null);
                       setDisplayNameSuccess(null);
                     }} className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55" placeholder="Absolute" />
                   </label>
-                  <p className="mt-2 text-xs leading-relaxed text-gray-500">{t("Displayed above your login in the profile header.", "Отображается над логином в шапке профиля.")}</p>
+                  <p className="mt-2 text-xs leading-relaxed text-gray-500">{t("Displayed above your login in the profile header.", "Р В РЎвЂєР РЋРІР‚С™Р В РЎвЂўР В Р’В±Р РЋР вЂљР В Р’В°Р В Р’В¶Р В Р’В°Р В Р’ВµР РЋРІР‚С™Р РЋР С“Р РЋР РЏ Р В Р вЂ¦Р В Р’В°Р В РўвЂ Р В Р’В»Р В РЎвЂўР В РЎвЂ“Р В РЎвЂР В Р вЂ¦Р В РЎвЂўР В РЎВ Р В Р вЂ  Р РЋРІвЂљВ¬Р В Р’В°Р В РЎвЂ”Р В РЎвЂќР В Р’Вµ Р В РЎвЂ”Р РЋР вЂљР В РЎвЂўР РЋРІР‚С›Р В РЎвЂР В Р’В»Р РЋР РЏ.")}</p>
                 </div>
                 <div className="mt-5 flex flex-wrap items-center gap-3">
-                  <button type="button" onClick={handleDisplayNameSave} disabled={isDisplayNameSaving} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">{isDisplayNameSaving ? t("Saving...", "Сохранение...") : t("Save Name", "Сохранить имя")}</button>
+                  <button type="button" onClick={handleDisplayNameSave} disabled={isDisplayNameSaving} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">{isDisplayNameSaving ? t("Saving...", "Р В Р Р‹Р В РЎвЂўР РЋРІР‚В¦Р РЋР вЂљР В Р’В°Р В Р вЂ¦Р В Р’ВµР В Р вЂ¦Р В РЎвЂР В Р’Вµ...") : t("Save Name", "Р В Р Р‹Р В РЎвЂўР РЋРІР‚В¦Р РЋР вЂљР В Р’В°Р В Р вЂ¦Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰ Р В РЎвЂР В РЎВР РЋР РЏ")}</button>
                 </div>
                 {displayNameError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{displayNameError}</p> : null}
                 {displayNameSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{displayNameSuccess}</p> : null}
               </div> : null}
 
               {isOwner && activeProfile && isProfileControlsOpen && !activeProfile.isBanned ? <div className="rounded-[32px] border border-[#201517] bg-[#0d0d0d] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
-                <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">{hasUsername ? t("Login", "Логин") : t("Create Login", "Создать логин")}</p>
-                <p className="mt-3 text-sm leading-relaxed text-gray-400">{hasUsername ? t("This login is shown below your profile name and is used for sign-in.", "Этот логин показывается под именем профиля и используется для входа.") : t("This account does not have a login yet. Create one so it appears below your profile name and can be used for sign-in.", "У этого аккаунта пока нет логина. Создайте его, чтобы он отображался под именем профиля и использовался для входа.")}</p>
+                <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">{hasUsername ? t("Login", "Р В РІР‚С”Р В РЎвЂўР В РЎвЂ“Р В РЎвЂР В Р вЂ¦") : t("Create Login", "Р В Р Р‹Р В РЎвЂўР В Р’В·Р В РўвЂР В Р’В°Р РЋРІР‚С™Р РЋР Р‰ Р В Р’В»Р В РЎвЂўР В РЎвЂ“Р В РЎвЂР В Р вЂ¦")}</p>
+                <p className="mt-3 text-sm leading-relaxed text-gray-400">{hasUsername ? t("This login is shown below your profile name and is used for sign-in.", "Р В Р’В­Р РЋРІР‚С™Р В РЎвЂўР РЋРІР‚С™ Р В Р’В»Р В РЎвЂўР В РЎвЂ“Р В РЎвЂР В Р вЂ¦ Р В РЎвЂ”Р В РЎвЂўР В РЎвЂќР В Р’В°Р В Р’В·Р РЋРІР‚в„–Р В Р вЂ Р В Р’В°Р В Р’ВµР РЋРІР‚С™Р РЋР С“Р РЋР РЏ Р В РЎвЂ”Р В РЎвЂўР В РўвЂ Р В РЎвЂР В РЎВР В Р’ВµР В Р вЂ¦Р В Р’ВµР В РЎВ Р В РЎвЂ”Р РЋР вЂљР В РЎвЂўР РЋРІР‚С›Р В РЎвЂР В Р’В»Р РЋР РЏ Р В РЎвЂ Р В РЎвЂР РЋР С“Р В РЎвЂ”Р В РЎвЂўР В Р’В»Р РЋР Р‰Р В Р’В·Р РЋРЎвЂњР В Р’ВµР РЋРІР‚С™Р РЋР С“Р РЋР РЏ Р В РўвЂР В Р’В»Р РЋР РЏ Р В Р вЂ Р РЋРІР‚В¦Р В РЎвЂўР В РўвЂР В Р’В°.") : t("This account does not have a login yet. Create one so it appears below your profile name and can be used for sign-in.", "Р В Р в‚¬ Р РЋР РЉР РЋРІР‚С™Р В РЎвЂўР В РЎвЂ“Р В РЎвЂў Р В Р’В°Р В РЎвЂќР В РЎвЂќР В Р’В°Р РЋРЎвЂњР В Р вЂ¦Р РЋРІР‚С™Р В Р’В° Р В РЎвЂ”Р В РЎвЂўР В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’ВµР РЋРІР‚С™ Р В Р’В»Р В РЎвЂўР В РЎвЂ“Р В РЎвЂР В Р вЂ¦Р В Р’В°. Р В Р Р‹Р В РЎвЂўР В Р’В·Р В РўвЂР В Р’В°Р В РІвЂћвЂ“Р РЋРІР‚С™Р В Р’Вµ Р В Р’ВµР В РЎвЂ“Р В РЎвЂў, Р РЋРІР‚РЋР РЋРІР‚С™Р В РЎвЂўР В Р’В±Р РЋРІР‚в„– Р В РЎвЂўР В Р вЂ¦ Р В РЎвЂўР РЋРІР‚С™Р В РЎвЂўР В Р’В±Р РЋР вЂљР В Р’В°Р В Р’В¶Р В Р’В°Р В Р’В»Р РЋР С“Р РЋР РЏ Р В РЎвЂ”Р В РЎвЂўР В РўвЂ Р В РЎвЂР В РЎВР В Р’ВµР В Р вЂ¦Р В Р’ВµР В РЎВ Р В РЎвЂ”Р РЋР вЂљР В РЎвЂўР РЋРІР‚С›Р В РЎвЂР В Р’В»Р РЋР РЏ Р В РЎвЂ Р В РЎвЂР РЋР С“Р В РЎвЂ”Р В РЎвЂўР В Р’В»Р РЋР Р‰Р В Р’В·Р В РЎвЂўР В Р вЂ Р В Р’В°Р В Р’В»Р РЋР С“Р РЋР РЏ Р В РўвЂР В Р’В»Р РЋР РЏ Р В Р вЂ Р РЋРІР‚В¦Р В РЎвЂўР В РўвЂР В Р’В°.")}</p>
                 <div className="mt-5">
                   <label className="block">
-                    <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Login", "Логин")}</span>
+                    <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Login", "Р В РІР‚С”Р В РЎвЂўР В РЎвЂ“Р В РЎвЂР В Р вЂ¦")}</span>
                     <input ref={ownerUsernameInputRef} type="text" value={usernameInput} minLength={3} maxLength={24} autoComplete="username" onChange={(event) => {
                       setUsernameInput(event.target.value);
                       setUsernameError(null);
                       setUsernameSuccess(null);
                     }} className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55" placeholder="your_login" />
                   </label>
-                  <p className="mt-2 text-xs leading-relaxed text-gray-500">{t("Login without spaces. Letters, numbers, `.`, `_`, and `-` are supported.", "Логин без пробелов. Поддерживаются буквы, цифры, `.`, `_` и `-`.")}</p>
+                  <p className="mt-2 text-xs leading-relaxed text-gray-500">{t("Login without spaces. Letters, numbers, `.`, `_`, and `-` are supported.", "Р В РІР‚С”Р В РЎвЂўР В РЎвЂ“Р В РЎвЂР В Р вЂ¦ Р В Р’В±Р В Р’ВµР В Р’В· Р В РЎвЂ”Р РЋР вЂљР В РЎвЂўР В Р’В±Р В Р’ВµР В Р’В»Р В РЎвЂўР В Р вЂ . Р В РЎСџР В РЎвЂўР В РўвЂР В РўвЂР В Р’ВµР РЋР вЂљР В Р’В¶Р В РЎвЂР В Р вЂ Р В Р’В°Р РЋР вЂ№Р РЋРІР‚С™Р РЋР С“Р РЋР РЏ Р В Р’В±Р РЋРЎвЂњР В РЎвЂќР В Р вЂ Р РЋРІР‚в„–, Р РЋРІР‚В Р В РЎвЂР РЋРІР‚С›Р РЋР вЂљР РЋРІР‚в„–, `.`, `_` Р В РЎвЂ `-`.")}</p>
                 </div>
                 {requiresUsernamePasswordConfirmation ? <div className="mt-5">
                   <label className="block">
-                    <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Current Password", "Текущий пароль")}</span>
+                    <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Current Password", "Р В РЎС›Р В Р’ВµР В РЎвЂќР РЋРЎвЂњР РЋРІР‚В°Р В РЎвЂР В РІвЂћвЂ“ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В РЎвЂўР В Р’В»Р РЋР Р‰")}</span>
                     <input type="password" value={usernamePasswordInput} autoComplete="current-password" onChange={(event) => {
                       setUsernamePasswordInput(event.target.value);
                       setUsernameError(null);
                       setUsernameSuccess(null);
-                    }} className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55" placeholder={t("Enter current password", "Введите текущий пароль")} />
+                    }} className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55" placeholder={t("Enter current password", "Р В РІР‚в„ўР В Р вЂ Р В Р’ВµР В РўвЂР В РЎвЂР РЋРІР‚С™Р В Р’Вµ Р РЋРІР‚С™Р В Р’ВµР В РЎвЂќР РЋРЎвЂњР РЋРІР‚В°Р В РЎвЂР В РІвЂћвЂ“ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В РЎвЂўР В Р’В»Р РЋР Р‰")} />
                   </label>
                 </div> : null}
                 <div className="mt-5 flex flex-wrap items-center gap-3">
-                  <button type="button" onClick={handleUsernameSave} disabled={isUsernameSaving} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">{isUsernameSaving ? t("Saving...", "Сохранение...") : t("Save Login", "Сохранить логин")}</button>
+                  <button type="button" onClick={handleUsernameSave} disabled={isUsernameSaving} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">{isUsernameSaving ? t("Saving...", "Р В Р Р‹Р В РЎвЂўР РЋРІР‚В¦Р РЋР вЂљР В Р’В°Р В Р вЂ¦Р В Р’ВµР В Р вЂ¦Р В РЎвЂР В Р’Вµ...") : t("Save Login", "Р В Р Р‹Р В РЎвЂўР РЋРІР‚В¦Р РЋР вЂљР В Р’В°Р В Р вЂ¦Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰ Р В Р’В»Р В РЎвЂўР В РЎвЂ“Р В РЎвЂР В Р вЂ¦")}</button>
                 </div>
                 {usernameError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{usernameError}</p> : null}
                 {usernameSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{usernameSuccess}</p> : null}
               </div> : null}
 
               {isOwner && activeProfile && isProfileControlsOpen && !activeProfile.isBanned ? <div className="rounded-[32px] border border-[#201517] bg-[#0d0d0d] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
-                <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">{t("Password", "Пароль")}</p>
-                <p className="mt-3 text-sm leading-relaxed text-gray-400">{t("Change password directly here or send a recovery email to the linked mailbox.", "Здесь можно сменить пароль или отправить письмо для восстановления на привязанную почту.")}</p>
+                <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">{t("Password", "Р В РЎСџР В Р’В°Р РЋР вЂљР В РЎвЂўР В Р’В»Р РЋР Р‰")}</p>
+                <p className="mt-3 text-sm leading-relaxed text-gray-400">{t("Change password directly here or send a recovery email to the linked mailbox.", "Р В РІР‚вЂќР В РўвЂР В Р’ВµР РЋР С“Р РЋР Р‰ Р В РЎВР В РЎвЂўР В Р’В¶Р В Р вЂ¦Р В РЎвЂў Р РЋР С“Р В РЎВР В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В РЎвЂўР В Р’В»Р РЋР Р‰ Р В РЎвЂР В Р’В»Р В РЎвЂ Р В РЎвЂўР РЋРІР‚С™Р В РЎвЂ”Р РЋР вЂљР В Р’В°Р В Р вЂ Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰ Р В РЎвЂ”Р В РЎвЂР РЋР С“Р РЋР Р‰Р В РЎВР В РЎвЂў Р В РўвЂР В Р’В»Р РЋР РЏ Р В Р вЂ Р В РЎвЂўР РЋР С“Р РЋР С“Р РЋРІР‚С™Р В Р’В°Р В Р вЂ¦Р В РЎвЂўР В Р вЂ Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р В Р вЂ¦Р В Р’В° Р В РЎвЂ”Р РЋР вЂљР В РЎвЂР В Р вЂ Р РЋР РЏР В Р’В·Р В Р’В°Р В Р вЂ¦Р В Р вЂ¦Р РЋРЎвЂњР РЋР вЂ№ Р В РЎвЂ”Р В РЎвЂўР РЋРІР‚РЋР РЋРІР‚С™Р РЋРЎвЂњ.")}</p>
                 {requiresUsernamePasswordConfirmation ? <div className="mt-5">
                   <label className="block">
-                    <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Current Password", "Текущий пароль")}</span>
+                    <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Current Password", "Р В РЎС›Р В Р’ВµР В РЎвЂќР РЋРЎвЂњР РЋРІР‚В°Р В РЎвЂР В РІвЂћвЂ“ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В РЎвЂўР В Р’В»Р РЋР Р‰")}</span>
                     <input type="password" value={currentPasswordInput} autoComplete="current-password" onChange={(event) => {
                       setCurrentPasswordInput(event.target.value);
                       setPasswordError(null);
                       setPasswordSuccess(null);
-                    }} className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55" placeholder={t("Enter current password", "Введите текущий пароль")} />
+                    }} className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55" placeholder={t("Enter current password", "Р В РІР‚в„ўР В Р вЂ Р В Р’ВµР В РўвЂР В РЎвЂР РЋРІР‚С™Р В Р’Вµ Р РЋРІР‚С™Р В Р’ВµР В РЎвЂќР РЋРЎвЂњР РЋРІР‚В°Р В РЎвЂР В РІвЂћвЂ“ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В РЎвЂўР В Р’В»Р РЋР Р‰")} />
                   </label>
-                </div> : <p className="mt-5 text-xs leading-relaxed text-gray-500">{t("This account is not using email/password login. You can still use email recovery below.", "Этот аккаунт не использует вход по email/паролю. Ниже всё равно доступно восстановление по почте.")}</p>}
+                </div> : <p className="mt-5 text-xs leading-relaxed text-gray-500">{t("This account is not using email/password login. You can still use email recovery below.", "Р В Р’В­Р РЋРІР‚С™Р В РЎвЂўР РЋРІР‚С™ Р В Р’В°Р В РЎвЂќР В РЎвЂќР В Р’В°Р РЋРЎвЂњР В Р вЂ¦Р РЋРІР‚С™ Р В Р вЂ¦Р В Р’Вµ Р В РЎвЂР РЋР С“Р В РЎвЂ”Р В РЎвЂўР В Р’В»Р РЋР Р‰Р В Р’В·Р РЋРЎвЂњР В Р’ВµР РЋРІР‚С™ Р В Р вЂ Р РЋРІР‚В¦Р В РЎвЂўР В РўвЂ Р В РЎвЂ”Р В РЎвЂў email/Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В РЎвЂўР В Р’В»Р РЋР вЂ№. Р В РЎСљР В РЎвЂР В Р’В¶Р В Р’Вµ Р В Р вЂ Р РЋР С“Р РЋРІР‚В Р РЋР вЂљР В Р’В°Р В Р вЂ Р В Р вЂ¦Р В РЎвЂў Р В РўвЂР В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋРЎвЂњР В РЎвЂ”Р В Р вЂ¦Р В РЎвЂў Р В Р вЂ Р В РЎвЂўР РЋР С“Р РЋР С“Р РЋРІР‚С™Р В Р’В°Р В Р вЂ¦Р В РЎвЂўР В Р вЂ Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР В Р’Вµ Р В РЎвЂ”Р В РЎвЂў Р В РЎвЂ”Р В РЎвЂўР РЋРІР‚РЋР РЋРІР‚С™Р В Р’Вµ.")}</p>}
                 {requiresUsernamePasswordConfirmation ? <div className="mt-4">
                   <label className="block">
-                    <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("New Password", "Новый пароль")}</span>
+                    <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("New Password", "Р В РЎСљР В РЎвЂўР В Р вЂ Р РЋРІР‚в„–Р В РІвЂћвЂ“ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В РЎвЂўР В Р’В»Р РЋР Р‰")}</span>
                     <input type="password" value={newPasswordInput} autoComplete="new-password" onChange={(event) => {
                       setNewPasswordInput(event.target.value);
                       setPasswordError(null);
                       setPasswordSuccess(null);
-                    }} className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55" placeholder={t("Minimum 6 characters", "Минимум 6 символов")} />
+                    }} className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55" placeholder={t("Minimum 6 characters", "Р В РЎС™Р В РЎвЂР В Р вЂ¦Р В РЎвЂР В РЎВР РЋРЎвЂњР В РЎВ 6 Р РЋР С“Р В РЎвЂР В РЎВР В Р вЂ Р В РЎвЂўР В Р’В»Р В РЎвЂўР В Р вЂ ")} />
                   </label>
                 </div> : null}
                 {requiresUsernamePasswordConfirmation ? <div className="mt-4">
                   <label className="block">
-                    <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Confirm New Password", "Подтвердите новый пароль")}</span>
+                    <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Confirm New Password", "Р В РЎСџР В РЎвЂўР В РўвЂР РЋРІР‚С™Р В Р вЂ Р В Р’ВµР РЋР вЂљР В РўвЂР В РЎвЂР РЋРІР‚С™Р В Р’Вµ Р В Р вЂ¦Р В РЎвЂўР В Р вЂ Р РЋРІР‚в„–Р В РІвЂћвЂ“ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В РЎвЂўР В Р’В»Р РЋР Р‰")}</span>
                     <input type="password" value={confirmNewPasswordInput} autoComplete="new-password" onChange={(event) => {
                       setConfirmNewPasswordInput(event.target.value);
                       setPasswordError(null);
@@ -6726,10 +6839,10 @@ useEffect(() => {
                     }} className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55" placeholder="Repeat new password" />
                   </label>
                 </div> : null}
-                <p className="mt-3 text-xs leading-relaxed text-gray-500">{t("Recovery emails may arrive in Spam/Junk.", "Письма для восстановления могут попасть в Спам.")}</p>
+                <p className="mt-3 text-xs leading-relaxed text-gray-500">{t("Recovery emails may arrive in Spam/Junk.", "Р В РЎСџР В РЎвЂР РЋР С“Р РЋР Р‰Р В РЎВР В Р’В° Р В РўвЂР В Р’В»Р РЋР РЏ Р В Р вЂ Р В РЎвЂўР РЋР С“Р РЋР С“Р РЋРІР‚С™Р В Р’В°Р В Р вЂ¦Р В РЎвЂўР В Р вЂ Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р В РЎВР В РЎвЂўР В РЎвЂ“Р РЋРЎвЂњР РЋРІР‚С™ Р В РЎвЂ”Р В РЎвЂўР В РЎвЂ”Р В Р’В°Р РЋР С“Р РЋРІР‚С™Р РЋР Р‰ Р В Р вЂ  Р В Р Р‹Р В РЎвЂ”Р В Р’В°Р В РЎВ.")}</p>
                 <div className="mt-5 flex flex-wrap items-center gap-3">
-                  {requiresUsernamePasswordConfirmation ? <button type="button" onClick={handlePasswordSave} disabled={isPasswordSaving || isPasswordResetSending} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">{isPasswordSaving ? t("Saving...", "Сохранение...") : t("Save Password", "Сохранить пароль")}</button> : null}
-                  <button type="button" onClick={handlePasswordResetRequest} disabled={isPasswordResetSending || isPasswordSaving || !activeProfile.email} className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60">{isPasswordResetSending ? t("Sending...", "Отправка...") : t("Send Reset Email", "Отправить письмо сброса")}</button>
+                  {requiresUsernamePasswordConfirmation ? <button type="button" onClick={handlePasswordSave} disabled={isPasswordSaving || isPasswordResetSending} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">{isPasswordSaving ? t("Saving...", "Р В Р Р‹Р В РЎвЂўР РЋРІР‚В¦Р РЋР вЂљР В Р’В°Р В Р вЂ¦Р В Р’ВµР В Р вЂ¦Р В РЎвЂР В Р’Вµ...") : t("Save Password", "Р В Р Р‹Р В РЎвЂўР РЋРІР‚В¦Р РЋР вЂљР В Р’В°Р В Р вЂ¦Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В РЎвЂўР В Р’В»Р РЋР Р‰")}</button> : null}
+                  <button type="button" onClick={handlePasswordResetRequest} disabled={isPasswordResetSending || isPasswordSaving || !activeProfile.email} className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60">{isPasswordResetSending ? t("Sending...", "Р В РЎвЂєР РЋРІР‚С™Р В РЎвЂ”Р РЋР вЂљР В Р’В°Р В Р вЂ Р В РЎвЂќР В Р’В°...") : t("Send Reset Email", "Р В РЎвЂєР РЋРІР‚С™Р В РЎвЂ”Р РЋР вЂљР В Р’В°Р В Р вЂ Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰ Р В РЎвЂ”Р В РЎвЂР РЋР С“Р РЋР Р‰Р В РЎВР В РЎвЂў Р РЋР С“Р В Р’В±Р РЋР вЂљР В РЎвЂўР РЋР С“Р В Р’В°")}</button>
                 </div>
                 {passwordError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{passwordError}</p> : null}
                 {passwordSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{passwordSuccess}</p> : null}
@@ -6772,15 +6885,15 @@ useEffect(() => {
               </div> : null}
 
               {isOwner && isProfileControlsOpen && !activeProfile?.isBanned ? <div className="rounded-[32px] border border-[#201517] bg-[#0d0d0d] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
-                <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">{t("Avatar", "Аватар")}</p>
+                <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">{t("Avatar", "Р В РЎвЂ™Р В Р вЂ Р В Р’В°Р РЋРІР‚С™Р В Р’В°Р РЋР вЂљ")}</p>
                 <div className="mt-5 rounded-[24px] border border-[#1d1d1d] bg-[#090909] p-4">
-                  <p className="text-sm font-semibold text-white">{hasActiveProfileAvatar ? t("Custom Avatar", "Пользовательский аватар") : t("Generated Avatar", "Сгенерированный аватар")}</p>
-                  <p className="mt-2 text-xs leading-relaxed text-gray-400">{t("Upload, replace, or delete your avatar here. PNG, JPG, and WEBP are available to all users. GIF, MP4, and WEBM require a higher profile tier.", "Здесь можно загрузить, заменить или удалить аватар. PNG, JPG и WEBP доступны всем пользователям. GIF, MP4 и WEBM требуют более высокого уровня профиля.")}</p>
+                  <p className="text-sm font-semibold text-white">{hasActiveProfileAvatar ? t("Custom Avatar", "Р В РЎСџР В РЎвЂўР В Р’В»Р РЋР Р‰Р В Р’В·Р В РЎвЂўР В Р вЂ Р В Р’В°Р РЋРІР‚С™Р В Р’ВµР В Р’В»Р РЋР Р‰Р РЋР С“Р В РЎвЂќР В РЎвЂР В РІвЂћвЂ“ Р В Р’В°Р В Р вЂ Р В Р’В°Р РЋРІР‚С™Р В Р’В°Р РЋР вЂљ") : t("Generated Avatar", "Р В Р Р‹Р В РЎвЂ“Р В Р’ВµР В Р вЂ¦Р В Р’ВµР РЋР вЂљР В РЎвЂР РЋР вЂљР В РЎвЂўР В Р вЂ Р В Р’В°Р В Р вЂ¦Р В Р вЂ¦Р РЋРІР‚в„–Р В РІвЂћвЂ“ Р В Р’В°Р В Р вЂ Р В Р’В°Р РЋРІР‚С™Р В Р’В°Р РЋР вЂљ")}</p>
+                  <p className="mt-2 text-xs leading-relaxed text-gray-400">{t("Upload, replace, or delete your avatar here. PNG, JPG, and WEBP are available to all users. GIF, MP4, and WEBM require a higher profile tier.", "Р В РІР‚вЂќР В РўвЂР В Р’ВµР РЋР С“Р РЋР Р‰ Р В РЎВР В РЎвЂўР В Р’В¶Р В Р вЂ¦Р В РЎвЂў Р В Р’В·Р В Р’В°Р В РЎвЂ“Р РЋР вЂљР РЋРЎвЂњР В Р’В·Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰, Р В Р’В·Р В Р’В°Р В РЎВР В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰ Р В РЎвЂР В Р’В»Р В РЎвЂ Р РЋРЎвЂњР В РўвЂР В Р’В°Р В Р’В»Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰ Р В Р’В°Р В Р вЂ Р В Р’В°Р РЋРІР‚С™Р В Р’В°Р РЋР вЂљ. PNG, JPG Р В РЎвЂ WEBP Р В РўвЂР В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋРЎвЂњР В РЎвЂ”Р В Р вЂ¦Р РЋРІР‚в„– Р В Р вЂ Р РЋР С“Р В Р’ВµР В РЎВ Р В РЎвЂ”Р В РЎвЂўР В Р’В»Р РЋР Р‰Р В Р’В·Р В РЎвЂўР В Р вЂ Р В Р’В°Р РЋРІР‚С™Р В Р’ВµР В Р’В»Р РЋР РЏР В РЎВ. GIF, MP4 Р В РЎвЂ WEBM Р РЋРІР‚С™Р РЋР вЂљР В Р’ВµР В Р’В±Р РЋРЎвЂњР РЋР вЂ№Р РЋРІР‚С™ Р В Р’В±Р В РЎвЂўР В Р’В»Р В Р’ВµР В Р’Вµ Р В Р вЂ Р РЋРІР‚в„–Р РЋР С“Р В РЎвЂўР В РЎвЂќР В РЎвЂўР В РЎвЂ“Р В РЎвЂў Р РЋРЎвЂњР РЋР вЂљР В РЎвЂўР В Р вЂ Р В Р вЂ¦Р РЋР РЏ Р В РЎвЂ”Р РЋР вЂљР В РЎвЂўР РЋРІР‚С›Р В РЎвЂР В Р’В»Р РЋР РЏ.")}</p>
                   <div className="mt-4 flex flex-wrap items-center gap-3">
                     <button type="button" onClick={() => avatarInputRef.current?.click()} disabled={isAvatarUploading || isAvatarDeleting} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">
-                      {isAvatarUploading ? t("Uploading...", "Загрузка...") : hasActiveProfileAvatar ? t("Replace Avatar", "Заменить аватар") : t("Upload Avatar", "Загрузить аватар")}
+                      {isAvatarUploading ? t("Uploading...", "Р В РІР‚вЂќР В Р’В°Р В РЎвЂ“Р РЋР вЂљР РЋРЎвЂњР В Р’В·Р В РЎвЂќР В Р’В°...") : hasActiveProfileAvatar ? t("Replace Avatar", "Р В РІР‚вЂќР В Р’В°Р В РЎВР В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰ Р В Р’В°Р В Р вЂ Р В Р’В°Р РЋРІР‚С™Р В Р’В°Р РЋР вЂљ") : t("Upload Avatar", "Р В РІР‚вЂќР В Р’В°Р В РЎвЂ“Р РЋР вЂљР РЋРЎвЂњР В Р’В·Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰ Р В Р’В°Р В Р вЂ Р В Р’В°Р РЋРІР‚С™Р В Р’В°Р РЋР вЂљ")}
                     </button>
-                    {hasActiveProfileAvatar ? <button type="button" onClick={handleAvatarDelete} disabled={isAvatarUploading || isAvatarDeleting} className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60">{isAvatarDeleting ? t("Deleting...", "Удаление...") : t("Delete Avatar", "Удалить аватар")}</button> : null}
+                    {hasActiveProfileAvatar ? <button type="button" onClick={handleAvatarDelete} disabled={isAvatarUploading || isAvatarDeleting} className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60">{isAvatarDeleting ? t("Deleting...", "Р В Р в‚¬Р В РўвЂР В Р’В°Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР В Р’Вµ...") : t("Delete Avatar", "Р В Р в‚¬Р В РўвЂР В Р’В°Р В Р’В»Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰ Р В Р’В°Р В Р вЂ Р В Р’В°Р РЋРІР‚С™Р В Р’В°Р РЋР вЂљ")}</button> : null}
                     <input ref={avatarInputRef} type="file" accept={AVATAR_FILE_ACCEPT} onChange={handleAvatarChange} className="hidden" />
                   </div>
                   {avatarError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{avatarError}</p> : null}
@@ -6945,12 +7058,12 @@ useEffect(() => {
                 <div className="border-b border-[#1c1c1c] bg-[radial-gradient(circle_at_top,rgba(255,183,197,0.16),transparent_60%)] px-6 py-5">
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">{t("Admin Panel", "Админ-панель")}</p>
+                      <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">{t("Admin Panel", "Р В РЎвЂ™Р В РўвЂР В РЎВР В РЎвЂР В Р вЂ¦-Р В РЎвЂ”Р В Р’В°Р В Р вЂ¦Р В Р’ВµР В Р’В»Р РЋР Р‰")}</p>
                       <p className="mt-3 text-sm leading-relaxed text-gray-300">
-                        {t(`Root controls for profile #${activeProfile.profileId ?? "?"}.`, `Root-настройки профиля #${activeProfile.profileId ?? "?"}.`)}
+                        {t(`Root controls for profile #${activeProfile.profileId ?? "?"}.`, `Root-Р В Р вЂ¦Р В Р’В°Р РЋР С“Р РЋРІР‚С™Р РЋР вЂљР В РЎвЂўР В РІвЂћвЂ“Р В РЎвЂќР В РЎвЂ Р В РЎвЂ”Р РЋР вЂљР В РЎвЂўР РЋРІР‚С›Р В РЎвЂР В Р’В»Р РЋР РЏ #${activeProfile.profileId ?? "?"}.`)}
                       </p>
                       <p className="mt-1 text-xs text-gray-500">
-                        {t("Managing", "Управление")} {primaryName}{hasUsername ? ` · @${activeProfile.login}` : ""}
+                        {t("Managing", "Р В Р в‚¬Р В РЎвЂ”Р РЋР вЂљР В Р’В°Р В Р вЂ Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР В Р’Вµ")} {primaryName}{hasUsername ? ` Р вЂ™Р’В· @${activeProfile.login}` : ""}
                       </p>
                     </div>
                     <button
@@ -6974,12 +7087,12 @@ useEffect(() => {
                     <section className="rounded-[24px] border border-[#1d1d1d] bg-[#0d0d0d] p-5">
                       <div className="flex items-center justify-between gap-3">
                         <div>
-                          <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Status", "Статус")}</p>
+                          <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Status", "Р В Р Р‹Р РЋРІР‚С™Р В Р’В°Р РЋРІР‚С™Р РЋРЎвЂњР РЋР С“")}</p>
                           <p className="mt-2 text-sm font-semibold text-white">
-                            {isTargetBanned ? t("Account is banned", "Аккаунт заблокирован") : t("Account is active", "Аккаунт активен")}
+                            {isTargetBanned ? t("Account is banned", "Р В РЎвЂ™Р В РЎвЂќР В РЎвЂќР В Р’В°Р РЋРЎвЂњР В Р вЂ¦Р РЋРІР‚С™ Р В Р’В·Р В Р’В°Р В Р’В±Р В Р’В»Р В РЎвЂўР В РЎвЂќР В РЎвЂР РЋР вЂљР В РЎвЂўР В Р вЂ Р В Р’В°Р В Р вЂ¦") : t("Account is active", "Р В РЎвЂ™Р В РЎвЂќР В РЎвЂќР В Р’В°Р РЋРЎвЂњР В Р вЂ¦Р РЋРІР‚С™ Р В Р’В°Р В РЎвЂќР РЋРІР‚С™Р В РЎвЂР В Р вЂ Р В Р’ВµР В Р вЂ¦")}
                           </p>
                           {activeProfile.bannedAt ? (
-                            <p className="mt-1 text-xs text-gray-500">{t("Updated", "Обновлено")} {formatTime(activeProfile.bannedAt, locale)}</p>
+                            <p className="mt-1 text-xs text-gray-500">{t("Updated", "Р В РЎвЂєР В Р’В±Р В Р вЂ¦Р В РЎвЂўР В Р вЂ Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂў")} {formatTime(activeProfile.bannedAt, locale)}</p>
                           ) : null}
                         </div>
                         <span
@@ -6989,7 +7102,7 @@ useEffect(() => {
                               : "border-[#1f3b2f] bg-[#0d1713] text-[#8ce5b2]"
                           }`}
                         >
-                          {isTargetBanned ? t("Banned", "Заблокирован") : t("Active", "Активен")}
+                          {isTargetBanned ? t("Banned", "Р В РІР‚вЂќР В Р’В°Р В Р’В±Р В Р’В»Р В РЎвЂўР В РЎвЂќР В РЎвЂР РЋР вЂљР В РЎвЂўР В Р вЂ Р В Р’В°Р В Р вЂ¦") : t("Active", "Р В РЎвЂ™Р В РЎвЂќР РЋРІР‚С™Р В РЎвЂР В Р вЂ Р В Р’ВµР В Р вЂ¦")}
                         </span>
                       </div>
                       <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -7003,12 +7116,12 @@ useEffect(() => {
                               : "border-[#ff5a54]/35 bg-[#ff5a54] text-black hover:bg-[#ff746f]"
                           }`}
                         >
-                          {isBanSaving ? t("Saving...", "Сохранение...") : isTargetBanned ? t("Unban Account", "Разблокировать аккаунт") : t("Ban Account", "Заблокировать аккаунт")}
+                          {isBanSaving ? t("Saving...", "Р В Р Р‹Р В РЎвЂўР РЋРІР‚В¦Р РЋР вЂљР В Р’В°Р В Р вЂ¦Р В Р’ВµР В Р вЂ¦Р В РЎвЂР В Р’Вµ...") : isTargetBanned ? t("Unban Account", "Р В Р’В Р В Р’В°Р В Р’В·Р В Р’В±Р В Р’В»Р В РЎвЂўР В РЎвЂќР В РЎвЂР РЋР вЂљР В РЎвЂўР В Р вЂ Р В Р’В°Р РЋРІР‚С™Р РЋР Р‰ Р В Р’В°Р В РЎвЂќР В РЎвЂќР В Р’В°Р РЋРЎвЂњР В Р вЂ¦Р РЋРІР‚С™") : t("Ban Account", "Р В РІР‚вЂќР В Р’В°Р В Р’В±Р В Р’В»Р В РЎвЂўР В РЎвЂќР В РЎвЂР РЋР вЂљР В РЎвЂўР В Р вЂ Р В Р’В°Р РЋРІР‚С™Р РЋР Р‰ Р В Р’В°Р В РЎвЂќР В РЎвЂќР В Р’В°Р РЋРЎвЂњР В Р вЂ¦Р РЋРІР‚С™")}
                         </button>
                       </div>
                       {isAdminSelfTarget && !isTargetBanned ? (
                         <p className="mt-3 text-xs leading-relaxed text-gray-500">
-                          {t("Self-ban is blocked to prevent losing access to your root account.", "Самоблокировка запрещена, чтобы вы не потеряли доступ к root-аккаунту.")}
+                          {t("Self-ban is blocked to prevent losing access to your root account.", "Р В Р Р‹Р В Р’В°Р В РЎВР В РЎвЂўР В Р’В±Р В Р’В»Р В РЎвЂўР В РЎвЂќР В РЎвЂР РЋР вЂљР В РЎвЂўР В Р вЂ Р В РЎвЂќР В Р’В° Р В Р’В·Р В Р’В°Р В РЎвЂ”Р РЋР вЂљР В Р’ВµР РЋРІР‚В°Р В Р’ВµР В Р вЂ¦Р В Р’В°, Р РЋРІР‚РЋР РЋРІР‚С™Р В РЎвЂўР В Р’В±Р РЋРІР‚в„– Р В Р вЂ Р РЋРІР‚в„– Р В Р вЂ¦Р В Р’Вµ Р В РЎвЂ”Р В РЎвЂўР РЋРІР‚С™Р В Р’ВµР РЋР вЂљР РЋР РЏР В Р’В»Р В РЎвЂ Р В РўвЂР В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋРЎвЂњР В РЎвЂ” Р В РЎвЂќ root-Р В Р’В°Р В РЎвЂќР В РЎвЂќР В Р’В°Р РЋРЎвЂњР В Р вЂ¦Р РЋРІР‚С™Р РЋРЎвЂњ.")}
                         </p>
                       ) : null}
                       {banError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{banError}</p> : null}
@@ -7019,12 +7132,12 @@ useEffect(() => {
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">
-                            {t("Subscription Access", "Доступ по подписке")}
+                            {t("Subscription Access", "Р В РІР‚СњР В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋРЎвЂњР В РЎвЂ” Р В РЎвЂ”Р В РЎвЂў Р В РЎвЂ”Р В РЎвЂўР В РўвЂР В РЎвЂ”Р В РЎвЂР РЋР С“Р В РЎвЂќР В Р’Вµ")}
                           </p>
                           <p className="mt-2 text-sm font-semibold text-white">
                             {hasActiveSubscriptionRole
-                              ? t("Subscription is active", "Подписка активна")
-                              : t("Subscription is inactive", "Подписка неактивна")}
+                              ? t("Subscription is active", "Р В РЎСџР В РЎвЂўР В РўвЂР В РЎвЂ”Р В РЎвЂР РЋР С“Р В РЎвЂќР В Р’В° Р В Р’В°Р В РЎвЂќР РЋРІР‚С™Р В РЎвЂР В Р вЂ Р В Р вЂ¦Р В Р’В°")
+                              : t("Subscription is inactive", "Р В РЎСџР В РЎвЂўР В РўвЂР В РЎвЂ”Р В РЎвЂР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’ВµР В Р’В°Р В РЎвЂќР РЋРІР‚С™Р В РЎвЂР В Р вЂ Р В Р вЂ¦Р В Р’В°")}
                           </p>
                         </div>
                         <span
@@ -7034,7 +7147,7 @@ useEffect(() => {
                               : "border-[#3a3a3a] bg-[#111111] text-[#a3a3a3]"
                           }`}
                         >
-                          {hasActiveSubscriptionRole ? t("Active", "Активна") : t("Inactive", "Неактивна")}
+                          {hasActiveSubscriptionRole ? t("Active", "Р В РЎвЂ™Р В РЎвЂќР РЋРІР‚С™Р В РЎвЂР В Р вЂ Р В Р вЂ¦Р В Р’В°") : t("Inactive", "Р В РЎСљР В Р’ВµР В Р’В°Р В РЎвЂќР РЋРІР‚С™Р В РЎвЂР В Р вЂ Р В Р вЂ¦Р В Р’В°")}
                         </span>
                       </div>
                       <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -7045,18 +7158,18 @@ useEffect(() => {
                           className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {isAdminSubscriptionSaving
-                            ? t("Saving...", "Сохранение...")
-                            : t("Grant Active Subscription", "Выдать активную подписку")}
+                            ? t("Saving...", "Р В Р Р‹Р В РЎвЂўР РЋРІР‚В¦Р РЋР вЂљР В Р’В°Р В Р вЂ¦Р В Р’ВµР В Р вЂ¦Р В РЎвЂР В Р’Вµ...")
+                            : t("Grant Active Subscription", "Р В РІР‚в„ўР РЋРІР‚в„–Р В РўвЂР В Р’В°Р РЋРІР‚С™Р РЋР Р‰ Р В Р’В°Р В РЎвЂќР РЋРІР‚С™Р В РЎвЂР В Р вЂ Р В Р вЂ¦Р РЋРЎвЂњР РЋР вЂ№ Р В РЎвЂ”Р В РЎвЂўР В РўвЂР В РЎвЂ”Р В РЎвЂР РЋР С“Р В РЎвЂќР РЋРЎвЂњ")}
                         </button>
                       </div>
                       {hasSubscriberRole ? (
                         <p className="mt-3 text-xs leading-relaxed text-gray-500">
-                          {t("This profile already has an active subscription role.", "У этого профиля уже есть роль активной подписки.")}
+                          {t("This profile already has an active subscription role.", "Р В Р в‚¬ Р РЋР РЉР РЋРІР‚С™Р В РЎвЂўР В РЎвЂ“Р В РЎвЂў Р В РЎвЂ”Р РЋР вЂљР В РЎвЂўР РЋРІР‚С›Р В РЎвЂР В Р’В»Р РЋР РЏ Р РЋРЎвЂњР В Р’В¶Р В Р’Вµ Р В Р’ВµР РЋР С“Р РЋРІР‚С™Р РЋР Р‰ Р РЋР вЂљР В РЎвЂўР В Р’В»Р РЋР Р‰ Р В Р’В°Р В РЎвЂќР РЋРІР‚С™Р В РЎвЂР В Р вЂ Р В Р вЂ¦Р В РЎвЂўР В РІвЂћвЂ“ Р В РЎвЂ”Р В РЎвЂўР В РўвЂР В РЎвЂ”Р В РЎвЂР РЋР С“Р В РЎвЂќР В РЎвЂ.")}
                         </p>
                       ) : null}
                       {hasTestPeriodRole && !hasSubscriberRole ? (
                         <p className="mt-3 text-xs leading-relaxed text-gray-500">
-                          {t("Granting active subscription replaces the test period role.", "Выдача активной подписки заменяет роль тестового периода.")}
+                          {t("Granting active subscription replaces the test period role.", "Р В РІР‚в„ўР РЋРІР‚в„–Р В РўвЂР В Р’В°Р РЋРІР‚РЋР В Р’В° Р В Р’В°Р В РЎвЂќР РЋРІР‚С™Р В РЎвЂР В Р вЂ Р В Р вЂ¦Р В РЎвЂўР В РІвЂћвЂ“ Р В РЎвЂ”Р В РЎвЂўР В РўвЂР В РЎвЂ”Р В РЎвЂР РЋР С“Р В РЎвЂќР В РЎвЂ Р В Р’В·Р В Р’В°Р В РЎВР В Р’ВµР В Р вЂ¦Р РЋР РЏР В Р’ВµР РЋРІР‚С™ Р РЋР вЂљР В РЎвЂўР В Р’В»Р РЋР Р‰ Р РЋРІР‚С™Р В Р’ВµР РЋР С“Р РЋРІР‚С™Р В РЎвЂўР В Р вЂ Р В РЎвЂўР В РЎвЂ“Р В РЎвЂў Р В РЎвЂ”Р В Р’ВµР РЋР вЂљР В РЎвЂР В РЎвЂўР В РўвЂР В Р’В°.")}
                         </p>
                       ) : null}
                       {adminSubscriptionError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{adminSubscriptionError}</p> : null}
@@ -7116,20 +7229,20 @@ useEffect(() => {
                     <section className="rounded-[24px] border border-[#1d1d1d] bg-[#0d0d0d] p-5">
                       <div className="flex items-center justify-between gap-3">
                         <div>
-                          <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Email Verification", "Подтверждение почты")}</p>
+                          <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Email Verification", "Р В РЎСџР В РЎвЂўР В РўвЂР РЋРІР‚С™Р В Р вЂ Р В Р’ВµР РЋР вЂљР В Р’В¶Р В РўвЂР В Р’ВµР В Р вЂ¦Р В РЎвЂР В Р’Вµ Р В РЎвЂ”Р В РЎвЂўР РЋРІР‚РЋР РЋРІР‚С™Р РЋРІР‚в„–")}</p>
                           <p className="mt-2 text-sm font-semibold text-white">
                             {targetVerificationStatus === "no-email"
-                              ? t("No email attached", "Почта не привязана")
+                              ? t("No email attached", "Р В РЎСџР В РЎвЂўР РЋРІР‚РЋР РЋРІР‚С™Р В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В РЎвЂ”Р РЋР вЂљР В РЎвЂР В Р вЂ Р РЋР РЏР В Р’В·Р В Р’В°Р В Р вЂ¦Р В Р’В°")
                               : targetVerificationStatus === "locked"
-                                ? t("Verification required", "Требуется подтверждение")
+                                ? t("Verification required", "Р В РЎС›Р РЋР вЂљР В Р’ВµР В Р’В±Р РЋРЎвЂњР В Р’ВµР РЋРІР‚С™Р РЋР С“Р РЋР РЏ Р В РЎвЂ”Р В РЎвЂўР В РўвЂР РЋРІР‚С™Р В Р вЂ Р В Р’ВµР РЋР вЂљР В Р’В¶Р В РўвЂР В Р’ВµР В Р вЂ¦Р В РЎвЂР В Р’Вµ")
                                 : targetVerificationStatus === "verified"
-                                  ? t("Email verified", "Почта подтверждена")
-                                  : t("State unknown", "Статус неизвестен")}
+                                  ? t("Email verified", "Р В РЎСџР В РЎвЂўР РЋРІР‚РЋР РЋРІР‚С™Р В Р’В° Р В РЎвЂ”Р В РЎвЂўР В РўвЂР РЋРІР‚С™Р В Р вЂ Р В Р’ВµР РЋР вЂљР В Р’В¶Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°")
+                                  : t("State unknown", "Р В Р Р‹Р РЋРІР‚С™Р В Р’В°Р РЋРІР‚С™Р РЋРЎвЂњР РЋР С“ Р В Р вЂ¦Р В Р’ВµР В РЎвЂР В Р’В·Р В Р вЂ Р В Р’ВµР РЋР С“Р РЋРІР‚С™Р В Р’ВµР В Р вЂ¦")}
                           </p>
                           {activeProfile.email ? (
                             <p className="mt-1 text-xs text-gray-500">{activeProfile.email}</p>
                           ) : (
-                            <p className="mt-1 text-xs text-gray-500">{t("This account does not have a stored email.", "У этого аккаунта нет сохранённой почты.")}</p>
+                            <p className="mt-1 text-xs text-gray-500">{t("This account does not have a stored email.", "Р В Р в‚¬ Р РЋР РЉР РЋРІР‚С™Р В РЎвЂўР В РЎвЂ“Р В РЎвЂў Р В Р’В°Р В РЎвЂќР В РЎвЂќР В Р’В°Р РЋРЎвЂњР В Р вЂ¦Р РЋРІР‚С™Р В Р’В° Р В Р вЂ¦Р В Р’ВµР РЋРІР‚С™ Р РЋР С“Р В РЎвЂўР РЋРІР‚В¦Р РЋР вЂљР В Р’В°Р В Р вЂ¦Р РЋРІР‚ВР В Р вЂ¦Р В Р вЂ¦Р В РЎвЂўР В РІвЂћвЂ“ Р В РЎвЂ”Р В РЎвЂўР РЋРІР‚РЋР РЋРІР‚С™Р РЋРІР‚в„–.")}</p>
                           )}
                         </div>
                         <span
@@ -7144,12 +7257,12 @@ useEffect(() => {
                           }`}
                         >
                           {targetVerificationStatus === "no-email"
-                            ? t("Unavailable", "Недоступно")
+                            ? t("Unavailable", "Р В РЎСљР В Р’ВµР В РўвЂР В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋРЎвЂњР В РЎвЂ”Р В Р вЂ¦Р В РЎвЂў")
                             : targetVerificationStatus === "locked"
-                              ? t("Locked", "Заблокировано")
+                              ? t("Locked", "Р В РІР‚вЂќР В Р’В°Р В Р’В±Р В Р’В»Р В РЎвЂўР В РЎвЂќР В РЎвЂР РЋР вЂљР В РЎвЂўР В Р вЂ Р В Р’В°Р В Р вЂ¦Р В РЎвЂў")
                               : targetVerificationStatus === "verified"
-                                ? t("Verified", "Подтверждено")
-                                : t("Unknown", "Неизвестно")}
+                                ? t("Verified", "Р В РЎСџР В РЎвЂўР В РўвЂР РЋРІР‚С™Р В Р вЂ Р В Р’ВµР РЋР вЂљР В Р’В¶Р В РўвЂР В Р’ВµР В Р вЂ¦Р В РЎвЂў")
+                                : t("Unknown", "Р В РЎСљР В Р’ВµР В РЎвЂР В Р’В·Р В Р вЂ Р В Р’ВµР РЋР С“Р РЋРІР‚С™Р В Р вЂ¦Р В РЎвЂў")}
                         </span>
                       </div>
                       <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -7168,15 +7281,15 @@ useEffect(() => {
                           }`}
                         >
                           {isAdminVerificationSaving
-                            ? t("Saving...", "Сохранение...")
+                            ? t("Saving...", "Р В Р Р‹Р В РЎвЂўР РЋРІР‚В¦Р РЋР вЂљР В Р’В°Р В Р вЂ¦Р В Р’ВµР В Р вЂ¦Р В РЎвЂР В Р’Вµ...")
                             : isTargetVerificationLocked || targetVerificationStatus === "unknown"
-                              ? t("Mark Verified", "Отметить подтверждённой")
-                              : t("Revoke Verification", "Отозвать подтверждение")}
+                              ? t("Mark Verified", "Р В РЎвЂєР РЋРІР‚С™Р В РЎВР В Р’ВµР РЋРІР‚С™Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰ Р В РЎвЂ”Р В РЎвЂўР В РўвЂР РЋРІР‚С™Р В Р вЂ Р В Р’ВµР РЋР вЂљР В Р’В¶Р В РўвЂР РЋРІР‚ВР В Р вЂ¦Р В Р вЂ¦Р В РЎвЂўР В РІвЂћвЂ“")
+                              : t("Revoke Verification", "Р В РЎвЂєР РЋРІР‚С™Р В РЎвЂўР В Р’В·Р В Р вЂ Р В Р’В°Р РЋРІР‚С™Р РЋР Р‰ Р В РЎвЂ”Р В РЎвЂўР В РўвЂР РЋРІР‚С™Р В Р вЂ Р В Р’ВµР РЋР вЂљР В Р’В¶Р В РўвЂР В Р’ВµР В Р вЂ¦Р В РЎвЂР В Р’Вµ")}
                         </button>
                       </div>
                       {isAdminSelfTarget && isTargetVerified ? (
                         <p className="mt-3 text-xs leading-relaxed text-gray-500">
-                          {t("Self-revoke is blocked to prevent losing access to your own root account.", "Самоотзыв запрещён, чтобы вы не потеряли доступ к своему root-аккаунту.")}
+                          {t("Self-revoke is blocked to prevent losing access to your own root account.", "Р В Р Р‹Р В Р’В°Р В РЎВР В РЎвЂўР В РЎвЂўР РЋРІР‚С™Р В Р’В·Р РЋРІР‚в„–Р В Р вЂ  Р В Р’В·Р В Р’В°Р В РЎвЂ”Р РЋР вЂљР В Р’ВµР РЋРІР‚В°Р РЋРІР‚ВР В Р вЂ¦, Р РЋРІР‚РЋР РЋРІР‚С™Р В РЎвЂўР В Р’В±Р РЋРІР‚в„– Р В Р вЂ Р РЋРІР‚в„– Р В Р вЂ¦Р В Р’Вµ Р В РЎвЂ”Р В РЎвЂўР РЋРІР‚С™Р В Р’ВµР РЋР вЂљР РЋР РЏР В Р’В»Р В РЎвЂ Р В РўвЂР В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋРЎвЂњР В РЎвЂ” Р В РЎвЂќ Р РЋР С“Р В Р вЂ Р В РЎвЂўР В Р’ВµР В РЎВР РЋРЎвЂњ root-Р В Р’В°Р В РЎвЂќР В РЎвЂќР В Р’В°Р РЋРЎвЂњР В Р вЂ¦Р РЋРІР‚С™Р РЋРЎвЂњ.")}
                         </p>
                       ) : null}
                       {adminVerificationError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{adminVerificationError}</p> : null}
@@ -7184,9 +7297,9 @@ useEffect(() => {
                     </section>
 
                     <section className="rounded-[24px] border border-[#1d1d1d] bg-[#0d0d0d] p-5">
-                      <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Password Recovery", "Восстановление пароля")}</p>
+                      <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Password Recovery", "Р В РІР‚в„ўР В РЎвЂўР РЋР С“Р РЋР С“Р РЋРІР‚С™Р В Р’В°Р В Р вЂ¦Р В РЎвЂўР В Р вЂ Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР В Р’Вµ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В РЎвЂўР В Р’В»Р РЋР РЏ")}</p>
                       <p className="mt-3 text-xs leading-relaxed text-gray-400">
-                        {t("Send a reset link to the linked email address for this account.", "Отправьте ссылку для сброса на привязанную почту этого аккаунта.")}
+                        {t("Send a reset link to the linked email address for this account.", "Р В РЎвЂєР РЋРІР‚С™Р В РЎвЂ”Р РЋР вЂљР В Р’В°Р В Р вЂ Р РЋР Р‰Р РЋРІР‚С™Р В Р’Вµ Р РЋР С“Р РЋР С“Р РЋРІР‚в„–Р В Р’В»Р В РЎвЂќР РЋРЎвЂњ Р В РўвЂР В Р’В»Р РЋР РЏ Р РЋР С“Р В Р’В±Р РЋР вЂљР В РЎвЂўР РЋР С“Р В Р’В° Р В Р вЂ¦Р В Р’В° Р В РЎвЂ”Р РЋР вЂљР В РЎвЂР В Р вЂ Р РЋР РЏР В Р’В·Р В Р’В°Р В Р вЂ¦Р В Р вЂ¦Р РЋРЎвЂњР РЋР вЂ№ Р В РЎвЂ”Р В РЎвЂўР РЋРІР‚РЋР РЋРІР‚С™Р РЋРЎвЂњ Р РЋР РЉР РЋРІР‚С™Р В РЎвЂўР В РЎвЂ“Р В РЎвЂў Р В Р’В°Р В РЎвЂќР В РЎвЂќР В Р’В°Р РЋРЎвЂњР В Р вЂ¦Р РЋРІР‚С™Р В Р’В°.")}
                       </p>
                       <div className="mt-4 flex flex-wrap items-center gap-3">
                         <button
@@ -7195,7 +7308,7 @@ useEffect(() => {
                           disabled={isAdminPasswordResetSending || isAccountDeleting}
                           className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          {isAdminPasswordResetSending ? t("Sending...", "Отправка...") : t("Send Reset Link", "Отправить ссылку сброса")}
+                          {isAdminPasswordResetSending ? t("Sending...", "Р В РЎвЂєР РЋРІР‚С™Р В РЎвЂ”Р РЋР вЂљР В Р’В°Р В Р вЂ Р В РЎвЂќР В Р’В°...") : t("Send Reset Link", "Р В РЎвЂєР РЋРІР‚С™Р В РЎвЂ”Р РЋР вЂљР В Р’В°Р В Р вЂ Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰ Р РЋР С“Р РЋР С“Р РЋРІР‚в„–Р В Р’В»Р В РЎвЂќР РЋРЎвЂњ Р РЋР С“Р В Р’В±Р РЋР вЂљР В РЎвЂўР РЋР С“Р В Р’В°")}
                         </button>
                       </div>
                       {adminPasswordResetError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{adminPasswordResetError}</p> : null}
@@ -7203,9 +7316,9 @@ useEffect(() => {
                     </section>
 
                     <section className="rounded-[24px] border border-[#3b1e24] bg-[#0d0d0d] p-5">
-                      <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-[#ff9aa9]">{t("Danger Zone", "Опасная зона")}</p>
+                      <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-[#ff9aa9]">{t("Danger Zone", "Р В РЎвЂєР В РЎвЂ”Р В Р’В°Р РЋР С“Р В Р вЂ¦Р В Р’В°Р РЋР РЏ Р В Р’В·Р В РЎвЂўР В Р вЂ¦Р В Р’В°")}</p>
                       <p className="mt-3 text-xs leading-relaxed text-gray-400">
-                        {t("Account deletion is available only for the current signed-in account.", "Удаление аккаунта доступно только для текущего авторизованного аккаунта.")}
+                        {t("Account deletion is available only for the current signed-in account.", "Р В Р в‚¬Р В РўвЂР В Р’В°Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР В Р’Вµ Р В Р’В°Р В РЎвЂќР В РЎвЂќР В Р’В°Р РЋРЎвЂњР В Р вЂ¦Р РЋРІР‚С™Р В Р’В° Р В РўвЂР В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋРЎвЂњР В РЎвЂ”Р В Р вЂ¦Р В РЎвЂў Р РЋРІР‚С™Р В РЎвЂўР В Р’В»Р РЋР Р‰Р В РЎвЂќР В РЎвЂў Р В РўвЂР В Р’В»Р РЋР РЏ Р РЋРІР‚С™Р В Р’ВµР В РЎвЂќР РЋРЎвЂњР РЋРІР‚В°Р В Р’ВµР В РЎвЂ“Р В РЎвЂў Р В Р’В°Р В Р вЂ Р РЋРІР‚С™Р В РЎвЂўР РЋР вЂљР В РЎвЂР В Р’В·Р В РЎвЂўР В Р вЂ Р В Р’В°Р В Р вЂ¦Р В Р вЂ¦Р В РЎвЂўР В РЎвЂ“Р В РЎвЂў Р В Р’В°Р В РЎвЂќР В РЎвЂќР В Р’В°Р РЋРЎвЂњР В Р вЂ¦Р РЋРІР‚С™Р В Р’В°.")}
                       </p>
                       <div className="mt-4 flex flex-wrap items-center gap-3">
                         <button
@@ -7214,21 +7327,21 @@ useEffect(() => {
                           disabled={!isAdminSelfTarget || isAccountDeleting || isAdminPasswordResetSending}
                           className="inline-flex items-center justify-center rounded-full border border-[#ff5a54]/35 bg-[#ff5a54] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ff746f] disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          {isAccountDeleting ? t("Deleting...", "Удаление...") : t("Delete Account", "Удалить аккаунт")}
+                          {isAccountDeleting ? t("Deleting...", "Р В Р в‚¬Р В РўвЂР В Р’В°Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР В Р’Вµ...") : t("Delete Account", "Р В Р в‚¬Р В РўвЂР В Р’В°Р В Р’В»Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰ Р В Р’В°Р В РЎвЂќР В РЎвЂќР В Р’В°Р РЋРЎвЂњР В Р вЂ¦Р РЋРІР‚С™")}
                         </button>
                       </div>
                       {!isAdminSelfTarget ? (
                         <p className="mt-3 text-xs leading-relaxed text-gray-500">
-                          {t("Open your own profile to use account deletion.", "Откройте свой профиль, чтобы использовать удаление аккаунта.")}
+                          {t("Open your own profile to use account deletion.", "Р В РЎвЂєР РЋРІР‚С™Р В РЎвЂќР РЋР вЂљР В РЎвЂўР В РІвЂћвЂ“Р РЋРІР‚С™Р В Р’Вµ Р РЋР С“Р В Р вЂ Р В РЎвЂўР В РІвЂћвЂ“ Р В РЎвЂ”Р РЋР вЂљР В РЎвЂўР РЋРІР‚С›Р В РЎвЂР В Р’В»Р РЋР Р‰, Р РЋРІР‚РЋР РЋРІР‚С™Р В РЎвЂўР В Р’В±Р РЋРІР‚в„– Р В РЎвЂР РЋР С“Р В РЎвЂ”Р В РЎвЂўР В Р’В»Р РЋР Р‰Р В Р’В·Р В РЎвЂўР В Р вЂ Р В Р’В°Р РЋРІР‚С™Р РЋР Р‰ Р РЋРЎвЂњР В РўвЂР В Р’В°Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР В Р’Вµ Р В Р’В°Р В РЎвЂќР В РЎвЂќР В Р’В°Р РЋРЎвЂњР В Р вЂ¦Р РЋРІР‚С™Р В Р’В°.")}
                         </p>
                       ) : null}
                       {deleteAccountError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{deleteAccountError}</p> : null}
                     </section>
 
                     <section className="rounded-[24px] border border-[#1d1d1d] bg-[#0d0d0d] p-5">
-                      <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Profile Name", "Имя профиля")}</p>
+                      <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Profile Name", "Р В Р’ВР В РЎВР РЋР РЏ Р В РЎвЂ”Р РЋР вЂљР В РЎвЂўР РЋРІР‚С›Р В РЎвЂР В Р’В»Р РЋР РЏ")}</p>
                       <label className="mt-4 block">
-                        <span className="mb-2 block text-xs text-gray-500">{t("Displayed name", "Отображаемое имя")}</span>
+                        <span className="mb-2 block text-xs text-gray-500">{t("Displayed name", "Р В РЎвЂєР РЋРІР‚С™Р В РЎвЂўР В Р’В±Р РЋР вЂљР В Р’В°Р В Р’В¶Р В Р’В°Р В Р’ВµР В РЎВР В РЎвЂўР В Р’Вµ Р В РЎвЂР В РЎВР РЋР РЏ")}</span>
                         <input
                           type="text"
                           value={displayNameInput}
@@ -7250,7 +7363,7 @@ useEffect(() => {
                           disabled={isDisplayNameSaving}
                           className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          {isDisplayNameSaving ? t("Saving...", "Сохранение...") : t("Save Name", "Сохранить имя")}
+                          {isDisplayNameSaving ? t("Saving...", "Р В Р Р‹Р В РЎвЂўР РЋРІР‚В¦Р РЋР вЂљР В Р’В°Р В Р вЂ¦Р В Р’ВµР В Р вЂ¦Р В РЎвЂР В Р’Вµ...") : t("Save Name", "Р В Р Р‹Р В РЎвЂўР РЋРІР‚В¦Р РЋР вЂљР В Р’В°Р В Р вЂ¦Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰ Р В РЎвЂР В РЎВР РЋР РЏ")}
                         </button>
                       </div>
                       {displayNameError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{displayNameError}</p> : null}
@@ -7258,9 +7371,9 @@ useEffect(() => {
                     </section>
 
                     <section className="rounded-[24px] border border-[#1d1d1d] bg-[#0d0d0d] p-5">
-                      <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Login", "Логин")}</p>
+                      <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Login", "Р В РІР‚С”Р В РЎвЂўР В РЎвЂ“Р В РЎвЂР В Р вЂ¦")}</p>
                       <label className="mt-4 block">
-                        <span className="mb-2 block text-xs text-gray-500">{t("Sign-in login", "Логин для входа")}</span>
+                        <span className="mb-2 block text-xs text-gray-500">{t("Sign-in login", "Р В РІР‚С”Р В РЎвЂўР В РЎвЂ“Р В РЎвЂР В Р вЂ¦ Р В РўвЂР В Р’В»Р РЋР РЏ Р В Р вЂ Р РЋРІР‚В¦Р В РЎвЂўР В РўвЂР В Р’В°")}</span>
                         <input
                           ref={adminUsernameInputRef}
                           type="text"
@@ -7277,7 +7390,7 @@ useEffect(() => {
                           placeholder="your_login"
                         />
                       </label>
-                      <p className="mt-2 text-xs leading-relaxed text-gray-500">{t("Login without spaces. Letters, numbers, `.`, `_`, and `-` are supported.", "Логин без пробелов. Поддерживаются буквы, цифры, `.`, `_` и `-`.")}</p>
+                      <p className="mt-2 text-xs leading-relaxed text-gray-500">{t("Login without spaces. Letters, numbers, `.`, `_`, and `-` are supported.", "Р В РІР‚С”Р В РЎвЂўР В РЎвЂ“Р В РЎвЂР В Р вЂ¦ Р В Р’В±Р В Р’ВµР В Р’В· Р В РЎвЂ”Р РЋР вЂљР В РЎвЂўР В Р’В±Р В Р’ВµР В Р’В»Р В РЎвЂўР В Р вЂ . Р В РЎСџР В РЎвЂўР В РўвЂР В РўвЂР В Р’ВµР РЋР вЂљР В Р’В¶Р В РЎвЂР В Р вЂ Р В Р’В°Р РЋР вЂ№Р РЋРІР‚С™Р РЋР С“Р РЋР РЏ Р В Р’В±Р РЋРЎвЂњР В РЎвЂќР В Р вЂ Р РЋРІР‚в„–, Р РЋРІР‚В Р В РЎвЂР РЋРІР‚С›Р РЋР вЂљР РЋРІР‚в„–, `.`, `_` Р В РЎвЂ `-`.")}</p>
                       <div className="mt-4 flex flex-wrap items-center gap-3">
                         <button
                           type="button"
@@ -7285,7 +7398,7 @@ useEffect(() => {
                           disabled={isUsernameSaving}
                           className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          {isUsernameSaving ? t("Saving...", "Сохранение...") : t("Save Login", "Сохранить логин")}
+                          {isUsernameSaving ? t("Saving...", "Р В Р Р‹Р В РЎвЂўР РЋРІР‚В¦Р РЋР вЂљР В Р’В°Р В Р вЂ¦Р В Р’ВµР В Р вЂ¦Р В РЎвЂР В Р’Вµ...") : t("Save Login", "Р В Р Р‹Р В РЎвЂўР РЋРІР‚В¦Р РЋР вЂљР В Р’В°Р В Р вЂ¦Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰ Р В Р’В»Р В РЎвЂўР В РЎвЂ“Р В РЎвЂР В Р вЂ¦")}
                         </button>
                       </div>
                       {usernameError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{usernameError}</p> : null}
@@ -7330,15 +7443,23 @@ useEffect(() => {
                         <button
                           type="button"
                           onClick={() => adminThemeSongFileInputRef.current?.click()}
-                          disabled={isAdminThemeSongSaving || isAdminThemeSongUploading}
+                          disabled={isAdminThemeSongSaving || isAdminThemeSongUploading || isAdminThemeSongDeleting}
                           className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {isAdminThemeSongUploading ? t("Uploading...", "Uploading...") : t("Upload Music", "Upload Music")}
                         </button>
                         <button
                           type="button"
+                          onClick={handleAdminThemeSongDelete}
+                          disabled={isAdminThemeSongSaving || isAdminThemeSongUploading || isAdminThemeSongDeleting}
+                          className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ff9aa9] transition hover:border-[#ff9aa9]/50 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isAdminThemeSongDeleting ? t("Deleting...", "Deleting...") : t("Delete Track", "Delete Track")}
+                        </button>
+                        <button
+                          type="button"
                           onClick={handleAdminThemeSongSave}
-                          disabled={isAdminThemeSongSaving || isAdminThemeSongUploading}
+                          disabled={isAdminThemeSongSaving || isAdminThemeSongUploading || isAdminThemeSongDeleting}
                           className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {isAdminThemeSongSaving ? t("Saving...", "Saving...") : t("Save Music", "Save Music")}
@@ -7352,9 +7473,9 @@ useEffect(() => {
                     </section>
 
                     <section className="rounded-[24px] border border-[#1d1d1d] bg-[#0d0d0d] p-5">
-                      <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Roles", "Роли")}</p>
+                      <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Roles", "Р В Р’В Р В РЎвЂўР В Р’В»Р В РЎвЂ")}</p>
                       <div className="mt-4">
-                        <p className="text-xs uppercase tracking-[0.22em] text-gray-500">{t("Assigned", "Назначены")}</p>
+                        <p className="text-xs uppercase tracking-[0.22em] text-gray-500">{t("Assigned", "Р В РЎСљР В Р’В°Р В Р’В·Р В Р вЂ¦Р В Р’В°Р РЋРІР‚РЋР В Р’ВµР В Р вЂ¦Р РЋРІР‚в„–")}</p>
                         <div className="mt-3 flex flex-wrap gap-3">
                           {normalizedDraftRoles.map((role) => {
                             const isLastUserRole =
@@ -7379,7 +7500,7 @@ useEffect(() => {
                         </div>
                       </div>
                       <div className="mt-5">
-                        <p className="text-xs uppercase tracking-[0.22em] text-gray-500">{t("Available", "Доступны")}</p>
+                        <p className="text-xs uppercase tracking-[0.22em] text-gray-500">{t("Available", "Р В РІР‚СњР В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋРЎвЂњР В РЎвЂ”Р В Р вЂ¦Р РЋРІР‚в„–")}</p>
                         <div className="mt-3 flex flex-wrap gap-3">
                           {availableRoleOptions.map((role) => (
                             <button
@@ -7404,7 +7525,7 @@ useEffect(() => {
                           disabled={isRolesSaving || !hasRoleChanges}
                           className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          {isRolesSaving ? t("Saving...", "Сохранение...") : t("Save Roles", "Сохранить роли")}
+                          {isRolesSaving ? t("Saving...", "Р В Р Р‹Р В РЎвЂўР РЋРІР‚В¦Р РЋР вЂљР В Р’В°Р В Р вЂ¦Р В Р’ВµР В Р вЂ¦Р В РЎвЂР В Р’Вµ...") : t("Save Roles", "Р В Р Р‹Р В РЎвЂўР РЋРІР‚В¦Р РЋР вЂљР В Р’В°Р В Р вЂ¦Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰ Р РЋР вЂљР В РЎвЂўР В Р’В»Р В РЎвЂ")}
                         </button>
                         <button
                           type="button"
@@ -7412,7 +7533,7 @@ useEffect(() => {
                           disabled={isRolesSaving || !hasRoleChanges}
                           className="inline-flex items-center justify-center rounded-full border border-[#2b1b1e] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          {t("Reset", "Сбросить")}
+                          {t("Reset", "Р В Р Р‹Р В Р’В±Р РЋР вЂљР В РЎвЂўР РЋР С“Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰")}
                         </button>
                       </div>
                       {rolesError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{rolesError}</p> : null}
@@ -7420,8 +7541,8 @@ useEffect(() => {
                     </section>
 
                     <section className="rounded-[24px] border border-[#1d1d1d] bg-[#0d0d0d] p-5">
-                      <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Avatar", "Аватар")}</p>
-                      <p className="mt-3 text-xs leading-relaxed text-gray-400">{t("Upload, replace, or delete the avatar for this account. PNG, JPG, and WEBP are available to all users. GIF, MP4, and WEBM require a higher profile tier.", "Здесь можно загрузить, заменить или удалить аватар этого аккаунта. PNG, JPG и WEBP доступны всем пользователям. GIF, MP4 и WEBM требуют более высокого уровня профиля.")}</p>
+                      <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Avatar", "Р В РЎвЂ™Р В Р вЂ Р В Р’В°Р РЋРІР‚С™Р В Р’В°Р РЋР вЂљ")}</p>
+                      <p className="mt-3 text-xs leading-relaxed text-gray-400">{t("Upload, replace, or delete the avatar for this account. PNG, JPG, and WEBP are available to all users. GIF, MP4, and WEBM require a higher profile tier.", "Р В РІР‚вЂќР В РўвЂР В Р’ВµР РЋР С“Р РЋР Р‰ Р В РЎВР В РЎвЂўР В Р’В¶Р В Р вЂ¦Р В РЎвЂў Р В Р’В·Р В Р’В°Р В РЎвЂ“Р РЋР вЂљР РЋРЎвЂњР В Р’В·Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰, Р В Р’В·Р В Р’В°Р В РЎВР В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰ Р В РЎвЂР В Р’В»Р В РЎвЂ Р РЋРЎвЂњР В РўвЂР В Р’В°Р В Р’В»Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰ Р В Р’В°Р В Р вЂ Р В Р’В°Р РЋРІР‚С™Р В Р’В°Р РЋР вЂљ Р РЋР РЉР РЋРІР‚С™Р В РЎвЂўР В РЎвЂ“Р В РЎвЂў Р В Р’В°Р В РЎвЂќР В РЎвЂќР В Р’В°Р РЋРЎвЂњР В Р вЂ¦Р РЋРІР‚С™Р В Р’В°. PNG, JPG Р В РЎвЂ WEBP Р В РўвЂР В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋРЎвЂњР В РЎвЂ”Р В Р вЂ¦Р РЋРІР‚в„– Р В Р вЂ Р РЋР С“Р В Р’ВµР В РЎВ Р В РЎвЂ”Р В РЎвЂўР В Р’В»Р РЋР Р‰Р В Р’В·Р В РЎвЂўР В Р вЂ Р В Р’В°Р РЋРІР‚С™Р В Р’ВµР В Р’В»Р РЋР РЏР В РЎВ. GIF, MP4 Р В РЎвЂ WEBM Р РЋРІР‚С™Р РЋР вЂљР В Р’ВµР В Р’В±Р РЋРЎвЂњР РЋР вЂ№Р РЋРІР‚С™ Р В Р’В±Р В РЎвЂўР В Р’В»Р В Р’ВµР В Р’Вµ Р В Р вЂ Р РЋРІР‚в„–Р РЋР С“Р В РЎвЂўР В РЎвЂќР В РЎвЂўР В РЎвЂ“Р В РЎвЂў Р РЋРЎвЂњР РЋР вЂљР В РЎвЂўР В Р вЂ Р В Р вЂ¦Р РЋР РЏ Р В РЎвЂ”Р РЋР вЂљР В РЎвЂўР РЋРІР‚С›Р В РЎвЂР В Р’В»Р РЋР РЏ.")}</p>
                       <div className="mt-4 flex flex-wrap items-center gap-3">
                         <button
                           type="button"
@@ -7429,7 +7550,7 @@ useEffect(() => {
                           disabled={isAvatarUploading || isAvatarDeleting}
                           className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          {isAvatarUploading ? t("Uploading...", "Загрузка...") : hasActiveProfileAvatar ? t("Replace Avatar", "Заменить аватар") : t("Upload Avatar", "Загрузить аватар")}
+                          {isAvatarUploading ? t("Uploading...", "Р В РІР‚вЂќР В Р’В°Р В РЎвЂ“Р РЋР вЂљР РЋРЎвЂњР В Р’В·Р В РЎвЂќР В Р’В°...") : hasActiveProfileAvatar ? t("Replace Avatar", "Р В РІР‚вЂќР В Р’В°Р В РЎВР В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰ Р В Р’В°Р В Р вЂ Р В Р’В°Р РЋРІР‚С™Р В Р’В°Р РЋР вЂљ") : t("Upload Avatar", "Р В РІР‚вЂќР В Р’В°Р В РЎвЂ“Р РЋР вЂљР РЋРЎвЂњР В Р’В·Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰ Р В Р’В°Р В Р вЂ Р В Р’В°Р РЋРІР‚С™Р В Р’В°Р РЋР вЂљ")}
                         </button>
                         {hasActiveProfileAvatar ? (
                           <button
@@ -7438,7 +7559,7 @@ useEffect(() => {
                             disabled={isAvatarUploading || isAvatarDeleting}
                             className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
                           >
-                            {isAvatarDeleting ? t("Deleting...", "Удаление...") : t("Delete Avatar", "Удалить аватар")}
+                            {isAvatarDeleting ? t("Deleting...", "Р В Р в‚¬Р В РўвЂР В Р’В°Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР В Р’Вµ...") : t("Delete Avatar", "Р В Р в‚¬Р В РўвЂР В Р’В°Р В Р’В»Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰ Р В Р’В°Р В Р вЂ Р В Р’В°Р РЋРІР‚С™Р В Р’В°Р РЋР вЂљ")}
                           </button>
                         ) : null}
                         <input
