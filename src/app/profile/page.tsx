@@ -43,8 +43,6 @@ type UserProfile = {
   roles: string[];
   isBanned?: boolean;
   bannedAt?: string | null;
-  hwid?: string | null;
-  subscriptionUntil?: string | null;
   providerIds: string[];
   creationTime: string | null;
   lastSignInTime: string | null;
@@ -131,11 +129,6 @@ type Bridge = {
   adminUpdateProfileDisplayName: (profileId: number, displayName: string) => Promise<UserProfile | null>;
   adminUpdateProfileLogin: (profileId: number, login: string) => Promise<UserProfile | null>;
   adminUpdateProfileThemeSong: (profileId: number, themeSongKey: string) => Promise<UserProfile | null>;
-  adminUpdateProfileSubscriptionUntil: (
-    profileId: number,
-    subscriptionUntil: string | null
-  ) => Promise<UserProfile | null>;
-  adminResetProfileHwid: (profileId: number) => Promise<UserProfile | null>;
   adminSetProfileBan: (profileId: number, isBanned: boolean) => Promise<UserProfile | null>;
   adminSetProfileEmailVerification: (profileId: number, isVerified: boolean) => Promise<UserProfile | null>;
   updateProfileRoles: (profileId: number, roles: string[]) => Promise<UserProfile | null>;
@@ -223,6 +216,9 @@ const PROFILE_NAV_SCAN_LIMIT = 300;
 const PROFILE_NAV_PREFETCH_PER_SIDE = 2;
 const PROFILE_THEME_TIMELINE_UPDATE_STEP_SECONDS = 0.24;
 const PROFILE_THEME_EMBED_FALLBACK_DURATION_SECONDS = 5 * 60;
+const FUNPAY_SUBSCRIPTION_URL = "https://funpay.com/lots/offer?id=67099133";
+const FUNPAY_ICON_URL = "https://funpay.com/favicon.ico";
+const FUNPAY_DONATION_TRACK_SRC = `${repoBasePath}/music/kto-to-mne-zadonatil.mp3`;
 const STALE_RUNTIME_RECOVERY_STORAGE_KEY = "sakura-stale-runtime-recovery-at";
 const STALE_RUNTIME_RECOVERY_COUNT_STORAGE_KEY = "sakura-stale-runtime-recovery-count";
 const STALE_RUNTIME_RECOVERY_COOLDOWN_MS = 5 * 60 * 1000;
@@ -957,68 +953,6 @@ const formatTime = (value: string | null, locale: UiLocale) => {
     ...(browserTimeZone ? { timeZone: browserTimeZone } : {}),
   }).format(parsedDate);
 };
-const resolveProfileSubscriptionUntil = (profile: UserProfile | null | undefined) => {
-  const rawValue =
-    typeof profile?.subscriptionUntil === "string"
-      ? profile.subscriptionUntil.trim()
-      : "";
-
-  if (!rawValue) {
-    return null;
-  }
-
-  const parsedDate = new Date(rawValue);
-
-  if (Number.isNaN(parsedDate.getTime())) {
-    return null;
-  }
-
-  return parsedDate.toISOString();
-};
-const toDateTimeLocalInputValue = (value: string | null) => {
-  if (!value) {
-    return "";
-  }
-
-  const parsedDate = new Date(value);
-
-  if (Number.isNaN(parsedDate.getTime())) {
-    return "";
-  }
-
-  const pad = (candidate: number) => String(candidate).padStart(2, "0");
-
-  return (
-    String(parsedDate.getFullYear()) +
-    "-" +
-    pad(parsedDate.getMonth() + 1) +
-    "-" +
-    pad(parsedDate.getDate()) +
-    "T" +
-    pad(parsedDate.getHours()) +
-    ":" +
-    pad(parsedDate.getMinutes())
-  );
-};
-const parseDateTimeLocalInputValue = (value: string): string | null => {
-  const trimmedValue = value.trim();
-
-  if (!trimmedValue) {
-    return null;
-  }
-
-  const parsedDate = new Date(trimmedValue);
-
-  if (Number.isNaN(parsedDate.getTime())) {
-    return null;
-  }
-
-  return parsedDate.toISOString();
-};
-const resolveProfileHwid = (profile: UserProfile | null | undefined) => {
-  const rawValue = typeof profile?.hwid === "string" ? profile.hwid.trim() : "";
-  return rawValue || null;
-};
 const isUserLikeRole = (role: string) => /^u(?:[\s_-]*s)?[\s_-]*e[\s_-]*r$/i.test(role.trim());
 const toCompactRoleToken = (role: string) =>
   role
@@ -1735,13 +1669,9 @@ export default function ProfilePage() {
   const [isAdminPasswordResetSending, setIsAdminPasswordResetSending] = useState(false);
   const [adminPasswordResetError, setAdminPasswordResetError] = useState<string | null>(null);
   const [adminPasswordResetSuccess, setAdminPasswordResetSuccess] = useState<string | null>(null);
-  const [adminSubscriptionUntilInput, setAdminSubscriptionUntilInput] = useState("");
-  const [isAdminSubscriptionUntilSaving, setIsAdminSubscriptionUntilSaving] = useState(false);
-  const [adminSubscriptionUntilError, setAdminSubscriptionUntilError] = useState<string | null>(null);
-  const [adminSubscriptionUntilSuccess, setAdminSubscriptionUntilSuccess] = useState<string | null>(null);
-  const [isAdminHwidResetting, setIsAdminHwidResetting] = useState(false);
-  const [adminHwidError, setAdminHwidError] = useState<string | null>(null);
-  const [adminHwidSuccess, setAdminHwidSuccess] = useState<string | null>(null);
+  const [isAdminSubscriptionSaving, setIsAdminSubscriptionSaving] = useState(false);
+  const [adminSubscriptionError, setAdminSubscriptionError] = useState<string | null>(null);
+  const [adminSubscriptionSuccess, setAdminSubscriptionSuccess] = useState<string | null>(null);
   const [adminThemeSongInput, setAdminThemeSongInput] = useState("");
   const [isAdminThemeSongSaving, setIsAdminThemeSongSaving] = useState(false);
   const [adminThemeSongError, setAdminThemeSongError] = useState<string | null>(null);
@@ -1796,6 +1726,7 @@ export default function ProfilePage() {
   const commentTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const profileThemeAudioRef = useRef<HTMLAudioElement | null>(null);
   const profileThemeEmbedFrameRef = useRef<HTMLIFrameElement | null>(null);
+  const funPayTrackAudioRef = useRef<HTMLAudioElement | null>(null);
   const profileThemeAutoplayAttemptedRef = useRef<string | null>(null);
   const mentionSuggestionsCacheRef = useRef<Record<string, UserProfile[]>>({});
   const editingCommentTextareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -2952,16 +2883,50 @@ useEffect(() => {
     isOwner && visibleCurrentUser?.providerIds?.includes("password")
   );
   const profileRoles = deriveVisibleProfileRoles(activeProfile);
+  const normalizedProfileRoleSet = new Set(profileRoles.map((role) => normalizeRoleName(role)));
+  const hasSubscriberRole = normalizedProfileRoleSet.has("subscriber");
+  const hasTestPeriodRole = normalizedProfileRoleSet.has("test period");
+  const hasActiveSubscriptionRole = hasSubscriberRole || hasTestPeriodRole;
   const normalizedProfileRoles = profileRoles;
   const canUseEnhancedAvatarMedia = canUseEnhancedAvatarMediaForRoles(activeProfile?.roles);
   const topProfileRole = profileRoles[0] ?? null;
   const profileHeadlineStyle = roleHeadlineStyle(topProfileRole);
   const isCurrentAccountBanned = visibleCurrentUser?.isBanned === true;
-  const activeProfileSubscriptionUntil = resolveProfileSubscriptionUntil(activeProfile);
-  const subscriptionUntilLabel = activeProfileSubscriptionUntil
-    ? formatTime(activeProfileSubscriptionUntil, locale)
-    : t("Not set", "Not set");
-  const activeProfileHwid = resolveProfileHwid(activeProfile);
+  const subscriptionStatus = hasActiveSubscriptionRole ? "active" : "inactive";
+  const subscriptionSummary = {
+    title: "",
+    status: subscriptionStatus,
+    description: hasActiveSubscriptionRole
+      ? t("Sakura Cheat Dota 2", "Sakura Cheat Dota 2")
+      : t(
+          "Buy a subscription to unlock all cheat features in the game.",
+          "Купите подписку, чтобы разблокировать все возможности чита в игре."
+        ),
+  };
+  const subscriptionBadgeStyle: CSSProperties =
+    subscriptionSummary.status === "active"
+      ? {
+          borderColor: "#1f7a4d",
+          backgroundColor: "#0d1713",
+          color: "#8ce5b2",
+          boxShadow: "0 0 18px rgba(31,122,77,0.24)",
+        }
+      : {
+          borderColor: "#3a3a3a",
+          backgroundColor: "#111111",
+          color: "#a3a3a3",
+          boxShadow: "0 0 14px rgba(0,0,0,0.32)",
+        };
+  const subscriptionTestPeriodBadgeStyle: CSSProperties = {
+    borderColor: "#e5e7eb",
+    backgroundColor: "#151515",
+    color: "#ffffff",
+    boxShadow: "0 0 16px rgba(255,255,255,0.18)",
+  };
+  const subscriptionStatusLabel =
+    subscriptionSummary.status === "active"
+      ? t("Active", "Активна")
+      : t("Inactive", "Неактивна");
   const isOwnProfileViewById = Boolean(
     visibleCurrentUser &&
       typeof visibleCurrentUser.profileId === "number" &&
@@ -3960,11 +3925,8 @@ useEffect(() => {
       setAdminVerificationSuccess(null);
       setAdminPasswordResetError(null);
       setAdminPasswordResetSuccess(null);
-      setAdminSubscriptionUntilInput("");
-      setAdminSubscriptionUntilError(null);
-      setAdminSubscriptionUntilSuccess(null);
-      setAdminHwidError(null);
-      setAdminHwidSuccess(null);
+      setAdminSubscriptionError(null);
+      setAdminSubscriptionSuccess(null);
       setAdminThemeSongInput("");
       setAdminThemeSongError(null);
       setAdminThemeSongSuccess(null);
@@ -4011,13 +3973,8 @@ useEffect(() => {
     setAdminVerificationSuccess(null);
     setAdminPasswordResetError(null);
     setAdminPasswordResetSuccess(null);
-    setAdminSubscriptionUntilInput(
-      toDateTimeLocalInputValue(resolveProfileSubscriptionUntil(activeProfile))
-    );
-    setAdminSubscriptionUntilError(null);
-    setAdminSubscriptionUntilSuccess(null);
-    setAdminHwidError(null);
-    setAdminHwidSuccess(null);
+    setAdminSubscriptionError(null);
+    setAdminSubscriptionSuccess(null);
     setAdminThemeSongInput(
       getAdminThemeSongInputValue(
         normalizeProfileThemeSongKey(activeProfile.themeSongKey) ??
@@ -4987,89 +4944,46 @@ useEffect(() => {
     }
   };
 
-  const handleAdminSubscriptionUntilSave = async () => {
+  const handleAdminGrantActiveSubscription = async () => {
     const bridge = getWindowState().sakuraFirebaseAuth;
 
     if (!bridge || !activeProfile?.profileId || !canManageRoleAssignments) {
       return;
     }
 
-    if (typeof bridge.adminUpdateProfileSubscriptionUntil !== "function") {
-      setAdminSubscriptionUntilError(
-        "Subscription end date update is unavailable in the current runtime."
-      );
-      setAdminSubscriptionUntilSuccess(null);
-      return;
-    }
-
-    const parsedSubscriptionUntil = parseDateTimeLocalInputValue(adminSubscriptionUntilInput);
-
-    if (adminSubscriptionUntilInput.trim() && !parsedSubscriptionUntil) {
-      setAdminSubscriptionUntilError("Enter a valid subscription end date.");
-      setAdminSubscriptionUntilSuccess(null);
-      return;
-    }
-
-    setAdminSubscriptionUntilError(null);
-    setAdminSubscriptionUntilSuccess(null);
-    setIsAdminSubscriptionUntilSaving(true);
+    setAdminSubscriptionError(null);
+    setAdminSubscriptionSuccess(null);
+    setIsAdminSubscriptionSaving(true);
 
     try {
-      const snapshot = await bridge.adminUpdateProfileSubscriptionUntil(
-        activeProfile.profileId,
-        parsedSubscriptionUntil
-      );
+      const nextRoles = normalizeRoleSelection([
+        ...(activeProfile.roles ?? []).filter(
+          (role) => normalizeRoleName(role) !== "test period"
+        ),
+        "subscriber",
+      ]);
+      const snapshot = await bridge.updateProfileRoles(activeProfile.profileId, nextRoles);
 
       if (snapshot) {
         applyUpdatedProfileSnapshot(snapshot);
+        setProfile(snapshot);
+        if (visibleCurrentUser?.uid === snapshot.uid) {
+          setCurrentUser(snapshot);
+        }
+        setDraftRoles(normalizeRoleSelection(snapshot.roles));
+      } else {
+        setDraftRoles(nextRoles);
       }
 
-      setAdminSubscriptionUntilInput(toDateTimeLocalInputValue(parsedSubscriptionUntil));
-      setAdminSubscriptionUntilSuccess(
-        parsedSubscriptionUntil
-          ? t("Subscription end date saved.", "Subscription end date saved.")
-          : t("Subscription end date cleared.", "Subscription end date cleared.")
+      setAdminSubscriptionSuccess(
+        t("Active subscription granted.", "Активная подписка выдана.")
       );
     } catch (error) {
-      setAdminSubscriptionUntilError(
-        error instanceof Error
-          ? error.message
-          : "Could not update the subscription end date."
+      setAdminSubscriptionError(
+        error instanceof Error ? error.message : "Could not grant active subscription."
       );
     } finally {
-      setIsAdminSubscriptionUntilSaving(false);
-    }
-  };
-
-  const handleAdminResetHwid = async () => {
-    const bridge = getWindowState().sakuraFirebaseAuth;
-
-    if (!bridge || !activeProfile?.profileId || !canManageRoleAssignments) {
-      return;
-    }
-
-    if (typeof bridge.adminResetProfileHwid !== "function") {
-      setAdminHwidError("HWID reset is unavailable in the current runtime.");
-      setAdminHwidSuccess(null);
-      return;
-    }
-
-    setAdminHwidError(null);
-    setAdminHwidSuccess(null);
-    setIsAdminHwidResetting(true);
-
-    try {
-      const snapshot = await bridge.adminResetProfileHwid(activeProfile.profileId);
-
-      if (snapshot) {
-        applyUpdatedProfileSnapshot(snapshot);
-      }
-
-      setAdminHwidSuccess(t("HWID has been reset.", "HWID has been reset."));
-    } catch (error) {
-      setAdminHwidError(error instanceof Error ? error.message : "Could not reset HWID.");
-    } finally {
-      setIsAdminHwidResetting(false);
+      setIsAdminSubscriptionSaving(false);
     }
   };
 
@@ -5948,6 +5862,17 @@ useEffect(() => {
       profileThemeAudioRef.current.volume = normalizedVolume;
     }
   };
+  const handleFunPayLinkClick = useCallback(() => {
+    const audio = funPayTrackAudioRef.current;
+
+    if (!audio) {
+      return;
+    }
+
+    audio.currentTime = 0;
+    void audio.play().catch(() => {
+    });
+  }, []);
   return (
     <main
       data-profile-build={PROFILE_BUILD_MARKER}
@@ -5961,6 +5886,13 @@ useEffect(() => {
       <audio
         ref={profileThemeAudioRef}
         src={profileThemeUsesNativeAudio ? profileThemeSongSrc ?? undefined : undefined}
+        preload="auto"
+        aria-hidden="true"
+        className="hidden"
+      />
+      <audio
+        ref={funPayTrackAudioRef}
+        src={FUNPAY_DONATION_TRACK_SRC}
         preload="auto"
         aria-hidden="true"
         className="hidden"
@@ -6254,19 +6186,64 @@ useEffect(() => {
                   </div>
                 </div>
               </div>
-              {shouldShowSubscriptionDetails ? (
-                <div className="px-8 pt-6 pb-7">
-                  <div className="rounded-[26px] border border-[#2f161d] bg-[radial-gradient(circle_at_top_left,rgba(255,183,197,0.1),transparent_58%),linear-gradient(180deg,#0c0a0b_0%,#090909_100%)] p-5 shadow-[0_0_26px_rgba(255,143,177,0.08)]">
-                    <p className="font-mono text-[10px] uppercase leading-none tracking-[0.4em] text-[#ffb7c5]">
-                      {t("Subscription", "Subscription")}
-                    </p>
-                    <p className="mt-4 text-xs uppercase tracking-[0.22em] text-[#b78a95]">
-                      {t("Sub Until", "Sub Until")}
-                    </p>
-                    <p className="mt-2 text-base font-semibold text-white">{subscriptionUntilLabel}</p>
+              <div className="px-8 pt-6 pb-7">
+                <div
+                  className={`rounded-[26px] border border-[#2f161d] bg-[radial-gradient(circle_at_top_left,rgba(255,183,197,0.1),transparent_58%),linear-gradient(180deg,#0c0a0b_0%,#090909_100%)] shadow-[0_0_26px_rgba(255,143,177,0.08)] ${
+                    shouldShowSubscriptionDetails ? "p-5" : "px-4 py-3"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="font-mono text-[10px] uppercase leading-none tracking-[0.4em] text-[#ffb7c5]">{t("Subscription", "Подписка")}</p>
+                    </div>
+                    <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                      <span style={{ ...subscriptionBadgeStyle, ...roleBadgeTextStyle }} className="inline-flex h-[24px] shrink-0 items-center rounded-full border px-3 text-[10px] font-bold leading-none">
+                        {subscriptionStatusLabel}
+                      </span>
+                      {hasTestPeriodRole ? <span style={{ ...subscriptionTestPeriodBadgeStyle, ...roleBadgeTextStyle }} className="inline-flex h-[24px] shrink-0 items-center rounded-full border px-3 text-[10px] font-bold leading-none">
+                        {t("Test Period", "Тестовый период")}
+                      </span> : null}
+                    </div>
                   </div>
+                  {shouldShowSubscriptionDetails ? (
+                    <div className="mt-4 rounded-[22px] border border-[#24171b] bg-[radial-gradient(circle_at_top_left,rgba(255,183,197,0.08),transparent_62%),#090909] p-4">
+                      <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-[#b78a95]">{t("Current Subscription", "Текущая подписка")}</p>
+                      <p className="mt-3 text-lg font-bold text-white">{subscriptionSummary.title}</p>
+                      <p className="mt-3 text-xs leading-relaxed text-gray-400">{subscriptionSummary.description}</p>
+                      <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-gray-400">
+                        <span>{t("Payment method", "Способ оплаты")}:</span>
+                        <a
+                          href={FUNPAY_SUBSCRIPTION_URL}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={handleFunPayLinkClick}
+                          className="inline-flex items-center gap-2 rounded-full border border-[#3a2a31] bg-[#140d11] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/45 hover:text-white"
+                        >
+                          <img
+                            src={FUNPAY_ICON_URL}
+                            alt="FunPay"
+                            loading="lazy"
+                            decoding="async"
+                            className="h-4 w-4 rounded-sm"
+                          />
+                          <span>FunPay</span>
+                        </a>
+                      </div>
+                      {hasActiveSubscriptionRole ? (
+                        <div className="mt-4">
+                          <button
+                            type="button"
+                            disabled
+                            className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black opacity-70"
+                          >
+                            {t("Download", "Скачать")}
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
-              ) : null}
+              </div>
             </div>
 
             <div className="relative z-10 flex w-full flex-col gap-6 self-start">
@@ -6962,61 +6939,51 @@ useEffect(() => {
                     </section>
 
                     <section className="rounded-[24px] border border-[#1d1d1d] bg-[#0d0d0d] p-5">
-                      <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">
-                        {t("Subscription & HWID", "Subscription & HWID")}
-                      </p>
-
-                      <div className="mt-4">
-                        <p className="text-xs uppercase tracking-[0.22em] text-gray-500">
-                          {t("Sub Until", "Sub Until")}
-                        </p>
-                        <p className="mt-2 text-sm font-semibold text-white">{subscriptionUntilLabel}</p>
-                        <label className="mt-3 block">
-                          <input
-                            type="datetime-local"
-                            value={adminSubscriptionUntilInput}
-                            onChange={(event) => {
-                              setAdminSubscriptionUntilInput(event.target.value);
-                              setAdminSubscriptionUntilError(null);
-                              setAdminSubscriptionUntilSuccess(null);
-                            }}
-                            className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55"
-                          />
-                        </label>
-                        <div className="mt-4 flex flex-wrap items-center gap-3">
-                          <button
-                            type="button"
-                            onClick={handleAdminSubscriptionUntilSave}
-                            disabled={isAdminSubscriptionUntilSaving || isAdminHwidResetting}
-                            className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            {isAdminSubscriptionUntilSaving
-                              ? t("Saving...", "Saving...")
-                              : t("Save Sub Until", "Save Sub Until")}
-                          </button>
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">
+                            {t("Subscription Access", "Доступ по подписке")}
+                          </p>
+                          <p className="mt-2 text-sm font-semibold text-white">
+                            {hasActiveSubscriptionRole
+                              ? t("Subscription is active", "Подписка активна")
+                              : t("Subscription is inactive", "Подписка неактивна")}
+                          </p>
                         </div>
-                        {adminSubscriptionUntilError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{adminSubscriptionUntilError}</p> : null}
-                        {adminSubscriptionUntilSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{adminSubscriptionUntilSuccess}</p> : null}
+                        <span
+                          className={`inline-flex shrink-0 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${
+                            hasActiveSubscriptionRole
+                              ? "border-[#1f3b2f] bg-[#0d1713] text-[#8ce5b2]"
+                              : "border-[#3a3a3a] bg-[#111111] text-[#a3a3a3]"
+                          }`}
+                        >
+                          {hasActiveSubscriptionRole ? t("Active", "Активна") : t("Inactive", "Неактивна")}
+                        </span>
                       </div>
-
-                      <div className="mt-6">
-                        <p className="text-xs uppercase tracking-[0.22em] text-gray-500">HWID</p>
-                        <p className="mt-2 break-all rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-xs text-gray-300">
-                          {activeProfileHwid ?? t("Not set", "Not set")}
+                      <div className="mt-4 flex flex-wrap items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={handleAdminGrantActiveSubscription}
+                          disabled={isAdminSubscriptionSaving || isRolesSaving || hasSubscriberRole}
+                          className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isAdminSubscriptionSaving
+                            ? t("Saving...", "Сохранение...")
+                            : t("Grant Active Subscription", "Выдать активную подписку")}
+                        </button>
+                      </div>
+                      {hasSubscriberRole ? (
+                        <p className="mt-3 text-xs leading-relaxed text-gray-500">
+                          {t("This profile already has an active subscription role.", "У этого профиля уже есть роль активной подписки.")}
                         </p>
-                        <div className="mt-4 flex flex-wrap items-center gap-3">
-                          <button
-                            type="button"
-                            onClick={handleAdminResetHwid}
-                            disabled={isAdminHwidResetting || isAdminSubscriptionUntilSaving || !activeProfileHwid}
-                            className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            {isAdminHwidResetting ? t("Resetting...", "Resetting...") : t("Reset HWID", "Reset HWID")}
-                          </button>
-                        </div>
-                        {adminHwidError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{adminHwidError}</p> : null}
-                        {adminHwidSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{adminHwidSuccess}</p> : null}
-                      </div>
+                      ) : null}
+                      {hasTestPeriodRole && !hasSubscriberRole ? (
+                        <p className="mt-3 text-xs leading-relaxed text-gray-500">
+                          {t("Granting active subscription replaces the test period role.", "Выдача активной подписки заменяет роль тестового периода.")}
+                        </p>
+                      ) : null}
+                      {adminSubscriptionError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{adminSubscriptionError}</p> : null}
+                      {adminSubscriptionSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{adminSubscriptionSuccess}</p> : null}
                     </section>
 
                     <section className="rounded-[24px] border border-[#1d1d1d] bg-[#0d0d0d] p-5">
