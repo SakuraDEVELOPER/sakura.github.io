@@ -3099,6 +3099,10 @@ export default function ProfilePage() {
   const isTargetVerificationLocked = targetVerificationStatus === "locked";
   const isTargetVerified = targetVerificationStatus === "verified";
   const isAdminSelfTarget = Boolean(canOpenAdminPanel && isOwner);
+  const isAdminThemeSongDeleteLocked = Boolean(
+    normalizeProfileThemePresetKey(adminThemeSongInput) ||
+      normalizeProfileThemePresetKey(profileThemeSelection?.key)
+  );
   const shouldRequireSettledAuthForView = requestedProfileId === null;
   const shouldShowPendingState =
     !authError &&
@@ -5673,6 +5677,12 @@ export default function ProfilePage() {
       return;
     }
 
+    if (isAdminThemeSongDeleteLocked) {
+      setAdminThemeSongError("Preset tracks cannot be deleted.");
+      setAdminThemeSongSuccess(null);
+      return;
+    }
+
     if (typeof bridge.adminUpdateProfileThemeSong !== "function") {
       setAdminThemeSongError("Profile music update is unavailable in the current runtime.");
       setAdminThemeSongSuccess(null);
@@ -7679,7 +7689,7 @@ export default function ProfilePage() {
                         <button
                           type="button"
                           onClick={handleAdminThemeSongDelete}
-                          disabled={isAdminThemeSongSaving || isAdminThemeSongUploading || isAdminThemeSongDeleting}
+                          disabled={isAdminThemeSongSaving || isAdminThemeSongUploading || isAdminThemeSongDeleting || isAdminThemeSongDeleteLocked}
                           className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ff9aa9] transition hover:border-[#ff9aa9]/50 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {isAdminThemeSongDeleting ? t("Deleting...", "Удаление...") : t("Delete Track", "Delete Track")}
