@@ -3065,10 +3065,7 @@ export default function ProfilePage() {
     title: subscriptionPlanLabel,
     status: subscriptionStatus,
     description: hasLifetimeRole
-      ? t(
-          "Lifetime access is active for this account.",
-          "Lifetime access is active for this account."
-        )
+      ? ""
       : hasActiveSubscriptionRole
         ? t("Sakura Cheat Dota 2", "Sakura Cheat Dota 2")
         : t(
@@ -6772,7 +6769,7 @@ export default function ProfilePage() {
                     <div className="mt-4 rounded-[22px] border border-[#24171b] bg-[radial-gradient(circle_at_top_left,rgba(255,183,197,0.08),transparent_62%),#090909] p-4">
                       <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-[#b78a95]">{t("Current Subscription", "Текущая подписка")}</p>
                       <p className="mt-3 text-lg font-bold text-white">{subscriptionSummary.title}</p>
-                      <p className="mt-3 text-xs leading-relaxed text-gray-400">{subscriptionSummary.description}</p>
+                      {subscriptionSummary.description ? <p className="mt-3 text-xs leading-relaxed text-gray-400">{subscriptionSummary.description}</p> : null}
                       <p className="mt-3 text-xs uppercase tracking-[0.22em] text-[#b78a95]">{t("Sub Until", "Sub Until")}</p>
                       <p className="mt-2 text-sm font-semibold text-white">{profileSubscriptionUntilLabel}</p>
                       <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-gray-400">
