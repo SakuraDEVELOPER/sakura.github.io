@@ -276,9 +276,10 @@ const ROLE_CHIP_ORDER = new Map([
   ["support", 5],
   ["sponsor", 6],
   ["tester", 7],
-  ["subscriber", 8],
-  ["test period", 9],
-  ["user", 10],
+  ["lifetime", 8],
+  ["subscriber", 9],
+  ["test period", 10],
+  ["user", 11],
 ]);
 const REMOVED_ROLE_NAMES = new Set<string>();
 
@@ -357,6 +358,14 @@ function normalizeRoleName(role: string) {
 
   if (compactRole === "subscriber") {
     return "subscriber";
+  }
+
+  if (
+    compactRole === "lifetime" ||
+    compactRole === "lifetimesubscription" ||
+    compactRole === "forever"
+  ) {
+    return "lifetime";
   }
 
   if (
@@ -450,6 +459,15 @@ function roleChipStyle(role: string | null | undefined): CSSProperties {
       backgroundColor: "#1f1207",
       color: "#ffe1c2",
       boxShadow: "0 0 18px rgba(251,146,60,0.22)",
+    };
+  }
+
+  if (normalizedRole === "lifetime") {
+    return {
+      borderColor: "#facc15",
+      backgroundColor: "#1b1708",
+      color: "#fff3c4",
+      boxShadow: "0 0 18px rgba(250,204,21,0.22)",
     };
   }
 

@@ -765,6 +765,14 @@ const firebaseModuleScript = `
     }
 
     if (
+      compactRole === "lifetime" ||
+      compactRole === "lifetimesubscription" ||
+      compactRole === "forever"
+    ) {
+      return "lifetime";
+    }
+
+    if (
       compactRole === "testperiod" ||
       compactRole === "trial" ||
       compactRole === "trialperiod"
@@ -800,9 +808,10 @@ const firebaseModuleScript = `
     ["support", 5],
     ["sponsor", 6],
     ["tester", 7],
-    ["subscriber", 8],
-    ["test period", 9],
-    ["user", 10],
+    ["lifetime", 8],
+    ["subscriber", 9],
+    ["test period", 10],
+    ["user", 11],
   ]);
   const COMMENT_ACCENT_ROLE_ORDER = new Map([
     ["root", 0],
@@ -813,9 +822,10 @@ const firebaseModuleScript = `
     ["support", 5],
     ["sponsor", 6],
     ["tester", 7],
-    ["subscriber", 8],
-    ["test period", 9],
-    ["user", 10],
+    ["lifetime", 8],
+    ["subscriber", 9],
+    ["test period", 10],
+    ["user", 11],
   ]);
   const sortRoles = (roles) =>
     [...roles].sort((left, right) => {

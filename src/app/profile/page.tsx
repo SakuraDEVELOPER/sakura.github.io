@@ -1097,6 +1097,14 @@ const normalizeRoleName = (role: string) => {
   }
 
   if (
+    compactRole === "lifetime" ||
+    compactRole === "lifetimesubscription" ||
+    compactRole === "forever"
+  ) {
+    return "lifetime";
+  }
+
+  if (
     compactRole === "testperiod" ||
     compactRole === "trial" ||
     compactRole === "trialperiod"
@@ -1129,6 +1137,10 @@ const formatRole = (role: string) => {
 
   if (normalizedRole === "subscriber") {
     return "subscriber";
+  }
+
+  if (normalizedRole === "lifetime") {
+    return "lifetime";
   }
 
   if (normalizedRole === "test period") {
@@ -1178,6 +1190,10 @@ const roleDisplayLabel = (role: string) => {
 
   if (normalizedRole === "subscriber") {
     return "Subscriber";
+  }
+
+  if (normalizedRole === "lifetime") {
+    return "Lifetime";
   }
 
   if (normalizedRole === "test period") {
@@ -1286,6 +1302,15 @@ const roleBadgeStyle = (role: string): CSSProperties => {
       backgroundColor: "#1f1207",
       color: "#ffe1c2",
       boxShadow: "0 0 18px rgba(251,146,60,0.24)",
+    };
+  }
+
+  if (normalizedRole === "lifetime") {
+    return {
+      borderColor: "#facc15",
+      backgroundColor: "#1b1708",
+      color: "#fff3c4",
+      boxShadow: "0 0 18px rgba(250,204,21,0.24)",
     };
   }
 
@@ -1436,6 +1461,10 @@ const roleCommentAuthorColor = (role: string | null | undefined) => {
     return "#fb923c";
   }
 
+  if (normalizedRole === "lifetime") {
+    return "#facc15";
+  }
+
   if (normalizedRole === "test period") {
     return "#f3f4f6";
   }
@@ -1464,6 +1493,7 @@ const EDITABLE_ROLE_OPTIONS = [
   "support",
   "sponsor",
   "tester",
+  "lifetime",
   "subscriber",
   "test period",
   "user",
@@ -1481,9 +1511,10 @@ const COMMENT_AUTHOR_ROLE_ORDER = new Map([
   ["support", 5],
   ["sponsor", 6],
   ["tester", 7],
-  ["subscriber", 8],
-  ["test period", 9],
-  ["user", 10],
+  ["lifetime", 8],
+  ["subscriber", 9],
+  ["test period", 10],
+  ["user", 11],
 ]);
 const sortRolesForDisplay = (roles: string[]) =>
   [...roles].sort((left, right) => {
@@ -3013,23 +3044,37 @@ export default function ProfilePage() {
   const profileRoles = deriveVisibleProfileRoles(activeProfile);
   const normalizedProfileRoleSet = new Set(profileRoles.map((role) => normalizeRoleName(role)));
   const hasSubscriberRole = normalizedProfileRoleSet.has("subscriber");
+  const hasLifetimeRole = normalizedProfileRoleSet.has("lifetime");
   const hasTestPeriodRole = normalizedProfileRoleSet.has("test period");
-  const hasActiveSubscriptionRole = hasSubscriberRole || hasTestPeriodRole;
+  const hasPaidSubscriptionRole = hasSubscriberRole || hasLifetimeRole;
+  const hasActiveSubscriptionRole = hasPaidSubscriptionRole || hasTestPeriodRole;
   const normalizedProfileRoles = profileRoles;
   const canUseEnhancedAvatarMedia = canUseEnhancedAvatarMediaForRoles(activeProfile?.roles);
   const topProfileRole = profileRoles[0] ?? null;
   const profileHeadlineStyle = roleHeadlineStyle(topProfileRole);
   const isCurrentAccountBanned = visibleCurrentUser?.isBanned === true;
   const subscriptionStatus = hasActiveSubscriptionRole ? "active" : "inactive";
+  const subscriptionPlanLabel = hasLifetimeRole
+    ? t("Lifetime", "Lifetime")
+    : hasSubscriberRole
+      ? t("Active Subscription", "Active Subscription")
+      : hasTestPeriodRole
+        ? t("Test Period", "???????? ??????")
+        : t("No Subscription", "No Subscription");
   const subscriptionSummary = {
-    title: "",
+    title: subscriptionPlanLabel,
     status: subscriptionStatus,
-    description: hasActiveSubscriptionRole
-      ? t("Sakura Cheat Dota 2", "Sakura Cheat Dota 2")
-      : t(
-          "Buy a subscription to unlock all cheat features in the game.",
-          "Купите подписку, чтобы разблокировать все возможности чита в игре."
-        ),
+    description: hasLifetimeRole
+      ? t(
+          "Lifetime access is active for this account.",
+          "Lifetime access is active for this account."
+        )
+      : hasActiveSubscriptionRole
+        ? t("Sakura Cheat Dota 2", "Sakura Cheat Dota 2")
+        : t(
+            "Buy a subscription to unlock all cheat features in the game.",
+            "Buy a subscription to unlock all cheat features in the game."
+          ),
   };
   const subscriptionBadgeStyle: CSSProperties =
     subscriptionSummary.status === "active"
@@ -3051,14 +3096,22 @@ export default function ProfilePage() {
     color: "#ffffff",
     boxShadow: "0 0 16px rgba(255,255,255,0.18)",
   };
+  const subscriptionLifetimeBadgeStyle: CSSProperties = {
+    borderColor: "#facc15",
+    backgroundColor: "#1b1708",
+    color: "#fff3c4",
+    boxShadow: "0 0 16px rgba(250,204,21,0.2)",
+  };
   const subscriptionStatusLabel =
     subscriptionSummary.status === "active"
       ? t("Active", "Активна")
       : t("Inactive", "Неактивна");
   const profileSubscriptionUntil = resolveProfileSubscriptionUntil(activeProfile);
-  const profileSubscriptionUntilLabel = profileSubscriptionUntil
-    ? formatTime(profileSubscriptionUntil, locale)
-    : t("Not set", "Not set");
+  const profileSubscriptionUntilLabel = hasLifetimeRole
+    ? t("Lifetime", "Lifetime")
+    : profileSubscriptionUntil
+      ? formatTime(profileSubscriptionUntil, locale)
+      : t("Not set", "Not set");
   const profileHwid = resolveProfileHwid(activeProfile);
   const isOwnProfileViewById = Boolean(
     visibleCurrentUser &&
@@ -5254,6 +5307,50 @@ export default function ProfilePage() {
     }
   };
 
+  const handleAdminGrantLifetimeSubscription = async () => {
+    const bridge = getWindowState().sakuraFirebaseAuth;
+
+    if (!bridge || !activeProfile?.profileId || !canManageRoleAssignments) {
+      return;
+    }
+
+    setAdminSubscriptionError(null);
+    setAdminSubscriptionSuccess(null);
+    setIsAdminSubscriptionSaving(true);
+
+    try {
+      const nextRoles = normalizeRoleSelection([
+        ...(activeProfile.roles ?? []).filter((role) => {
+          const normalizedRole = normalizeRoleName(role);
+          return normalizedRole !== "test period" && normalizedRole !== "subscriber";
+        }),
+        "lifetime",
+      ]);
+      const snapshot = await bridge.updateProfileRoles(activeProfile.profileId, nextRoles);
+
+      if (snapshot) {
+        applyUpdatedProfileSnapshot(snapshot);
+        setProfile(snapshot);
+        if (visibleCurrentUser?.uid === snapshot.uid) {
+          setCurrentUser(snapshot);
+        }
+        setDraftRoles(normalizeRoleSelection(snapshot.roles));
+      } else {
+        setDraftRoles(nextRoles);
+      }
+
+      setAdminSubscriptionSuccess(
+        t("Lifetime subscription granted.", "Lifetime subscription granted.")
+      );
+    } catch (error) {
+      setAdminSubscriptionError(
+        error instanceof Error ? error.message : "Could not grant lifetime subscription."
+      );
+    } finally {
+      setIsAdminSubscriptionSaving(false);
+    }
+  };
+
   const handleAdminSubscriptionUntilSave = async () => {
     const bridge = getWindowState().sakuraFirebaseAuth;
 
@@ -6663,8 +6760,11 @@ export default function ProfilePage() {
                       <span style={{ ...subscriptionBadgeStyle, ...roleBadgeTextStyle }} className="inline-flex h-[24px] shrink-0 items-center rounded-full border px-3 text-[10px] font-bold leading-none">
                         {subscriptionStatusLabel}
                       </span>
+                      {hasLifetimeRole ? <span style={{ ...subscriptionLifetimeBadgeStyle, ...roleBadgeTextStyle }} className="inline-flex h-[24px] shrink-0 items-center rounded-full border px-3 text-[10px] font-bold leading-none">
+                        {t("Lifetime", "Lifetime")}
+                      </span> : null}
                       {hasTestPeriodRole ? <span style={{ ...subscriptionTestPeriodBadgeStyle, ...roleBadgeTextStyle }} className="inline-flex h-[24px] shrink-0 items-center rounded-full border px-3 text-[10px] font-bold leading-none">
-                        {t("Test Period", "Тестовый период")}
+                        {t("Test Period", "???????? ??????")}
                       </span> : null}
                     </div>
                   </div>
@@ -7392,12 +7492,22 @@ export default function ProfilePage() {
                         <button
                           type="button"
                           onClick={handleAdminGrantActiveSubscription}
-                          disabled={isAdminSubscriptionSaving || isRolesSaving || hasSubscriberRole}
+                          disabled={isAdminSubscriptionSaving || isRolesSaving || hasSubscriberRole || hasLifetimeRole}
                           className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {isAdminSubscriptionSaving
                             ? t("Saving...", "Сохранение...")
                             : t("Grant Active Subscription", "Выдать активную подписку")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleAdminGrantLifetimeSubscription}
+                          disabled={isAdminSubscriptionSaving || isRolesSaving || hasLifetimeRole}
+                          className="inline-flex items-center justify-center rounded-full border border-[#facc15]/45 bg-[#facc15] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#fde047] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isAdminSubscriptionSaving
+                            ? t("Saving...", "Saving...")
+                            : t("Grant Lifetime Subscription", "Grant Lifetime Subscription")}
                         </button>
                       </div>
                       {hasSubscriberRole ? (
@@ -7405,9 +7515,14 @@ export default function ProfilePage() {
                           {t("This profile already has an active subscription role.", "У этого профиля уже есть роль активной подписки.")}
                         </p>
                       ) : null}
-                      {hasTestPeriodRole && !hasSubscriberRole ? (
+                      {hasLifetimeRole ? (
                         <p className="mt-3 text-xs leading-relaxed text-gray-500">
-                          {t("Granting active subscription replaces the test period role.", "Выдача активной подписки заменяет роль тестового периода.")}
+                          {t("This profile already has a lifetime subscription role.", "This profile already has a lifetime subscription role.")}
+                        </p>
+                      ) : null}
+                      {hasTestPeriodRole && !hasSubscriberRole && !hasLifetimeRole ? (
+                        <p className="mt-3 text-xs leading-relaxed text-gray-500">
+                          {t("Granting active or lifetime subscription replaces the test period role.", "Granting active or lifetime subscription replaces the test period role.")}
                         </p>
                       ) : null}
                       {adminSubscriptionError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{adminSubscriptionError}</p> : null}
