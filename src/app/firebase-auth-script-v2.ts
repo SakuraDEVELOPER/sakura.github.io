@@ -2304,10 +2304,11 @@ const firebaseModuleScript = `
       return code === "profile/record-missing" || code === "permission-denied";
     };
     const ensureRootActorSnapshot = async () => {
+      await waitForAuthStateSettlement();
       const user = auth.currentUser;
 
       if (!user || user.isAnonymous) {
-        throw createFirebaseError("auth/no-current-user", "Sign in again to open the admin panel.");
+        throw createFirebaseError("auth/no-current-user", "Сессия авторизации не активна. Войдите в аккаунт на главной странице.");
       }
 
       let actorSnapshot = window.sakuraCurrentUserSnapshot;
@@ -4844,6 +4845,7 @@ const firebaseModuleScript = `
     };
 
     const freezeSubscription = async () => {
+      await waitForAuthStateSettlement();
       const user = auth.currentUser;
       if (!user || user.isAnonymous) {
         throw createFirebaseError("auth/no-current-user", "Войдите в аккаунт, чтобы управлять подпиской.");
@@ -4880,6 +4882,7 @@ const firebaseModuleScript = `
     };
 
     const unfreezeSubscription = async () => {
+      await waitForAuthStateSettlement();
       const user = auth.currentUser;
       if (!user || user.isAnonymous) {
         throw createFirebaseError("auth/no-current-user", "Войдите в аккаунт, чтобы управлять подпиской.");
@@ -5019,6 +5022,7 @@ const firebaseModuleScript = `
     };
 
     const redeemPromoCode = async (inputCode) => {
+      await waitForAuthStateSettlement();
       const user = auth.currentUser;
       if (!user || user.isAnonymous) {
         throw createFirebaseError("auth/no-current-user", "Войдите в аккаунт, чтобы активировать промокод.");
