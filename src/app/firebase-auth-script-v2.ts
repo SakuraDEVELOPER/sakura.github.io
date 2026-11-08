@@ -2031,9 +2031,14 @@ const firebaseModuleScript = `
   };
 
   const fetchSupabaseProfileById = async (profileId) => {
+    const normalizedProfileId = normalizeSupabaseInteger(profileId);
+    if (!normalizedProfileId || normalizedProfileId <= 0) {
+      return null;
+    }
+
     const profileRows = await fetchSupabaseRows("public_profiles", {
       select: SUPABASE_PROFILE_SELECT,
-      profile_id: "eq." + profileId,
+      profile_id: "eq." + normalizedProfileId,
       limit: 1,
     });
 
@@ -2043,7 +2048,7 @@ const firebaseModuleScript = `
 
     const presenceRows = await fetchSupabaseRows("public_profile_presence", {
       select: SUPABASE_PROFILE_PRESENCE_SELECT,
-      profile_id: "eq." + profileId,
+      profile_id: "eq." + normalizedProfileId,
       limit: 1,
     });
 
@@ -2054,9 +2059,14 @@ const firebaseModuleScript = `
   };
 
   const fetchSupabaseCommentsByProfileId = async (profileId) => {
+    const normalizedProfileId = normalizeSupabaseInteger(profileId);
+    if (!normalizedProfileId || normalizedProfileId <= 0) {
+      return [];
+    }
+
     const rows = await fetchSupabaseRows("public_profile_comments", {
       select: SUPABASE_PROFILE_COMMENT_SELECT,
-      profile_id: "eq." + profileId,
+      profile_id: "eq." + normalizedProfileId,
       order: "created_at.desc",
       limit: 200,
     });
