@@ -16,9 +16,45 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Sakura",
+  metadataBase: new URL("https://sakuradeveloper.github.io/sakura.github.io"),
+  title: "Sakura — Приватный софт для Dota 2",
   description:
-    "Free Dota 2 cheat with camera distance, enemy resource bars, and a clean in-game menu.",
+    "Приватный софт для Dota 2 с безопасным Humanizer-обходом: отдаление камеры, мана и кулдауны врагов, скрипты на комбо, переключение Armlet и чистый оверлей без просадок FPS.",
+  keywords: [
+    "приватный софт дота 2",
+    "приватный чит дота 2",
+    "чит на доту 2",
+    "дота 2 скрипты",
+    "отдаление камеры дота 2",
+    "sakura dota 2",
+    "sakura cheat",
+    "dota 2 software",
+    "humanizer dota 2",
+  ],
+  openGraph: {
+    title: "Sakura — Приватный софт для Dota 2",
+    description:
+      "Приватный софт нового поколения для Dota 2: безопасный Humanizer-шлюз, отдаление камеры, отображение кулдаунов и маны врагов, комбо-скрипты и авто-армлет.",
+    url: "https://sakuradeveloper.github.io/sakura.github.io",
+    siteName: "Sakura",
+    locale: "ru_RU",
+    type: "website",
+    images: [
+      {
+        url: "https://sakuradeveloper.github.io/sakura.github.io/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Sakura — Приватный софт для Dota 2",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Sakura — Приватный софт для Dota 2",
+    description:
+      "Приватный софт для Dota 2: Humanizer-защита, отдаление камеры, кулдауны способностей, авто-комбо и чистый оверлей.",
+    images: ["https://sakuradeveloper.github.io/sakura.github.io/og-image.png"],
+  },
   icons: {
     icon: [
       {

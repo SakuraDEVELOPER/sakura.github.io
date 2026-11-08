@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { type UiLocale, useLocaleText } from "@/lib/ui-locale";
+import { SakuraIcon } from "./sakura-icon";
 
 export type TicketMessage = {
   id: string;
@@ -315,8 +316,8 @@ export default function SupportTicketsModal({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#211519] bg-[radial-gradient(ellipse_at_top,rgba(255,183,197,0.12),transparent_70%)] px-6 py-4">
           <div className="flex items-center gap-2.5">
-            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#ffb7c5]/35 bg-[#170e12] text-[#ffb7c5] font-black text-xs">
-              S
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#ffb7c5]/35 bg-[#170e12] p-1 shadow-[0_0_16px_rgba(255,183,197,0.2)]">
+              <SakuraIcon className="h-full w-full" />
             </span>
             <div>
               <h2 className="text-base font-bold text-white uppercase tracking-tight">
