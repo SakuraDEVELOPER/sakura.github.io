@@ -184,9 +184,33 @@ service cloud.firestore {
       // Обновление промокода (учёт активации)
       allow update: if isRoot() || (
         currentUserIsActive()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedCount', 'usedBy'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedCount', 'usedBy', 'activations'])
         && request.resource.data.usedCount == resource.data.usedCount + 1
       );
+    }
+
+    // 5. Патчноуты и Новости
+    match /changelog/{entryId} {
+      allow read: if true;
+      allow write: if isRoot();
+    }
+
+    // 6. Тикеты поддержки
+    match /supportTickets/{ticketId} {
+      allow create: if currentUserIsActive()
+        && request.resource.data.authorUid == request.auth.uid;
+
+      allow read: if isRoot()
+        || (currentUserIsActive() && resource.data.authorUid == request.auth.uid);
+
+      allow update: if isRoot()
+        || (
+          currentUserIsActive()
+          && resource.data.authorUid == request.auth.uid
+          && request.resource.data.authorUid == resource.data.authorUid
+        );
+
+      allow delete: if isRoot();
     }
   }
 }

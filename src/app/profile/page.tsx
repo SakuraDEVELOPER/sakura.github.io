@@ -26,6 +26,19 @@ import { readCachedProfileComments, writeCachedProfileComments } from "@/lib/pro
 import { readCachedSiteOnlineCount, writeCachedSiteOnlineCount } from "@/lib/site-online-cache";
 import { type UiLocale, useLocaleText } from "@/lib/ui-locale";
 
+type ActivationRecord = {
+  id: string;
+  type: "promo" | "admin_grant" | "freeze" | "unfreeze" | "referral_bonus";
+  code?: string;
+  durationDays?: number;
+  isLifetime?: boolean;
+  activatedAt: string;
+  subscriptionUntil?: string | null;
+  grantedBy?: string | null;
+  note?: string;
+  remainingDays?: string | number;
+};
+
 type UserProfile = {
   uid: string;
   isAnonymous: boolean;
@@ -49,6 +62,9 @@ type UserProfile = {
   isFrozen?: boolean;
   frozenAt?: string | null;
   frozenRemainingMs?: number | null;
+  activationHistory?: ActivationRecord[];
+  referredBy?: string | null;
+  referralCount?: number;
   providerIds: string[];
   creationTime: string | null;
   lastSignInTime: string | null;
@@ -1822,6 +1838,8 @@ export default function ProfilePage() {
   const [isFreezingSubscription, setIsFreezingSubscription] = useState(false);
   const [freezeErrorMessage, setFreezeErrorMessage] = useState<string | null>(null);
   const [freezeSuccessMessage, setFreezeSuccessMessage] = useState<string | null>(null);
+
+  const [copiedReferral, setCopiedReferral] = useState(false);
 
   // Admin promo code management state
   const [adminPromoList, setAdminPromoList] = useState<any[]>([]);
@@ -6859,6 +6877,7 @@ export default function ProfilePage() {
               </div>
               <div className="flex flex-wrap items-center justify-end gap-3">
                 <Link href="/" className="inline-flex items-center justify-center rounded-full border border-[#2a2a2a] bg-[#101010] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-gray-300 transition hover:border-[#4a4a4a] hover:text-white">Home</Link>
+                <Link href="/changelog" className="inline-flex items-center justify-center rounded-full border border-[#2a2a2a] bg-[#101010] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-gray-300 transition hover:border-[#4a4a4a] hover:text-white">{t("Changelog", "Патчноуты")}</Link>
                 {visibleCurrentUser?.profileId && !isOwner ? <a href={profilePath(visibleCurrentUser.profileId)} className="inline-flex items-center justify-center rounded-full border border-[#2b1b1e] bg-[#1a1012] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white">My Profile</a> : null}
                 {visibleCurrentUser ? <button type="button" onClick={handleLogout} disabled={isLoggingOut} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">{isLoggingOut ? t("Logging out...", "Выход...") : t("Logout", "Выход")}</button> : null}
                 <div className="lg:hidden">
@@ -7350,10 +7369,131 @@ export default function ProfilePage() {
                           )}
                         </div>
                       )}
+
+                      {/* Activation & Subscription History */}
+                      {isOwner && (
+                        <div className="mt-5 border-t border-[#23171b] pt-4">
+                          <div className="flex items-center justify-between">
+                            <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-gray-400">
+                              {t("Activation History", "История активаций")}
+                            </p>
+                            {activeProfile?.activationHistory && activeProfile.activationHistory.length > 0 && (
+                              <span className="text-[10px] font-mono text-gray-500">
+                                ({activeProfile.activationHistory.length})
+                              </span>
+                            )}
+                          </div>
+
+                          {(!activeProfile?.activationHistory || activeProfile.activationHistory.length === 0) ? (
+                            <p className="mt-2 text-xs text-gray-600">
+                              {t("No activations yet.", "История активаций пуста.")}
+                            </p>
+                          ) : (
+                            <div className="mt-2.5 max-h-48 overflow-y-auto space-y-2 pr-1">
+                              {activeProfile.activationHistory.map((item) => (
+                                <div
+                                  key={item.id}
+                                  className="flex items-center justify-between rounded-xl border border-[#23171b] bg-[#120b0e] px-3 py-2 text-xs"
+                                >
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-mono font-bold text-white text-[11px]">
+                                        {item.type === "promo"
+                                          ? item.code
+                                          : item.type === "admin_grant"
+                                          ? t("Admin Grant", "Выдано админом")
+                                          : item.type === "freeze"
+                                          ? t("Frozen", "Заморожено")
+                                          : item.type === "unfreeze"
+                                          ? t("Unfrozen", "Разморожено")
+                                          : item.type === "referral_bonus"
+                                          ? t("Referral Bonus", "Реферальный бонус")
+                                          : t("Subscription", "Подписка")}
+                                      </span>
+                                      {item.isLifetime ? (
+                                        <span className="rounded-full bg-[#facc15]/10 border border-[#facc15]/30 px-1.5 py-0.5 text-[9px] font-bold text-[#fde047]">
+                                          Lifetime
+                                        </span>
+                                      ) : item.durationDays ? (
+                                        <span className="rounded-full bg-[#8ce5b2]/10 border border-[#8ce5b2]/30 px-1.5 py-0.5 text-[9px] font-bold text-[#8ce5b2]">
+                                          +{item.durationDays} {t("d", "дн")}
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                    <p className="mt-0.5 text-[10px] text-gray-500">
+                                      {new Date(item.activatedAt).toLocaleString(locale === "ru" ? "ru-RU" : "en-US", {
+                                        day: "2-digit",
+                                        month: "2-digit",
+                                        year: "numeric",
+                                        hour: "2-digit",
+                                        minute: "2-digit"
+                                      })}
+                                    </p>
+                                  </div>
+                                  {item.subscriptionUntil && !item.isLifetime && (
+                                    <div className="text-right">
+                                      <span className="text-[10px] text-gray-500 block">
+                                        {t("Until", "До")}
+                                      </span>
+                                      <span className="text-[11px] font-medium text-gray-300">
+                                        {new Date(item.subscriptionUntil).toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US")}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ) : null}
                 </div>
               </div>
+
+              {/* Referral Program Card (for own profile) */}
+              {isOwner && activeProfile && (
+                <div className="mt-6 rounded-[32px] border border-[#26171d] bg-[#0d090b] p-6 shadow-[0_0_50px_rgba(255,183,197,0.05)]">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#ffb7c5]">
+                        {t("Referral Program", "Реферальная программа")}
+                      </p>
+                      <p className="mt-1 text-sm font-bold text-white">
+                        {t("Invite friends and get bonus days", "Приглашай друзей и получай дни подписки")}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-xs text-gray-400 leading-relaxed">
+                    {t(
+                      "Share your personal link. When a friend registers and activates a subscription, you will receive +3 free days of subscription!",
+                      "Поделитесь ссылкой с другом. Когда он зарегистрируется и активирует подписку, вы получите +3 дня к своей подписке!"
+                    )}
+                  </p>
+
+                  <div className="mt-4 flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={typeof window !== "undefined" ? `${window.location.origin}/sakura.github.io/?ref=${activeProfile.login || activeProfile.profileId}` : ""}
+                      className="flex-1 rounded-xl border border-[#311c24] bg-[#140d11] px-3.5 py-2 text-xs font-mono text-gray-300 outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (typeof window === "undefined") return;
+                        const link = `${window.location.origin}/sakura.github.io/?ref=${activeProfile.login || activeProfile.profileId}`;
+                        navigator.clipboard.writeText(link);
+                        setCopiedReferral(true);
+                        setTimeout(() => setCopiedReferral(false), 2500);
+                      }}
+                      className="shrink-0 rounded-xl border border-[#ffb7c5]/35 bg-[#ffb7c5] px-4 py-2 text-xs font-bold text-black transition hover:bg-white"
+                    >
+                      {copiedReferral ? t("Copied!", "Скопировано!") : t("Copy Link", "Копировать")}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="relative z-10 flex w-full flex-col gap-6 self-start">
@@ -8731,6 +8871,19 @@ export default function ProfilePage() {
                                   </div>
                                   {promo.note && (
                                     <p className="mt-0.5 truncate text-[11px] text-gray-400">{promo.note}</p>
+                                  )}
+                                  {Array.isArray(promo.activations) && promo.activations.length > 0 && (
+                                    <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px] text-gray-500">
+                                      <span className="text-[#8ce5b2]">{t("Used by:", "Активировали:")}</span>
+                                      {promo.activations.slice(0, 5).map((act: any, idx: number) => (
+                                        <span key={idx} className="rounded bg-[#1a1115] px-1.5 py-0.5 text-gray-300 font-mono">
+                                          {act.login ? `@${act.login}` : `#${act.profileId}`}
+                                        </span>
+                                      ))}
+                                      {promo.activations.length > 5 && (
+                                        <span>+{promo.activations.length - 5}</span>
+                                      )}
+                                    </div>
                                   )}
                                 </div>
                                 <button

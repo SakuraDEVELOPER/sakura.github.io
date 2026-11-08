@@ -911,6 +911,15 @@ function HeaderAuth() {
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get("ref");
+    if (ref && ref.trim()) {
+      window.localStorage.setItem("sakura_ref", ref.trim().slice(0, 64));
+    }
+  }, []);
+
+  useEffect(() => {
     if (typeof window === "undefined" || !currentUserId || !window.sakuraFirebaseAuth) {
       return;
     }
@@ -2054,6 +2063,7 @@ export default function Home() {
           </div>
 
           <div className="flex flex-wrap items-center justify-start gap-3 text-sm font-medium text-gray-400 md:justify-self-end md:justify-end">
+            <Link href="/changelog" className="inline-flex items-center justify-center rounded-full border border-[#2a2a2a] bg-[#101010] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-gray-300 transition hover:border-[#4a4a4a] hover:text-white">{t("Changelog", "Патчноуты")}</Link>
             <SiteOnlineBadge count={siteOnlineCount} profileHrefBuilder={profileHref} />
             <HeaderAuth />
           </div>

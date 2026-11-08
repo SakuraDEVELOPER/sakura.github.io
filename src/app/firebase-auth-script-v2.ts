@@ -1495,6 +1495,7 @@ const firebaseModuleScript = `
           lastSignInTime: user.metadata.lastSignInTime ?? null,
           loginHistory: Array.isArray(details.loginHistory) ? details.loginHistory : [],
           visitHistory: normalizeVisitHistory(details.visitHistory),
+          activationHistory: Array.isArray(details.activationHistory) ? details.activationHistory : [],
           presence: normalizePresence(details.presence, window.location.pathname)
         }
       : null;
@@ -1538,6 +1539,7 @@ const firebaseModuleScript = `
       ? details.loginHistory.filter((entry) => typeof entry === "string")
       : [],
     visitHistory: normalizeVisitHistory(details.visitHistory),
+    activationHistory: Array.isArray(details.activationHistory) ? details.activationHistory : [],
     presence: normalizePresence(details.presence, null),
   });
 
@@ -2755,6 +2757,7 @@ const firebaseModuleScript = `
         loginHistory,
         visitHistory,
         presence,
+        referredBy: existingData?.referredBy || (typeof window !== "undefined" ? window.localStorage?.getItem("sakura_ref") : null) || null,
         updatedAt: new Date().toISOString(),
       };
 
@@ -4488,12 +4491,22 @@ const firebaseModuleScript = `
         );
       }
 
+      const adminHistoryItem = {
+        id: "admin_" + Date.now(),
+        type: "admin_grant",
+        grantedBy: actorSnapshot?.login || "admin",
+        subscriptionUntil: normalizedSubscriptionUntil,
+        activatedAt: new Date().toISOString()
+      };
+      const existingAdminHistory = Array.isArray(targetDoc.data()?.activationHistory) ? targetDoc.data().activationHistory : [];
+      const updatedAdminHistory = [adminHistoryItem, ...existingAdminHistory].slice(0, 50);
       try {
         await setDoc(
           userRefFor(targetDoc.id),
           {
             subscriptionUntil: normalizedSubscriptionUntil,
             subscription_until: normalizedSubscriptionUntil,
+            activationHistory: updatedAdminHistory,
             updatedAt: new Date().toISOString(),
           },
           { merge: true }
@@ -4868,10 +4881,19 @@ const firebaseModuleScript = `
       if (remainingMs < 3600000) {
         throw createFirebaseError("subscription/no-remaining", "Недостаточно оставшегося времени для заморозки (минимум 1 час).");
       }
+      const freezeHistoryItem = {
+        id: "freeze_" + Date.now(),
+        type: "freeze",
+        activatedAt: new Date().toISOString(),
+        remainingDays: (remainingMs / 86400000).toFixed(1)
+      };
+      const existingFreezeHistory = Array.isArray(data.activationHistory) ? data.activationHistory : [];
+      const updatedFreezeHistory = [freezeHistoryItem, ...existingFreezeHistory].slice(0, 50);
       const updatePayload = {
         isFrozen: true,
         frozenAt: new Date().toISOString(),
         frozenRemainingMs: remainingMs,
+        activationHistory: updatedFreezeHistory,
         updatedAt: new Date().toISOString()
       };
       await setDoc(userRefFor(targetDoc.id), updatePayload, { merge: true });
@@ -4898,6 +4920,14 @@ const firebaseModuleScript = `
       if (!roles.some(r => ["subscriber", "sub"].includes(r.toLowerCase()))) {
         roles.push("subscriber");
       }
+      const unfreezeHistoryItem = {
+        id: "unfreeze_" + Date.now(),
+        type: "unfreeze",
+        activatedAt: new Date().toISOString(),
+        subscriptionUntil: newUntil
+      };
+      const existingUnfreezeHistory = Array.isArray(data.activationHistory) ? data.activationHistory : [];
+      const updatedUnfreezeHistory = [unfreezeHistoryItem, ...existingUnfreezeHistory].slice(0, 50);
       const updatePayload = {
         isFrozen: false,
         frozenAt: null,
@@ -4905,6 +4935,7 @@ const firebaseModuleScript = `
         subscriptionUntil: newUntil,
         subscription_until: newUntil,
         roles,
+        activationHistory: updatedUnfreezeHistory,
         updatedAt: new Date().toISOString()
       };
       await setDoc(userRefFor(targetDoc.id), updatePayload, { merge: true });
@@ -5072,10 +5103,81 @@ const firebaseModuleScript = `
         }
       }
 
+      const historyItem = {
+        id: "act_" + Date.now(),
+        type: "promo",
+        code: upperCode,
+        durationDays: promo.durationDays,
+        isLifetime: Boolean(isLifetimePromo),
+        activatedAt: new Date().toISOString(),
+        subscriptionUntil: newUntil,
+        note: promo.note || ""
+      };
+
+      const existingHistory = Array.isArray(userData.activationHistory) ? userData.activationHistory : [];
+      const updatedHistory = [historyItem, ...existingHistory].slice(0, 50);
+
+      const promoActivations = Array.isArray(promo.activations) ? promo.activations : [];
+      promoActivations.push({
+        profileId: userProfileId,
+        login: userData.login || null,
+        displayName: userData.displayName || null,
+        activatedAt: new Date().toISOString()
+      });
+
       await setDoc(promoRef, {
         usedCount: (promo.usedCount || 0) + 1,
-        usedBy: [...usedBy, userProfileId]
+        usedBy: [...usedBy, userProfileId],
+        activations: promoActivations
       }, { merge: true });
+
+      // Check if user was referred by someone and hasn't rewarded the referrer yet
+      let referralRewarded = userData.referralRewarded === true;
+      if (userData.referredBy && !referralRewarded) {
+        try {
+          const rawRef = String(userData.referredBy).trim();
+          const parsedRefId = Number(rawRef.replace(/^@/, ""));
+          let referrerDoc = null;
+          if (Number.isInteger(parsedRefId) && parsedRefId > 0) {
+            referrerDoc = await findUserByProfileId(parsedRefId);
+          }
+          if (!referrerDoc) {
+            referrerDoc = await findUserByLogin(rawRef.replace(/^@/, "").toLowerCase());
+          }
+          if (referrerDoc && referrerDoc.id !== targetDoc.id) {
+            const refData = referrerDoc.data() || {};
+            const refCurrentUntil = refData.subscriptionUntil || refData.subscription_until;
+            const refBaseTime = refCurrentUntil && new Date(refCurrentUntil).getTime() > Date.now()
+              ? new Date(refCurrentUntil).getTime()
+              : Date.now();
+            const refNewUntil = new Date(refBaseTime + 3 * 86400000).toISOString();
+            const refRoles = normalizeRoles(refData.roles);
+            if (!refRoles.some(r => ["subscriber", "sub", "lifetime", "root", "owner", "co-owner"].includes(r.toLowerCase()))) {
+              refRoles.push("subscriber");
+            }
+            const refHistory = Array.isArray(refData.activationHistory) ? refData.activationHistory : [];
+            const refBonusItem = {
+              id: "ref_" + Date.now(),
+              type: "referral_bonus",
+              durationDays: 3,
+              activatedAt: new Date().toISOString(),
+              subscriptionUntil: refNewUntil,
+              note: "Реферальный бонус за друга @" + (userData.login || userProfileId)
+            };
+            await setDoc(userRefFor(referrerDoc.id), {
+              subscriptionUntil: refNewUntil,
+              subscription_until: refNewUntil,
+              roles: refRoles,
+              referralCount: (Number(refData.referralCount) || 0) + 1,
+              activationHistory: [refBonusItem, ...refHistory].slice(0, 50),
+              updatedAt: new Date().toISOString()
+            }, { merge: true });
+            referralRewarded = true;
+          }
+        } catch (refErr) {
+          console.warn("Referral bonus reward error:", refErr);
+        }
+      }
 
       const userUpdate = {
         subscriptionUntil: newUntil,
@@ -5084,6 +5186,8 @@ const firebaseModuleScript = `
         isFrozen: false,
         frozenAt: null,
         frozenRemainingMs: 0,
+        activationHistory: updatedHistory,
+        referralRewarded,
         updatedAt: new Date().toISOString()
       };
       await setDoc(userRefFor(targetDoc.id), userUpdate, { merge: true });
