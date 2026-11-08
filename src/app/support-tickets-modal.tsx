@@ -71,6 +71,24 @@ export default function SupportTicketsModal({
 
     const savedWebhook = window.localStorage.getItem(DEFAULT_DISCORD_WEBHOOK_KEY) || "";
     setDiscordWebhookUrl(savedWebhook);
+
+    // Also sync global webhook URL from Firestore meta/settings
+    try {
+      const db = (window as any).firebaseFirestoreDb;
+      const doc = (window as any).firebaseDoc;
+      const getDoc = (window as any).firebaseGetDoc;
+      if (db && doc && getDoc) {
+        getDoc(doc(db, "meta", "settings"))
+          .then((snap: any) => {
+            if (snap.exists() && snap.data()?.discordWebhookUrl) {
+              const url = snap.data().discordWebhookUrl;
+              setDiscordWebhookUrl(url);
+              window.localStorage.setItem(DEFAULT_DISCORD_WEBHOOK_KEY, url);
+            }
+          })
+          .catch(() => {});
+      }
+    } catch {}
   }, [isOpen]);
 
   useEffect(() => {
@@ -120,7 +138,20 @@ export default function SupportTicketsModal({
   };
 
   const sendDiscordNotification = async (ticket: SupportTicket, initialText: string) => {
-    const webhook = discordWebhookUrl || (typeof window !== "undefined" ? window.localStorage.getItem(DEFAULT_DISCORD_WEBHOOK_KEY) : null);
+    let webhook = discordWebhookUrl || (typeof window !== "undefined" ? window.localStorage.getItem(DEFAULT_DISCORD_WEBHOOK_KEY) : null);
+    if (!webhook || !webhook.startsWith("http")) {
+      try {
+        const db = (window as any).firebaseFirestoreDb;
+        const doc = (window as any).firebaseDoc;
+        const getDoc = (window as any).firebaseGetDoc;
+        if (db && doc && getDoc) {
+          const snap = await getDoc(doc(db, "meta", "settings"));
+          if (snap.exists() && snap.data()?.discordWebhookUrl) {
+            webhook = snap.data().discordWebhookUrl;
+          }
+        }
+      } catch {}
+    }
     if (!webhook || !webhook.startsWith("http")) return;
 
     try {
@@ -572,13 +603,29 @@ export default function SupportTicketsModal({
                     />
                     <button
                       type="button"
-                      onClick={() => {
-                        window.localStorage.setItem(DEFAULT_DISCORD_WEBHOOK_KEY, discordWebhookUrl.trim());
-                        alert(t("Discord Webhook saved!", "Discord Webhook сохранён!"));
+                      disabled={isSavingWebhook}
+                      onClick={async () => {
+                        const trimmed = discordWebhookUrl.trim();
+                        window.localStorage.setItem(DEFAULT_DISCORD_WEBHOOK_KEY, trimmed);
+                        setIsSavingWebhook(true);
+                        try {
+                          const db = (window as any).firebaseFirestoreDb;
+                          const doc = (window as any).firebaseDoc;
+                          const setDoc = (window as any).firebaseSetDoc;
+                          if (db && doc && setDoc) {
+                            await setDoc(doc(db, "meta", "settings"), { discordWebhookUrl: trimmed }, { merge: true });
+                          }
+                          alert(t("Discord Webhook saved for all visitors!", "Discord Webhook сохранён для всех пользователей!"));
+                        } catch (err) {
+                          console.warn("Could not save to Firestore meta/settings:", err);
+                          alert(t("Saved to browser storage.", "Сохранено в памяти браузера."));
+                        } finally {
+                          setIsSavingWebhook(false);
+                        }
                       }}
-                      className="rounded-xl border border-[#ffb7c5]/30 bg-[#ffb7c5] px-3.5 py-1.5 text-xs font-bold text-black hover:bg-white transition"
+                      className="rounded-xl border border-[#ffb7c5]/30 bg-[#ffb7c5] px-3.5 py-1.5 text-xs font-bold text-black hover:bg-white transition disabled:opacity-50"
                     >
-                      {t("Save", "Сохранить")}
+                      {isSavingWebhook ? t("Saving...", "Сохранение...") : t("Save", "Сохранить")}
                     </button>
                   </div>
                 </div>

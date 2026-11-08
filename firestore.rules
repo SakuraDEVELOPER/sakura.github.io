@@ -169,6 +169,12 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // 2.1 Глобальные настройки (Discord Webhook, системные параметры)
+    match /meta/settings {
+      allow read: if true;
+      allow write: if isRoot();
+    }
+
     // 3. Комментарии в профилях
     match /profileComments/{commentId} {
       allow read: if true;

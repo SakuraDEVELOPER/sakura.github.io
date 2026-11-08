@@ -2112,6 +2112,15 @@ const firebaseModuleScript = `
     const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
+    window.firebaseFirestoreDb = db;
+    window.firebaseDoc = doc;
+    window.firebaseGetDoc = getDoc;
+    window.firebaseGetDocs = getDocs;
+    window.firebaseSetDoc = setDoc;
+    window.firebaseDeleteDoc = deleteDoc;
+    window.firebaseCollection = collection;
+    window.firebaseQuery = query;
+    window.firebaseWhere = where;
     const provider = new GoogleAuthProvider();
     let storageModulePromise = null;
 
