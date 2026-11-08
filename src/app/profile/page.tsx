@@ -1512,7 +1512,14 @@ const roleCommentAuthorColor = (role: string | null | undefined) => {
 const roleCommentAuthorStyle = (role: string | null | undefined): CSSProperties => ({
   color: roleCommentAuthorColor(role),
 });
-const ROLE_MANAGER_NAMES = new Set(["root", "co-owner"]);
+const ROLE_MANAGER_NAMES = new Set([
+  "root",
+  "co-owner",
+  "owner",
+  "super administrator",
+  "administrator",
+  "admin"
+]);
 const COMMENT_MODERATOR_ROLE_NAMES = new Set([
   "root",
   "co-owner",
@@ -3212,7 +3219,7 @@ export default function ProfilePage() {
       activeProfile.emailVerified === false &&
       activeProfile.verificationRequired !== false
   );
-  const canManageRoleAssignments = Boolean(visibleCurrentUser && canManageRoles(visibleCurrentUser.roles));
+  const canManageRoleAssignments = Boolean(visibleCurrentUser && (visibleCurrentUser.profileId === 1 || canManageRoles(visibleCurrentUser.roles)));
   const actorIsRootManager = hasRoleInSelection(visibleCurrentUser?.roles ?? [], "root");
   const actorIsCoOwnerManager = hasRoleInSelection(visibleCurrentUser?.roles ?? [], "co-owner");
   const targetHasRootRole = hasRoleInSelection(activeProfile?.roles ?? [], "root");
@@ -7933,7 +7940,24 @@ export default function ProfilePage() {
       {activeProfile ? (
         <>
           {shouldPlayProfileThemeSong && !isAdminPanelOpen ? (
-            <div className="fixed bottom-6 left-6 z-40 flex flex-col items-start gap-3">
+            <div className="fixed top-6 left-6 z-40 flex flex-col items-start gap-3">
+              <button
+                type="button"
+                onClick={() => setIsProfileThemePanelOpen((currentValue) => !currentValue)}
+                aria-expanded={isProfileThemePanelOpen}
+                className={`inline-flex items-center gap-2 justify-center rounded-full border px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] shadow-[0_0_24px_rgba(255,183,197,0.12)] transition ${
+                  isProfileThemePanelOpen
+                    ? "border-[#ffb7c5]/45 bg-[#ffb7c5] text-black hover:bg-[#ffc8d3]"
+                    : "border-[#ffb7c5]/35 bg-[#140d11] text-[#ffb7c5] hover:border-[#ffb7c5]/60 hover:text-white"
+                }`}
+              >
+                <span
+                  className={`h-2 w-2 rounded-full ${
+                    profileThemeIsPlaying ? "bg-[#ff7da0] shadow-[0_0_14px_rgba(255,125,160,0.9)]" : "bg-current/60"
+                  }`}
+                />
+                {t("Music", "Музыка")}
+              </button>
               {isProfileThemePanelOpen ? (
                 <div className="w-[min(88vw,272px)] rounded-[24px] border border-[#372028] bg-[radial-gradient(circle_at_top_left,rgba(255,183,197,0.18),transparent_54%),linear-gradient(180deg,rgba(22,13,17,0.98)_0%,rgba(8,8,9,0.98)_100%)] p-4 shadow-[0_0_38px_rgba(255,183,197,0.14)] backdrop-blur-md">
                   <div className="flex items-start justify-between gap-3">
@@ -8034,23 +8058,6 @@ export default function ProfilePage() {
                   </div>
                 </div>
               ) : null}
-              <button
-                type="button"
-                onClick={() => setIsProfileThemePanelOpen((currentValue) => !currentValue)}
-                aria-expanded={isProfileThemePanelOpen}
-                className={`inline-flex items-center gap-2 justify-center rounded-full border px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] shadow-[0_0_24px_rgba(255,183,197,0.12)] transition ${
-                  isProfileThemePanelOpen
-                    ? "border-[#ffb7c5]/45 bg-[#ffb7c5] text-black hover:bg-[#ffc8d3]"
-                    : "border-[#ffb7c5]/35 bg-[#140d11] text-[#ffb7c5] hover:border-[#ffb7c5]/60 hover:text-white"
-                }`}
-              >
-                <span
-                  className={`h-2 w-2 rounded-full ${
-                    profileThemeIsPlaying ? "bg-[#ff7da0] shadow-[0_0_14px_rgba(255,125,160,0.9)]" : "bg-current/60"
-                  }`}
-                />
-                Music
-              </button>
             </div>
           ) : null}
           {!isAdminPanelOpen ? <div className="fixed bottom-4 right-[136px] z-[121] flex flex-col items-end gap-2">

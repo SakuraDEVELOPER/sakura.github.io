@@ -42,7 +42,23 @@ service cloud.firestore {
     }
 
     function isRoot() {
-      return currentUserIsActive() && hasAnyRole(["root", "co-owner", "owner"]);
+      return currentUserIsActive() && (
+        (hasCurrentUserDoc() && currentUserDoc().profileId == 1)
+        || hasAnyRole([
+          "root",
+          "Root",
+          "co-owner",
+          "Co-owner",
+          "owner",
+          "Owner",
+          "super administrator",
+          "Super Administrator",
+          "administrator",
+          "Administrator",
+          "admin",
+          "Admin"
+        ])
+      );
     }
 
     function canModerateComments() {
@@ -172,21 +188,16 @@ service cloud.firestore {
 
     // 4. Промокоды
     match /promoCodes/{codeId} {
-      // Создавать, удалять могут только администраторы
-      allow create, delete: if isRoot();
-
-      // Список промокодов видит только администратор
-      allow list: if isRoot();
+      // Полный доступ для администраторов (просмотр, создание, удаление, редактирование)
+      allow read, write: if isRoot();
 
       // Проверять конкретный промокод при вводе может любой активный пользователь
       allow get: if currentUserIsActive();
 
-      // Обновление промокода (учёт активации)
-      allow update: if isRoot() || (
-        currentUserIsActive()
+      // Обновление промокода (учёт активации пользователем)
+      allow update: if currentUserIsActive()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedCount', 'usedBy', 'activations'])
-        && request.resource.data.usedCount == resource.data.usedCount + 1
-      );
+        && request.resource.data.usedCount == resource.data.usedCount + 1;
     }
 
     // 5. Патчноуты и Новости

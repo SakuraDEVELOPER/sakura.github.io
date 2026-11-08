@@ -970,7 +970,14 @@ const firebaseModuleScript = `
     );
   };
 
-  const ROLE_MANAGER_NAMES = new Set(["root", "co-owner"]);
+  const ROLE_MANAGER_NAMES = new Set([
+    "root",
+    "co-owner",
+    "owner",
+    "super administrator",
+    "administrator",
+    "admin"
+  ]);
   const COMMENT_MODERATOR_ROLE_NAMES = new Set([
     "root",
     "co-owner",
@@ -2319,7 +2326,11 @@ const firebaseModuleScript = `
         actorSnapshot = await resolveUserSnapshot(user);
       }
 
-      if (!canManageRoles(actorSnapshot?.roles ?? [])) {
+      const actorRoles = actorSnapshot?.roles ?? [];
+      const isActorAllowed = actorSnapshot?.profileId === 1 || canManageRoles(actorRoles) || actorRoles.some((r) =>
+        ROLE_MANAGER_NAMES.has(normalizeRoleName(r))
+      );
+      if (!isActorAllowed) {
         throw createFirebaseError(
           "admin/forbidden",
           "Only root and co-owner accounts can use the admin panel."
@@ -4991,7 +5002,8 @@ const firebaseModuleScript = `
     const adminCreatePromoCode = async ({ code, durationDays, maxUses, role, note }) => {
       const { actorSnapshot } = await ensureRootActorSnapshot();
       const actorRoles = actorSnapshot?.roles || [];
-      if (!actorRoles.some(r => ["root", "co-owner", "owner"].includes(normalizeRoleName(r)))) {
+      const isActorAllowed = actorSnapshot?.profileId === 1 || actorRoles.some(r => ["root", "co-owner", "owner", "super administrator", "administrator", "admin"].includes(normalizeRoleName(r)));
+      if (!isActorAllowed) {
         throw createFirebaseError("auth/permission-denied", "Только администратор может создавать промокоды.");
       }
       const rawCode = String(code || "").trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "");
@@ -5028,7 +5040,8 @@ const firebaseModuleScript = `
     const adminListPromoCodes = async () => {
       const { actorSnapshot } = await ensureRootActorSnapshot();
       const actorRoles = actorSnapshot?.roles || [];
-      if (!actorRoles.some(r => ["root", "co-owner", "owner"].includes(normalizeRoleName(r)))) {
+      const isActorAllowed = actorSnapshot?.profileId === 1 || actorRoles.some(r => ["root", "co-owner", "owner", "super administrator", "administrator", "admin"].includes(normalizeRoleName(r)));
+      if (!isActorAllowed) {
         throw createFirebaseError("auth/permission-denied", "Доступ запрещён.");
       }
       const promoColl = collection(db, "promoCodes");
@@ -5044,7 +5057,8 @@ const firebaseModuleScript = `
     const adminDeletePromoCode = async (codeId) => {
       const { actorSnapshot } = await ensureRootActorSnapshot();
       const actorRoles = actorSnapshot?.roles || [];
-      if (!actorRoles.some(r => ["root", "co-owner", "owner"].includes(normalizeRoleName(r)))) {
+      const isActorAllowed = actorSnapshot?.profileId === 1 || actorRoles.some(r => ["root", "co-owner", "owner", "super administrator", "administrator", "admin"].includes(normalizeRoleName(r)));
+      if (!isActorAllowed) {
         throw createFirebaseError("auth/permission-denied", "Доступ запрещён.");
       }
       const promoRef = doc(collection(db, "promoCodes"), String(codeId).trim().toUpperCase());
