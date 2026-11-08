@@ -46,6 +46,9 @@ type UserProfile = {
   bannedAt?: string | null;
   hwid?: string | null;
   subscriptionUntil?: string | null;
+  isFrozen?: boolean;
+  frozenAt?: string | null;
+  frozenRemainingMs?: number | null;
   providerIds: string[];
   creationTime: string | null;
   lastSignInTime: string | null;
@@ -140,6 +143,24 @@ type Bridge = {
   adminSetProfileBan: (profileId: number, isBanned: boolean) => Promise<UserProfile | null>;
   adminSetProfileEmailVerification: (profileId: number, isVerified: boolean) => Promise<UserProfile | null>;
   updateProfileRoles: (profileId: number, roles: string[]) => Promise<UserProfile | null>;
+  freezeSubscription?: () => Promise<UserProfile | null>;
+  unfreezeSubscription?: () => Promise<UserProfile | null>;
+  adminToggleUserFreeze?: (profileId: number) => Promise<UserProfile | null>;
+  adminCreatePromoCode?: (options: {
+    code: string;
+    durationDays: number;
+    maxUses: number;
+    role?: string;
+    note?: string;
+  }) => Promise<any>;
+  adminListPromoCodes?: () => Promise<any[]>;
+  adminDeletePromoCode?: (codeId: string) => Promise<boolean>;
+  redeemPromoCode?: (code: string) => Promise<{
+    success: boolean;
+    durationDays: number;
+    isLifetime: boolean;
+    newUntil: string;
+  }>;
   updateAvatar: (file: File | AvatarUploadPayload) => Promise<UserProfile | null>;
   deleteAvatar: () => Promise<UserProfile | null>;
   adminUpdateProfileAvatar: (
@@ -1790,6 +1811,31 @@ export default function ProfilePage() {
   const [adminThemeSongSuccess, setAdminThemeSongSuccess] = useState<string | null>(null);
   const [isAccountDeleting, setIsAccountDeleting] = useState(false);
   const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
+
+  // Promo code redemption state
+  const [promoCodeInput, setPromoCodeInput] = useState("");
+  const [isRedeemingPromo, setIsRedeemingPromo] = useState(false);
+  const [promoErrorMessage, setPromoErrorMessage] = useState<string | null>(null);
+  const [promoSuccessMessage, setPromoSuccessMessage] = useState<string | null>(null);
+
+  // Freeze state
+  const [isFreezingSubscription, setIsFreezingSubscription] = useState(false);
+  const [freezeErrorMessage, setFreezeErrorMessage] = useState<string | null>(null);
+  const [freezeSuccessMessage, setFreezeSuccessMessage] = useState<string | null>(null);
+
+  // Admin promo code management state
+  const [adminPromoList, setAdminPromoList] = useState<any[]>([]);
+  const [isAdminPromoLoading, setIsAdminPromoLoading] = useState(false);
+  const [adminPromoCodeInput, setAdminPromoCodeInput] = useState("");
+  const [adminPromoDaysInput, setAdminPromoDaysInput] = useState(30);
+  const [adminPromoUsesInput, setAdminPromoUsesInput] = useState(1);
+  const [adminPromoRoleInput, setAdminPromoRoleInput] = useState("subscriber");
+  const [adminPromoNoteInput, setAdminPromoNoteInput] = useState("");
+  const [isAdminPromoCreating, setIsAdminPromoCreating] = useState(false);
+  const [adminPromoError, setAdminPromoError] = useState<string | null>(null);
+  const [adminPromoSuccess, setAdminPromoSuccess] = useState<string | null>(null);
+  const [adminCopiedPromoCode, setAdminCopiedPromoCode] = useState<string | null>(null);
+  const [isAdminFreezeTargetSaving, setIsAdminFreezeTargetSaving] = useState(false);
   const [comments, setComments] = useState<ProfileComment[]>(bootstrap.comments);
   const [commentAuthorProfiles, setCommentAuthorProfiles] = useState<Record<number, UserProfile>>({});
   const [commentAuthorProfilesByCommentId, setCommentAuthorProfilesByCommentId] = useState<Record<string, UserProfile>>({});
@@ -3105,11 +3151,32 @@ export default function ProfilePage() {
       ? t("Active", "Активна")
       : t("Inactive", "Неактивна");
   const profileSubscriptionUntil = resolveProfileSubscriptionUntil(activeProfile);
+  const isProfileFrozen = activeProfile?.isFrozen === true;
+  const calculateRemainingTime = (untilIso: string | null | undefined, isFrozen: boolean, frozenMs: number | null | undefined) => {
+    if (isFrozen && typeof frozenMs === "number" && frozenMs > 0) {
+      const totalSec = Math.floor(frozenMs / 1000);
+      const days = Math.floor(totalSec / 86400);
+      const hours = Math.floor((totalSec % 86400) / 3600);
+      if (days > 0) return `${days} ${t("d.", "дн.")} ${hours} ${t("h.", "ч.")}`;
+      const mins = Math.floor((totalSec % 3600) / 60);
+      return `${hours} ${t("h.", "ч.")} ${mins} ${t("m.", "мин.")}`;
+    }
+    if (!untilIso) return null;
+    const diffMs = new Date(untilIso).getTime() - Date.now();
+    if (diffMs <= 0) return t("Expired", "Истекла");
+    const totalSec = Math.floor(diffMs / 1000);
+    const days = Math.floor(totalSec / 86400);
+    const hours = Math.floor((totalSec % 86400) / 3600);
+    if (days > 0) return `${days} ${t("d.", "дн.")} ${hours} ${t("h.", "ч.")}`;
+    const mins = Math.floor((totalSec % 3600) / 60);
+    return `${hours} ${t("h.", "ч.")} ${mins} ${t("m.", "мин.")}`;
+  };
+  const remainingTimePretty = calculateRemainingTime(profileSubscriptionUntil, isProfileFrozen, activeProfile?.frozenRemainingMs);
   const profileSubscriptionUntilLabel = hasLifetimeRole
     ? t("Lifetime", "Lifetime")
     : profileSubscriptionUntil
       ? formatTime(profileSubscriptionUntil, locale)
-      : t("Not set", "Not set");
+      : t("Not set", "Не указан");
   const profileHwid = resolveProfileHwid(activeProfile);
   const isOwnProfileViewById = Boolean(
     visibleCurrentUser &&
@@ -5604,6 +5671,140 @@ export default function ProfilePage() {
     }
   };
 
+  const handleRedeemPromo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const bridge = getWindowState().sakuraFirebaseAuth;
+    if (!bridge?.redeemPromoCode || !promoCodeInput.trim()) return;
+    setIsRedeemingPromo(true);
+    setPromoErrorMessage(null);
+    setPromoSuccessMessage(null);
+    try {
+      const res = await bridge.redeemPromoCode(promoCodeInput.trim());
+      if (res?.isLifetime) {
+        setPromoSuccessMessage(t("Lifetime access activated!", "Бессрочный доступ (Lifetime) успешно активирован!"));
+      } else {
+        setPromoSuccessMessage(
+          t(`Promo code activated! +${res.durationDays} days added.`, `Промокод активирован! Добавлено +${res.durationDays} дн.`)
+        );
+      }
+      setPromoCodeInput("");
+    } catch (err: any) {
+      setPromoErrorMessage(err?.message || t("Failed to redeem promo code.", "Не удалось активировать промокод."));
+    } finally {
+      setIsRedeemingPromo(false);
+    }
+  };
+
+  const handleFreezeSubscription = async () => {
+    const bridge = getWindowState().sakuraFirebaseAuth;
+    if (!bridge?.freezeSubscription) return;
+    if (!window.confirm(t("Freeze subscription? While frozen, you cannot launch Sakura until you unfreeze it.", "Заморозить подписку? Пока подписка заморожена, вход в Sakura будет заблокирован до разморозки."))) return;
+    setIsFreezingSubscription(true);
+    setFreezeErrorMessage(null);
+    setFreezeSuccessMessage(null);
+    try {
+      const snapshot = await bridge.freezeSubscription();
+      applyUpdatedProfileSnapshot(snapshot);
+      setFreezeSuccessMessage(t("Subscription frozen. Remaining time paused.", "Подписка заморожена. Таймер времени приостановлен."));
+    } catch (err: any) {
+      setFreezeErrorMessage(err?.message || t("Failed to freeze subscription.", "Не удалось заморозить подписку."));
+    } finally {
+      setIsFreezingSubscription(false);
+    }
+  };
+
+  const handleUnfreezeSubscription = async () => {
+    const bridge = getWindowState().sakuraFirebaseAuth;
+    if (!bridge?.unfreezeSubscription) return;
+    setIsFreezingSubscription(true);
+    setFreezeErrorMessage(null);
+    setFreezeSuccessMessage(null);
+    try {
+      const snapshot = await bridge.unfreezeSubscription();
+      applyUpdatedProfileSnapshot(snapshot);
+      setFreezeSuccessMessage(t("Subscription unfrozen! Sakura access restored.", "Подписка разморожена! Доступ к Sakura восстановлен."));
+    } catch (err: any) {
+      setFreezeErrorMessage(err?.message || t("Failed to unfreeze subscription.", "Не удалось разморозить подписку."));
+    } finally {
+      setIsFreezingSubscription(false);
+    }
+  };
+
+  const handleAdminToggleFreeze = async () => {
+    const bridge = getWindowState().sakuraFirebaseAuth;
+    if (!bridge?.adminToggleUserFreeze || !activeProfile?.profileId) return;
+    setIsAdminFreezeTargetSaving(true);
+    try {
+      const snapshot = await bridge.adminToggleUserFreeze(activeProfile.profileId);
+      applyUpdatedProfileSnapshot(snapshot);
+    } catch (err: any) {
+      alert(err?.message || "Failed to toggle freeze");
+    } finally {
+      setIsAdminFreezeTargetSaving(false);
+    }
+  };
+
+  const loadAdminPromoCodes = async () => {
+    const bridge = getWindowState().sakuraFirebaseAuth;
+    if (!bridge?.adminListPromoCodes) return;
+    setIsAdminPromoLoading(true);
+    try {
+      const list = await bridge.adminListPromoCodes();
+      setAdminPromoList(list || []);
+    } catch (err: any) {
+      setAdminPromoError(err?.message || "Failed to load promo codes");
+    } finally {
+      setIsAdminPromoLoading(false);
+    }
+  };
+
+  const handleAdminCreatePromo = async () => {
+    const bridge = getWindowState().sakuraFirebaseAuth;
+    if (!bridge?.adminCreatePromoCode) return;
+    setIsAdminPromoCreating(true);
+    setAdminPromoError(null);
+    setAdminPromoSuccess(null);
+    try {
+      const newPromo = await bridge.adminCreatePromoCode({
+        code: adminPromoCodeInput,
+        durationDays: adminPromoDaysInput,
+        maxUses: adminPromoUsesInput,
+        role: adminPromoRoleInput,
+        note: adminPromoNoteInput
+      });
+      setAdminPromoSuccess(t(`Promo code «${newPromo.code}» created!`, `Промокод «${newPromo.code}» успешно создан!`));
+      setAdminPromoCodeInput("");
+      setAdminPromoNoteInput("");
+      await loadAdminPromoCodes();
+    } catch (err: any) {
+      setAdminPromoError(err?.message || "Failed to create promo code");
+    } finally {
+      setIsAdminPromoCreating(false);
+    }
+  };
+
+  const handleAdminDeletePromo = async (code: string) => {
+    const bridge = getWindowState().sakuraFirebaseAuth;
+    if (!bridge?.adminDeletePromoCode) return;
+    if (!window.confirm(t(`Delete promo code «${code}»?`, `Удалить промокод «${code}»?`))) return;
+    try {
+      await bridge.adminDeletePromoCode(code);
+      await loadAdminPromoCodes();
+    } catch (err: any) {
+      alert(err?.message || "Failed to delete promo code");
+    }
+  };
+
+  const generateRandomPromoCode = () => {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let rand = "";
+    for (let i = 0; i < 4; i++) rand += chars[Math.floor(Math.random() * chars.length)];
+    rand += "-";
+    for (let i = 0; i < 4; i++) rand += chars[Math.floor(Math.random() * chars.length)];
+    const prefix = adminPromoDaysInput >= 99999 ? "LIFETIME" : `${adminPromoDaysInput}D`;
+    setAdminPromoCodeInput(`SAKURA-${prefix}-${rand}`);
+  };
+
   const handleResendVerification = async () => {
     const bridge = getWindowState().sakuraFirebaseAuth;
 
@@ -6927,62 +7128,228 @@ export default function ProfilePage() {
               <div className="px-8 pt-6 pb-7">
                 <div
                   className={`rounded-[26px] border border-[#2f161d] bg-[radial-gradient(circle_at_top_left,rgba(255,183,197,0.1),transparent_58%),linear-gradient(180deg,#0c0a0b_0%,#090909_100%)] shadow-[0_0_26px_rgba(255,143,177,0.08)] ${
-                    shouldShowSubscriptionDetails ? "p-5" : "px-4 py-3"
+                    shouldShowSubscriptionDetails ? "p-6" : "px-4 py-3"
                   }`}
                 >
                   <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <p className="font-mono text-[10px] uppercase leading-none tracking-[0.4em] text-[#ffb7c5]">{t("Subscription", "Подписка")}</p>
-                    </div>
+                    <p className="font-mono text-[10px] uppercase leading-none tracking-[0.4em] text-[#ffb7c5]">
+                      {t("Subscription", "Подписка")}
+                    </p>
                     <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-                      <span style={{ ...subscriptionBadgeStyle, ...roleBadgeTextStyle }} className="inline-flex h-[24px] shrink-0 items-center rounded-full border px-3 text-[10px] font-bold leading-none">
-                        {subscriptionStatusLabel}
-                      </span>
-                      {hasLifetimeRole ? <span style={{ ...subscriptionLifetimeBadgeStyle, ...roleBadgeTextStyle }} className="inline-flex h-[24px] shrink-0 items-center rounded-full border px-3 text-[10px] font-bold leading-none">
-                        {t("Lifetime", "Lifetime")}
-                      </span> : null}
-                      {hasTestPeriodRole ? <span style={{ ...subscriptionTestPeriodBadgeStyle, ...roleBadgeTextStyle }} className="inline-flex h-[24px] shrink-0 items-center rounded-full border px-3 text-[10px] font-bold leading-none">
-                        {t("Test Period", "Test Period")}
-                      </span> : null}
+                      {hasLifetimeRole ? (
+                        <span className="inline-flex h-[24px] shrink-0 items-center rounded-full border border-[#facc15]/50 bg-[#1b1708] px-3 text-[10px] font-bold leading-none text-[#fff3c4] shadow-[0_0_16px_rgba(250,204,21,0.22)]">
+                          {t("Lifetime", "Навсегда")}
+                        </span>
+                      ) : activeProfile?.isFrozen ? (
+                        <span className="inline-flex h-[24px] shrink-0 items-center rounded-full border border-[#38bdf8]/50 bg-[#082f49] px-3 text-[10px] font-bold leading-none text-[#7dd3fc] shadow-[0_0_16px_rgba(56,189,248,0.22)]">
+                          {t("Frozen", "Заморожена")}
+                        </span>
+                      ) : hasActiveSubscriptionRole ? (
+                        <span className="inline-flex h-[24px] shrink-0 items-center rounded-full border border-[#1f7a4d] bg-[#0d1713] px-3 text-[10px] font-bold leading-none text-[#8ce5b2] shadow-[0_0_18px_rgba(31,122,77,0.24)]">
+                          {t("Active", "Активна")}
+                        </span>
+                      ) : (
+                        <span className="inline-flex h-[24px] shrink-0 items-center rounded-full border border-[#3a3a3a] bg-[#111111] px-3 text-[10px] font-bold leading-none text-[#a3a3a3]">
+                          {t("Inactive", "Неактивна")}
+                        </span>
+                      )}
                     </div>
                   </div>
+
                   {shouldShowSubscriptionDetails ? (
-                    <div className="mt-4 rounded-[22px] border border-[#24171b] bg-[radial-gradient(circle_at_top_left,rgba(255,183,197,0.08),transparent_62%),#090909] p-4">
-                      <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-[#b78a95]">{t("Current Subscription", "Текущая подписка")}</p>
-                      <p className="mt-3 text-lg font-bold text-white">{subscriptionSummary.title}</p>
-                      {subscriptionSummary.description ? <p className="mt-3 text-xs leading-relaxed text-gray-400">{subscriptionSummary.description}</p> : null}
-                      <p className="mt-3 text-xs uppercase tracking-[0.22em] text-[#b78a95]">{t("Sub Until", "Sub Until")}</p>
-                      <p className="mt-2 text-sm font-semibold text-white">{profileSubscriptionUntilLabel}</p>
-                      <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-gray-400">
-                        <span>{t("Payment method", "Способ оплаты")}:</span>
-                        <a
-                          href={FUNPAY_SUBSCRIPTION_URL}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={handleFunPayLinkClick}
-                          className="inline-flex items-center gap-2 rounded-full border border-[#3a2a31] bg-[#140d11] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/45 hover:text-white"
-                        >
-                          <img
-                            src={FUNPAY_ICON_URL}
-                            alt="FunPay"
-                            loading="lazy"
-                            decoding="async"
-                            className="h-4 w-4 rounded-sm"
-                          />
-                          <span>FunPay</span>
-                        </a>
-                      </div>
-                      {hasActiveSubscriptionRole ? (
-                        <div className="mt-4">
-                          <button
-                            type="button"
-                            disabled
-                            className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black opacity-70"
-                          >
-                            {t("Download", "Скачать")}
-                          </button>
+                    <div className="mt-5 rounded-[22px] border border-[#24171b] bg-[radial-gradient(circle_at_top_left,rgba(255,183,197,0.08),transparent_62%),#090909] p-5">
+                      {hasLifetimeRole ? (
+                        /* Lifetime Profile View */
+                        <div>
+                          <div>
+                            <p className="text-base font-bold text-white">
+                              {t("Sakura Lifetime Access", "Sakura — Полный доступ навсегда")}
+                            </p>
+                            <p className="mt-1 text-xs leading-relaxed text-gray-400">
+                              {t(
+                                "You have permanent unlimited access to all features and future updates of Sakura.",
+                                "У вас активирован постоянный неограниченный доступ ко всем функциям чита Sakura."
+                              )}
+                            </p>
+                          </div>
+                          <div className="mt-4 flex flex-wrap items-center gap-3">
+                            <button
+                              type="button"
+                              disabled
+                              className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-5 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-black opacity-60 cursor-not-allowed"
+                            >
+                              {t("Download SakuraLoader.exe", "Скачать SakuraLoader.exe")}
+                            </button>
+                          </div>
                         </div>
-                      ) : null}
+                      ) : activeProfile?.isFrozen ? (
+                        /* Frozen Subscription View */
+                        <div>
+                          <div>
+                            <p className="text-base font-bold text-[#7dd3fc]">
+                              {t("Subscription Frozen", "Подписка заморожена")}
+                            </p>
+                            <p className="mt-1 text-xs leading-relaxed text-gray-400">
+                              {t(
+                                "Timer is paused. Launcher login is locked until you unfreeze.",
+                                "Таймер времени приостановлен. Вход в лоадер заблокирован до разморозки."
+                              )}
+                            </p>
+                          </div>
+                          {remainingTimePretty && (
+                            <div className="mt-3.5 inline-flex items-center gap-2 rounded-xl border border-[#38bdf8]/30 bg-[#082f49]/40 px-3.5 py-1.5 text-xs">
+                              <span className="text-gray-400">{t("Saved Remaining Time", "Сохранённое время")}:</span>
+                              <span className="font-bold text-[#7dd3fc]">{remainingTimePretty}</span>
+                            </div>
+                          )}
+                          {isOwner && (
+                            <div className="mt-4 flex flex-wrap items-center gap-3">
+                              <button
+                                type="button"
+                                onClick={handleUnfreezeSubscription}
+                                disabled={isFreezingSubscription}
+                                className="inline-flex items-center justify-center rounded-full border border-[#f97316]/60 bg-gradient-to-r from-[#ea580c] to-[#f97316] px-5 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-white shadow-[0_0_20px_rgba(249,115,22,0.35)] transition hover:scale-105 disabled:opacity-60"
+                              >
+                                <span>{isFreezingSubscription ? t("Unfreezing...", "Размораживаем...") : t("Unfreeze Subscription", "Разморозить подписку")}</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ) : hasActiveSubscriptionRole ? (
+                        /* Active Timed Subscription View */
+                        <div>
+                          <div>
+                            <p className="text-base font-bold text-white">
+                              {t("Sakura Subscription", "Подписка Sakura")}
+                            </p>
+                            <p className="mt-0.5 text-xs text-gray-400">
+                              {hasTestPeriodRole ? t("Test Period Access", "Пробный период") : t("Active Full Access", "Активный полный доступ")}
+                            </p>
+                          </div>
+                          <div className="mt-3.5 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            <div className="rounded-xl border border-[#3a2a31] bg-[#140d11] px-3.5 py-2.5">
+                              <p className="text-[10px] font-mono uppercase text-[#b78a95] tracking-[0.18em]">
+                                {t("Valid Until", "Действует до")}
+                              </p>
+                              <p className="mt-0.5 text-sm font-semibold text-white">
+                                {profileSubscriptionUntilLabel}
+                              </p>
+                            </div>
+                            {remainingTimePretty && (
+                              <div className="rounded-xl border border-[#1f7a4d]/40 bg-[#0d1713] px-3.5 py-2.5">
+                                <p className="text-[10px] font-mono uppercase text-[#8ce5b2] tracking-[0.18em]">
+                                  {t("Time Remaining", "Осталось времени")}
+                                </p>
+                                <p className="mt-0.5 text-sm font-semibold text-[#8ce5b2]">
+                                  {remainingTimePretty}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                          <div className="mt-4 flex flex-wrap items-center gap-3">
+                            <button
+                              type="button"
+                              disabled
+                              className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-black opacity-60 cursor-not-allowed"
+                            >
+                              {t("Download Loader", "Скачать лоадер")}
+                            </button>
+                            {isOwner && !hasTestPeriodRole && (
+                              <button
+                                type="button"
+                                onClick={handleFreezeSubscription}
+                                disabled={isFreezingSubscription}
+                                className="inline-flex items-center justify-center rounded-full border border-[#38bdf8]/40 bg-[#082f49]/50 px-4 py-2 text-xs font-bold text-[#7dd3fc] transition hover:border-[#38bdf8] hover:text-white disabled:opacity-60"
+                              >
+                                <span>{isFreezingSubscription ? t("Freezing...", "Заморозка...") : t("Freeze Subscription", "Заморозить")}</span>
+                              </button>
+                            )}
+                            <a
+                              href={FUNPAY_SUBSCRIPTION_URL}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={handleFunPayLinkClick}
+                              className="inline-flex items-center gap-2 rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-xs font-bold text-[#ffb7c5] transition hover:border-[#ffb7c5]/45 hover:text-white"
+                            >
+                              <img src={FUNPAY_ICON_URL} alt="FunPay" loading="lazy" decoding="async" className="h-3.5 w-3.5 rounded-sm" />
+                              <span>{t("Extend", "Продлить")}</span>
+                            </a>
+                          </div>
+                        </div>
+                      ) : (
+                        /* Inactive Subscription View */
+                        <div>
+                          <p className="text-base font-bold text-white">
+                            {t("No Active Subscription", "Нет активной подписки")}
+                          </p>
+                          <p className="mt-1 text-xs text-gray-400">
+                            {t(
+                              "Buy a key on FunPay or activate a promo code below to get access to Sakura.",
+                              "Приобретите ключ на FunPay или активируйте промокод ниже для доступа к читу."
+                            )}
+                          </p>
+                          <div className="mt-4 flex flex-wrap items-center gap-3">
+                            <a
+                              href={FUNPAY_SUBSCRIPTION_URL}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={handleFunPayLinkClick}
+                              className="inline-flex items-center gap-2 rounded-full border border-[#ffb7c5]/40 bg-[#ffb7c5] px-5 py-2.5 text-xs font-bold text-black shadow-[0_0_18px_rgba(255,183,197,0.3)] transition hover:bg-white hover:scale-105"
+                            >
+                              <img src={FUNPAY_ICON_URL} alt="FunPay" loading="lazy" decoding="async" className="h-4 w-4 rounded-sm" />
+                              <span>{t("Buy on FunPay", "Купить на FunPay")}</span>
+                            </a>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Freeze status messages */}
+                      {freezeSuccessMessage && (
+                        <p className="mt-3 text-xs text-[#8ce5b2] flex items-center gap-1.5 font-medium">
+                          <span>✓</span> {freezeSuccessMessage}
+                        </p>
+                      )}
+                      {freezeErrorMessage && (
+                        <p className="mt-3 text-xs text-[#ff9aa9] flex items-center gap-1.5 font-medium">
+                          <span>⚠</span> {freezeErrorMessage}
+                        </p>
+                      )}
+
+                      {/* Promo Code Activation Box (for own profile) */}
+                      {isOwner && (
+                        <div className="mt-5 border-t border-[#23171b] pt-4">
+                          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#ffb7c5]">
+                            {t("Activate Promo Code", "Активация промокода")}
+                          </p>
+                          <form onSubmit={handleRedeemPromo} className="mt-2.5 flex items-center gap-2">
+                            <input
+                              type="text"
+                              placeholder={t("Enter promo code (e.g. SAKURA-VIP)", "Введите промокод (например, SAKURA-VIP)")}
+                              value={promoCodeInput}
+                              onChange={(e) => setPromoCodeInput(e.target.value.toUpperCase())}
+                              disabled={isRedeemingPromo}
+                              className="flex-1 rounded-xl border border-[#3a2a31] bg-[#120b0e] px-4 py-2 text-xs font-mono uppercase tracking-[0.12em] text-white placeholder:text-gray-600 focus:border-[#ffb7c5] focus:outline-none transition"
+                            />
+                            <button
+                              type="submit"
+                              disabled={isRedeemingPromo || !promoCodeInput.trim()}
+                              className="shrink-0 rounded-xl border border-[#ffb7c5]/40 bg-[#ffb7c5] px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-black transition hover:bg-white disabled:opacity-50"
+                            >
+                              {isRedeemingPromo ? t("Applying...", "Применяем...") : t("Apply", "Применить")}
+                            </button>
+                          </form>
+                          {promoSuccessMessage && (
+                            <p className="mt-2 text-xs text-[#8ce5b2] font-medium flex items-center gap-1.5">
+                              <span>✓</span> {promoSuccessMessage}
+                            </p>
+                          )}
+                          {promoErrorMessage && (
+                            <p className="mt-2 text-xs text-[#ff9aa9] font-medium flex items-center gap-1.5">
+                              <span>⚠</span> {promoErrorMessage}
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ) : null}
                 </div>
@@ -7550,7 +7917,10 @@ export default function ProfilePage() {
             {canOpenAdminPanel ? (
               <button
                 type="button"
-                onClick={() => setIsAdminPanelOpen(true)}
+                onClick={() => {
+                  setIsAdminPanelOpen(true);
+                  loadAdminPromoCodes();
+                }}
                 aria-label="Open admin panel"
                 className={`inline-flex h-10 w-10 items-center justify-center rounded-full border text-base shadow-[0_0_24px_rgba(255,183,197,0.14)] transition hover:text-white ${
                   isTargetBanned
@@ -7706,6 +8076,20 @@ export default function ProfilePage() {
                           {isAdminSubscriptionSaving
                             ? t("Saving...", "Saving...")
                             : t("Revoke Lifetime Subscription", "Revoke Lifetime Subscription")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleAdminToggleFreeze}
+                          disabled={isAdminSubscriptionSaving || isRolesSaving}
+                          className={`inline-flex items-center justify-center rounded-full border px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                            activeProfile?.isFrozen
+                              ? "border-[#f97316]/60 bg-gradient-to-r from-[#ea580c] to-[#f97316] text-white shadow-[0_0_16px_rgba(249,115,22,0.35)]"
+                              : "border-[#38bdf8]/40 bg-[#082f49] text-[#7dd3fc] hover:border-[#38bdf8] hover:text-white"
+                          }`}
+                        >
+                          {activeProfile?.isFrozen
+                            ? t("Unfreeze User", "Разморозить пользователя")
+                            : t("Freeze User", "Заморозить пользователя")}
                         </button>
                       </div>
                       {hasSubscriberRole ? (
@@ -8173,6 +8557,194 @@ export default function ProfilePage() {
                       </div>
                       {avatarError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{avatarError}</p> : null}
                       {avatarSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{avatarSuccess}</p> : null}
+                    </section>
+                    {/* Promo Codes Management Section */}
+                    <section className="rounded-[24px] border border-[#ffb7c5]/25 bg-[radial-gradient(circle_at_top_left,rgba(255,183,197,0.06),transparent_60%),#0d0d0d] p-5 shadow-[0_0_24px_rgba(255,183,197,0.06)]">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          
+                          <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-[#ffb7c5]">
+                            {t("Promo Codes Generator", "Генератор промокодов")}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={loadAdminPromoCodes}
+                          disabled={isAdminPromoLoading}
+                          className="text-xs text-gray-400 hover:text-white transition"
+                          title={t("Refresh list", "Обновить список")}
+                        >
+                          {isAdminPromoLoading ? t("Loading...", "Загрузка...") : t("Refresh", "Обновить")}
+                        </button>
+                      </div>
+                      <p className="mt-2 text-xs leading-relaxed text-gray-400">
+                        {t(
+                          "Generate unique promo codes for subscription access. Only administrators can create and manage codes.",
+                          "Создание уникальных промокодов для активации подписки. Только администраторы могут генерировать коды."
+                        )}
+                      </p>
+
+                      {/* Promo Code Creation Form */}
+                      <div className="mt-4 rounded-2xl border border-[#25171c] bg-[#120a0e] p-4 space-y-3.5">
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <div className="relative flex-1">
+                            <input
+                              type="text"
+                              value={adminPromoCodeInput}
+                              onChange={(e) => setAdminPromoCodeInput(e.target.value.toUpperCase())}
+                              placeholder={t("Code (e.g. SAKURA-VIP)", "Промокод (например, SAKURA-VIP)")}
+                              maxLength={32}
+                              className="w-full rounded-xl border border-[#311c24] bg-[#090909] px-3.5 py-2 text-xs font-mono font-bold uppercase text-white outline-none placeholder:text-gray-600 focus:border-[#ffb7c5]/50"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={generateRandomPromoCode}
+                            className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[#3a2a31] bg-[#180e14] px-3.5 py-2 text-xs font-semibold text-[#ffb7c5] transition hover:bg-[#22131b]"
+                          >
+                            
+                            <span>{t("Random", "Случайный")}</span>
+                          </button>
+                        </div>
+
+                        {/* Duration Presets */}
+                        <div>
+                          <p className="mb-1.5 text-[10px] font-mono uppercase tracking-[0.18em] text-gray-400">
+                            {t("Duration", "Длительность")}
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {[
+                              { label: t("1 Day", "1 День"), days: 1 },
+                              { label: t("3 Days", "3 Дня"), days: 3 },
+                              { label: t("7 Days", "7 Дней"), days: 7 },
+                              { label: t("14 Days", "14 Дней"), days: 14 },
+                              { label: t("30 Days", "30 Дней"), days: 30 },
+                              { label: t("90 Days", "90 Дней"), days: 90 },
+                              { label: t("365 Days", "1 Год"), days: 365 },
+                              { label: t("Lifetime", "Навсегда"), days: 0 },
+                            ].map((preset) => {
+                              const isSelected = adminPromoDaysInput === preset.days;
+                              return (
+                                <button
+                                  key={preset.days}
+                                  type="button"
+                                  onClick={() => setAdminPromoDaysInput(preset.days)}
+                                  className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold transition ${
+                                    isSelected
+                                      ? "border border-[#ffb7c5]/60 bg-[#ffb7c5] text-black shadow-[0_0_12px_rgba(255,183,197,0.3)]"
+                                      : "border border-[#2a1a21] bg-[#0d090b] text-gray-400 hover:text-white"
+                                  }`}
+                                >
+                                  {preset.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <p className="mb-1.5 text-[10px] font-mono uppercase tracking-[0.18em] text-gray-400">
+                              {t("Max Activations", "Макс. использований")}
+                            </p>
+                            <input
+                              type="number"
+                              min={1}
+                              max={9999}
+                              value={adminPromoUsesInput}
+                              onChange={(e) => setAdminPromoUsesInput(Math.max(1, parseInt(e.target.value) || 1))}
+                              className="w-full rounded-xl border border-[#311c24] bg-[#090909] px-3.5 py-1.5 text-xs text-white outline-none focus:border-[#ffb7c5]/50"
+                            />
+                          </div>
+                          <div>
+                            <p className="mb-1.5 text-[10px] font-mono uppercase tracking-[0.18em] text-gray-400">
+                              {t("Note / Description", "Примечание")}
+                            </p>
+                            <input
+                              type="text"
+                              maxLength={64}
+                              value={adminPromoNoteInput}
+                              onChange={(e) => setAdminPromoNoteInput(e.target.value)}
+                              placeholder={t("e.g. VK Giveaway", "например, розыгрыш")}
+                              className="w-full rounded-xl border border-[#311c24] bg-[#090909] px-3.5 py-1.5 text-xs text-white outline-none placeholder:text-gray-600 focus:border-[#ffb7c5]/50"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="pt-1 flex items-center justify-between gap-3">
+                          <button
+                            type="button"
+                            onClick={handleAdminCreatePromo}
+                            disabled={isAdminPromoCreating}
+                            className="inline-flex items-center justify-center gap-2 rounded-full border border-[#ffb7c5]/40 bg-[#ffb7c5] px-5 py-2 text-xs font-bold uppercase tracking-[0.14em] text-black shadow-[0_0_16px_rgba(255,183,197,0.25)] transition hover:bg-white disabled:opacity-60"
+                          >
+                            
+                            <span>{isAdminPromoCreating ? t("Creating...", "Создание...") : t("Create Promo Code", "Создать промокод")}</span>
+                          </button>
+                        </div>
+
+                        {adminPromoError && (
+                          <p className="text-xs text-[#ff9aa9] leading-relaxed">{adminPromoError}</p>
+                        )}
+                        {adminPromoSuccess && (
+                          <p className="text-xs text-[#8ce5b2] leading-relaxed">{adminPromoSuccess}</p>
+                        )}
+                      </div>
+
+                      {/* Promo Codes List */}
+                      <div className="mt-4">
+                        <p className="mb-2 text-[10px] font-mono uppercase tracking-[0.2em] text-gray-400">
+                          {t("Active Promo Codes", "Активные промокоды")} ({adminPromoList.length})
+                        </p>
+                        {adminPromoList.length === 0 ? (
+                          <div className="rounded-xl border border-[#201519] bg-[#0c080a] p-4 text-center text-xs text-gray-500">
+                            {t("No promo codes generated yet.", "Пока нет созданных промокодов.")}
+                          </div>
+                        ) : (
+                          <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
+                            {adminPromoList.map((promo) => (
+                              <div
+                                key={promo.id || promo.code}
+                                className="flex items-center justify-between gap-3 rounded-xl border border-[#281b21] bg-[#110a0e] px-3.5 py-2.5 text-xs"
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-mono font-bold tracking-wider text-[#ffb7c5]">
+                                      {promo.code}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(promo.code);
+                                        alert(t(`Copied: ${promo.code}`, `Скопировано: ${promo.code}`));
+                                      }}
+                                      className="rounded bg-[#1e1217] px-2 py-0.5 text-[10px] font-semibold text-gray-300 hover:text-white transition"
+                                    >
+                                      {t("Copy", "Копировать")}
+                                    </button>
+                                    <span className="rounded bg-[#1e1217] px-2 py-0.5 text-[10px] font-semibold text-gray-300">
+                                      {promo.durationDays === 0 ? t("Lifetime", "Навсегда") : `${promo.durationDays} ${t("days", "дн.")}`}
+                                    </span>
+                                    <span className="rounded bg-[#181114] px-1.5 py-0.5 text-[10px] text-gray-400">
+                                      {promo.usedCount || 0} / {promo.maxUses}
+                                    </span>
+                                  </div>
+                                  {promo.note && (
+                                    <p className="mt-0.5 truncate text-[11px] text-gray-400">{promo.note}</p>
+                                  )}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleAdminDeletePromo(promo.id || promo.code)}
+                                  className="rounded bg-[#1e1217] px-2 py-0.5 text-[10px] text-gray-400 hover:text-[#ff5a54] transition"
+                                >
+                                  {t("Delete", "Удалить")}
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </section>
                   </div>
                 </div>

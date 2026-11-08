@@ -1477,6 +1477,9 @@ const firebaseModuleScript = `
           themeSongKey: resolveThemeSongKey(details, null),
           hwid: resolveHwid(details, null),
           subscriptionUntil: resolveSubscriptionUntil(details, null),
+          isFrozen: details.isFrozen === true,
+          frozenAt: typeof details.frozenAt === "string" ? details.frozenAt : null,
+          frozenRemainingMs: typeof details.frozenRemainingMs === "number" ? details.frozenRemainingMs : null,
           roles: normalizeRoles(details.roles),
           isBanned: details.isBanned === true,
           bannedAt: resolveBannedAt(details),
@@ -1516,6 +1519,9 @@ const firebaseModuleScript = `
     themeSongKey: resolveThemeSongKey(details, null),
     hwid: resolveHwid(details, null),
     subscriptionUntil: resolveSubscriptionUntil(details, null),
+    isFrozen: details.isFrozen === true,
+    frozenAt: typeof details.frozenAt === "string" ? details.frozenAt : null,
+    frozenRemainingMs: typeof details.frozenRemainingMs === "number" ? details.frozenRemainingMs : null,
     roles: normalizeRoles(details.roles),
     isBanned: details.isBanned === true,
     bannedAt: resolveBannedAt(details),
@@ -4837,6 +4843,260 @@ const firebaseModuleScript = `
       });
     };
 
+    const freezeSubscription = async () => {
+      const user = auth.currentUser;
+      if (!user || user.isAnonymous) {
+        throw createFirebaseError("auth/no-current-user", "Войдите в аккаунт, чтобы управлять подпиской.");
+      }
+      const targetDoc = await findUserByProfileId(window.sakuraCurrentUserSnapshot?.profileId);
+      if (!targetDoc) throw createFirebaseError("auth/user-not-found", "Профиль не найден.");
+      const data = targetDoc.data() || {};
+      if (data.isFrozen) throw createFirebaseError("subscription/already-frozen", "Подписка уже заморожена.");
+      const roles = normalizeRoles(data.roles);
+      if (roles.some((r) => ["lifetime", "root", "owner", "co-owner"].includes(r.toLowerCase()))) {
+        throw createFirebaseError("subscription/lifetime-freeze", "Бессрочную подписку (Lifetime) не требуется замораживать.");
+      }
+      if (roles.some((r) => ["test period", "trial"].includes(r.toLowerCase()))) {
+        throw createFirebaseError("subscription/trial-freeze", "Пробный период (Test Period) нельзя заморозить.");
+      }
+      const untilStr = data.subscriptionUntil || data.subscription_until;
+      const untilTime = untilStr ? new Date(untilStr).getTime() : 0;
+      const now = Date.now();
+      const remainingMs = Math.max(0, untilTime - now);
+      if (remainingMs < 3600000) {
+        throw createFirebaseError("subscription/no-remaining", "Недостаточно оставшегося времени для заморозки (минимум 1 час).");
+      }
+      const updatePayload = {
+        isFrozen: true,
+        frozenAt: new Date().toISOString(),
+        frozenRemainingMs: remainingMs,
+        updatedAt: new Date().toISOString()
+      };
+      await setDoc(userRefFor(targetDoc.id), updatePayload, { merge: true });
+      return refreshStoredUserSnapshot(targetDoc.id, {
+        ...data,
+        ...updatePayload
+      });
+    };
+
+    const unfreezeSubscription = async () => {
+      const user = auth.currentUser;
+      if (!user || user.isAnonymous) {
+        throw createFirebaseError("auth/no-current-user", "Войдите в аккаунт, чтобы управлять подпиской.");
+      }
+      const targetDoc = await findUserByProfileId(window.sakuraCurrentUserSnapshot?.profileId);
+      if (!targetDoc) throw createFirebaseError("auth/user-not-found", "Профиль не найден.");
+      const data = targetDoc.data() || {};
+      if (!data.isFrozen) throw createFirebaseError("subscription/not-frozen", "Подписка не заморожена.");
+      const remainingMs = Number(data.frozenRemainingMs) || 0;
+      if (remainingMs <= 0) throw createFirebaseError("subscription/no-remaining", "Нет сохранённого времени для разморозки.");
+      const newUntil = new Date(Date.now() + remainingMs).toISOString();
+      const roles = normalizeRoles(data.roles);
+      if (!roles.some(r => ["subscriber", "sub"].includes(r.toLowerCase()))) {
+        roles.push("subscriber");
+      }
+      const updatePayload = {
+        isFrozen: false,
+        frozenAt: null,
+        frozenRemainingMs: 0,
+        subscriptionUntil: newUntil,
+        subscription_until: newUntil,
+        roles,
+        updatedAt: new Date().toISOString()
+      };
+      await setDoc(userRefFor(targetDoc.id), updatePayload, { merge: true });
+      return refreshStoredUserSnapshot(targetDoc.id, {
+        ...data,
+        ...updatePayload
+      });
+    };
+
+    const adminToggleUserFreeze = async (profileId) => {
+      const { actorSnapshot } = await ensureRootActorSnapshot();
+      if (!Number.isInteger(profileId) || profileId <= 0) {
+        throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
+      }
+      const targetDoc = await findUserByProfileId(profileId);
+      if (!targetDoc) throw createFirebaseError("profile/not-found", "Профиль не найден.");
+      ensureActorCanManageTargetProfile(actorSnapshot?.roles ?? [], targetDoc.data()?.roles ?? []);
+      const data = targetDoc.data() || {};
+      const now = Date.now();
+      let updatePayload;
+      if (data.isFrozen) {
+        const remainingMs = Number(data.frozenRemainingMs) || (30 * 86400000);
+        const newUntil = new Date(now + remainingMs).toISOString();
+        const roles = normalizeRoles(data.roles);
+        if (!roles.some(r => ["subscriber", "sub"].includes(r.toLowerCase()))) roles.push("subscriber");
+        updatePayload = {
+          isFrozen: false,
+          frozenAt: null,
+          frozenRemainingMs: 0,
+          subscriptionUntil: newUntil,
+          subscription_until: newUntil,
+          roles,
+          updatedAt: new Date().toISOString()
+        };
+      } else {
+        const untilStr = data.subscriptionUntil || data.subscription_until;
+        const untilTime = untilStr ? new Date(untilStr).getTime() : (now + 30 * 86400000);
+        const remainingMs = Math.max(86400000, untilTime - now);
+        updatePayload = {
+          isFrozen: true,
+          frozenAt: new Date().toISOString(),
+          frozenRemainingMs: remainingMs,
+          updatedAt: new Date().toISOString()
+        };
+      }
+      await setDoc(userRefFor(targetDoc.id), updatePayload, { merge: true });
+      return refreshStoredUserSnapshot(targetDoc.id, {
+        ...data,
+        ...updatePayload
+      });
+    };
+
+    const adminCreatePromoCode = async ({ code, durationDays, maxUses, role, note }) => {
+      const { actorSnapshot } = await ensureRootActorSnapshot();
+      const actorRoles = actorSnapshot?.roles || [];
+      if (!actorRoles.some(r => ["root", "co-owner", "owner"].includes(normalizeRoleName(r)))) {
+        throw createFirebaseError("auth/permission-denied", "Только администратор может создавать промокоды.");
+      }
+      const rawCode = String(code || "").trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "");
+      if (!rawCode || rawCode.length < 3) {
+        throw createFirebaseError("promo/invalid-code", "Код должен содержать минимум 3 символа (латиница, цифры, дефис).");
+      }
+      const days = Number(durationDays);
+      if (!Number.isFinite(days) || days <= 0) {
+        throw createFirebaseError("promo/invalid-duration", "Укажите корректный срок действия (количество дней).");
+      }
+      const uses = Math.max(0, Math.trunc(Number(maxUses) || 1));
+      const targetRole = String(role || "subscriber").trim().toLowerCase();
+      const promoRef = doc(collection(db, "promoCodes"), rawCode);
+      const existing = await getDoc(promoRef);
+      if (existing.exists()) {
+        throw createFirebaseError("promo/already-exists", "Промокод «" + rawCode + "» уже существует.");
+      }
+      const promoData = {
+        code: rawCode,
+        durationDays: days,
+        maxUses: uses,
+        usedCount: 0,
+        usedBy: [],
+        role: targetRole,
+        note: String(note || "").trim().slice(0, 256),
+        createdBy: actorSnapshot?.profileId || null,
+        createdAt: new Date().toISOString(),
+        isActive: true
+      };
+      await setDoc(promoRef, promoData);
+      return { id: promoRef.id, ...promoData };
+    };
+
+    const adminListPromoCodes = async () => {
+      const { actorSnapshot } = await ensureRootActorSnapshot();
+      const actorRoles = actorSnapshot?.roles || [];
+      if (!actorRoles.some(r => ["root", "co-owner", "owner"].includes(normalizeRoleName(r)))) {
+        throw createFirebaseError("auth/permission-denied", "Доступ запрещён.");
+      }
+      const promoColl = collection(db, "promoCodes");
+      const snap = await getDocs(promoColl);
+      const list = [];
+      snap.forEach((d) => {
+        list.push({ id: d.id, ...d.data() });
+      });
+      list.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+      return list;
+    };
+
+    const adminDeletePromoCode = async (codeId) => {
+      const { actorSnapshot } = await ensureRootActorSnapshot();
+      const actorRoles = actorSnapshot?.roles || [];
+      if (!actorRoles.some(r => ["root", "co-owner", "owner"].includes(normalizeRoleName(r)))) {
+        throw createFirebaseError("auth/permission-denied", "Доступ запрещён.");
+      }
+      const promoRef = doc(collection(db, "promoCodes"), String(codeId).trim().toUpperCase());
+      await deleteDoc(promoRef);
+      return true;
+    };
+
+    const redeemPromoCode = async (inputCode) => {
+      const user = auth.currentUser;
+      if (!user || user.isAnonymous) {
+        throw createFirebaseError("auth/no-current-user", "Войдите в аккаунт, чтобы активировать промокод.");
+      }
+      const targetDoc = await findUserByProfileId(window.sakuraCurrentUserSnapshot?.profileId);
+      if (!targetDoc) throw createFirebaseError("auth/user-not-found", "Профиль не найден.");
+      const userData = targetDoc.data() || {};
+      const userProfileId = userData.profileId || window.sakuraCurrentUserSnapshot?.profileId;
+      if (!userProfileId) throw createFirebaseError("auth/user-not-found", "Не удалось определить ID профиля.");
+
+      const upperCode = String(inputCode || "").trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "");
+      if (!upperCode) throw createFirebaseError("promo/empty", "Введите промокод.");
+
+      const promoRef = doc(collection(db, "promoCodes"), upperCode);
+      const promoSnap = await getDoc(promoRef);
+      if (!promoSnap.exists() || !promoSnap.data()?.isActive) {
+        throw createFirebaseError("promo/not-found", "Промокод не существует или не активен.");
+      }
+      const promo = promoSnap.data();
+      const usedBy = Array.isArray(promo.usedBy) ? promo.usedBy : [];
+      if (usedBy.includes(userProfileId)) {
+        throw createFirebaseError("promo/already-used", "Вы уже активировали этот промокод на своём аккаунте.");
+      }
+      if (promo.maxUses > 0 && (promo.usedCount || 0) >= promo.maxUses) {
+        throw createFirebaseError("promo/depleted", "Лимит активаций этого промокода исчерпан.");
+      }
+
+      const now = Date.now();
+      const currentRoles = normalizeRoles(userData.roles);
+      let newUntil;
+      let newRoles = [...currentRoles];
+      const isLifetimePromo = promo.durationDays >= 99999 || promo.role === "lifetime";
+
+      if (isLifetimePromo) {
+        newUntil = LIFETIME_SUBSCRIPTION_UNTIL_INPUT_VALUE;
+        if (!newRoles.some(r => ["lifetime"].includes(r.toLowerCase()))) {
+          newRoles.push("lifetime");
+        }
+      } else {
+        const currentUntilStr = userData.subscriptionUntil || userData.subscription_until;
+        const currentUntilTime = currentUntilStr ? new Date(currentUntilStr).getTime() : 0;
+        const baseTime = currentUntilTime > now ? currentUntilTime : now;
+        const addMs = promo.durationDays * 86400000;
+        newUntil = new Date(baseTime + addMs).toISOString();
+        if (!newRoles.some(r => ["subscriber", "sub"].includes(r.toLowerCase()))) {
+          newRoles.push("subscriber");
+        }
+      }
+
+      await setDoc(promoRef, {
+        usedCount: (promo.usedCount || 0) + 1,
+        usedBy: [...usedBy, userProfileId]
+      }, { merge: true });
+
+      const userUpdate = {
+        subscriptionUntil: newUntil,
+        subscription_until: newUntil,
+        roles: newRoles,
+        isFrozen: false,
+        frozenAt: null,
+        frozenRemainingMs: 0,
+        updatedAt: new Date().toISOString()
+      };
+      await setDoc(userRefFor(targetDoc.id), userUpdate, { merge: true });
+
+      refreshStoredUserSnapshot(targetDoc.id, {
+        ...userData,
+        ...userUpdate
+      });
+
+      return {
+        success: true,
+        durationDays: promo.durationDays,
+        isLifetime: isLifetimePromo,
+        newUntil
+      };
+    };
+
     const resendVerificationEmail = async () => {
       const user = auth.currentUser;
 
@@ -5132,6 +5392,13 @@ const firebaseModuleScript = `
       getSiteOnlineCount,
       getSiteOnlineUsers,
       updateProfileRoles,
+      freezeSubscription,
+      unfreezeSubscription,
+      adminToggleUserFreeze,
+      adminCreatePromoCode,
+      adminListPromoCodes,
+      adminDeletePromoCode,
+      redeemPromoCode,
       updateAvatar,
       deleteAvatar,
       adminUpdateProfileAvatar,
