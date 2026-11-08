@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { AvatarMedia, AVATAR_FILE_ACCEPT } from "../avatar-media";
 import { HeaderSocialLinks } from "../header-social-links";
+import { SakuraIcon } from "../sakura-icon";
 import { SiteOnlineBadge } from "../site-online-badge";
 import {
   deleteSupabaseCommentMedia,
@@ -6876,7 +6877,16 @@ export default function ProfilePage() {
         <div className="mb-8 flex flex-col gap-4">
           <div className="relative">
             <nav className="flex flex-col gap-4 rounded-[28px] border border-[#1b1b1b] bg-black/40 px-6 py-5 backdrop-blur-sm md:flex-row md:items-center md:justify-between">
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center gap-4">
+                <Link href="/" className="flex items-center gap-2.5 transition-opacity hover:opacity-90">
+                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#ffb7c5]/40 bg-[#160d11] p-1 shadow-[0_0_18px_rgba(255,183,197,0.25)]">
+                    <SakuraIcon className="h-full w-full" />
+                  </span>
+                  <span className="text-base font-black uppercase tracking-tight text-white hidden sm:inline">
+                    Sa<span className="text-[#ffb7c5]">kura</span>
+                  </span>
+                </Link>
+                <div className="h-4 w-px bg-white/10 hidden sm:block" />
                 <HeaderSocialLinks showLabel />
               </div>
               <div className="flex flex-wrap items-center justify-end gap-3">

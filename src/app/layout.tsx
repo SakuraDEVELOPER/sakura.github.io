@@ -19,6 +19,20 @@ export const metadata: Metadata = {
   title: "Sakura",
   description:
     "Free Dota 2 cheat with camera distance, enemy resource bars, and a clean in-game menu.",
+  icons: {
+    icon: [
+      {
+        url: "/sakura.github.io/icon.svg",
+        type: "image/svg+xml",
+      },
+      {
+        url: "/sakura.github.io/favicon.ico",
+        type: "image/x-icon",
+      },
+    ],
+    shortcut: "/sakura.github.io/icon.svg",
+    apple: "/sakura.github.io/icon.svg",
+  },
 };
 
 export default function RootLayout({

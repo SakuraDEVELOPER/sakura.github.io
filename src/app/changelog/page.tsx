@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { type UiLocale, useLocaleText } from "@/lib/ui-locale";
+import { SakuraIcon } from "../sakura-icon";
 
 type ChangeItem = {
   type: "new" | "improved" | "fixed";
@@ -300,8 +301,8 @@ export default function ChangelogPage() {
       <header className="relative z-20 border-b border-[#1b1517] bg-[#0c090a]/90 backdrop-blur-md px-6 py-4">
         <div className="mx-auto flex max-w-5xl items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5 transition-opacity hover:opacity-90">
-            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#ffb7c5]/40 bg-[#160d11] text-[#ffb7c5] font-black text-xs shadow-[0_0_16px_rgba(255,183,197,0.2)]">
-              S
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#ffb7c5]/40 bg-[#160d11] p-1 shadow-[0_0_18px_rgba(255,183,197,0.25)]">
+              <SakuraIcon className="h-full w-full" />
             </span>
             <span className="text-lg font-black uppercase tracking-tight text-white">
               Sa<span className="text-[#ffb7c5]">kura</span>
@@ -336,8 +337,9 @@ export default function ChangelogPage() {
             <p className="font-mono text-xs uppercase tracking-[0.3em] text-[#ffb7c5]">
               {t("Updates & Releases", "Обновления и релизы")}
             </p>
-            <h1 className="mt-2 text-3xl sm:text-4xl font-black uppercase tracking-tight text-white">
-              {t("Sakura Changelog", "Патчноуты Sakura")}
+            <h1 className="mt-2 flex items-center gap-3 text-3xl sm:text-4xl font-black uppercase tracking-tight text-white">
+              <SakuraIcon className="h-8 w-8 sm:h-9 sm:w-9 shrink-0 drop-shadow-[0_0_12px_rgba(255,183,197,0.45)]" />
+              <span>{t("Sakura Changelog", "Патчноуты Sakura")}</span>
             </h1>
             <p className="mt-1 text-sm text-gray-400">
               {t(
@@ -351,10 +353,10 @@ export default function ChangelogPage() {
             <button
               type="button"
               onClick={() => setIsModalOpen(true)}
-              className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-[#ffb7c5]/40 bg-[#ffb7c5] px-5 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-black shadow-[0_0_24px_rgba(255,183,197,0.25)] transition hover:bg-white"
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-[#ffb7c5]/40 bg-[#ffb7c5] px-5 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-black shadow-[0_0_24px_rgba(255,183,197,0.25)] transition hover:bg-white"
             >
-              <span>+</span>
-              <span>{t("Add Entry", "Добавить новость")}</span>
+              <SakuraIcon className="h-4 w-4 shrink-0" />
+              <span>+ {t("Add News", "Добавить новость")}</span>
             </button>
           )}
         </div>

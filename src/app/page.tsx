@@ -8,6 +8,7 @@ import { LazyMotion, domAnimation, m } from "framer-motion";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { AvatarMedia } from "./avatar-media";
 import { HeaderSocialLinks } from "./header-social-links";
+import { SakuraIcon } from "./sakura-icon";
 import { SiteOnlineBadge } from "./site-online-badge";
 import { readCachedAuthSnapshot } from "@/lib/auth-snapshot-cache";
 import { writeCachedProfileSnapshot } from "@/lib/profile-cache";
@@ -2048,8 +2049,8 @@ export default function Home() {
                   />
                 </span>
               ) : (
-                <span className="text-2xl text-[#ffb7c5] drop-shadow-[0_0_10px_rgba(255,183,197,0.5)]">
-                  🌸
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#ffb7c5]/35 bg-[#160d11] p-1.5 shadow-[0_0_20px_rgba(255,183,197,0.25)]">
+                  <SakuraIcon className="h-full w-full" />
                 </span>
               )}
               <h1 className="text-xl font-black tracking-tighter uppercase text-white">
