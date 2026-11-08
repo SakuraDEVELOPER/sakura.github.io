@@ -27,6 +27,8 @@ export type SupportTicket = {
 
 // Default Discord Webhook URL can be stored or overridden
 const DEFAULT_DISCORD_WEBHOOK_KEY = "sakura_discord_webhook_url";
+const DEFAULT_DISCORD_WEBHOOK_URL =
+  "https://discord.com/api/webhooks/1569122112424120360/DaaFVT6qhZkaaeBCYsejXIE8baiYo8ylOi5MdhfrG8UaVwvZ8d2MecUUN-1wzsBOag8e";
 
 export default function SupportTicketsModal({
   isOpen,
@@ -69,7 +71,7 @@ export default function SupportTicketsModal({
     );
     setIsAdmin(adminCheck);
 
-    const savedWebhook = window.localStorage.getItem(DEFAULT_DISCORD_WEBHOOK_KEY) || "";
+    const savedWebhook = window.localStorage.getItem(DEFAULT_DISCORD_WEBHOOK_KEY) || DEFAULT_DISCORD_WEBHOOK_URL;
     setDiscordWebhookUrl(savedWebhook);
 
     // Also sync global webhook URL from Firestore meta/settings
@@ -138,7 +140,10 @@ export default function SupportTicketsModal({
   };
 
   const sendDiscordNotification = async (ticket: SupportTicket, initialText: string) => {
-    let webhook = discordWebhookUrl || (typeof window !== "undefined" ? window.localStorage.getItem(DEFAULT_DISCORD_WEBHOOK_KEY) : null);
+    let webhook =
+      discordWebhookUrl ||
+      (typeof window !== "undefined" ? window.localStorage.getItem(DEFAULT_DISCORD_WEBHOOK_KEY) : null) ||
+      DEFAULT_DISCORD_WEBHOOK_URL;
     if (!webhook || !webhook.startsWith("http")) {
       try {
         const db = (window as any).firebaseFirestoreDb;
