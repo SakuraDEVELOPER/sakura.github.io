@@ -84,7 +84,7 @@ const DEFAULT_CHANGELOG: ChangelogEntry[] = [
     ],
   },
   {
-    id: "v2026-10-09-rebrand",
+    id: "v2026-10-09-loader-core",
     version: "v2026.10.09",
     date: "2026-10-09",
     category: "loader",
@@ -93,8 +93,8 @@ const DEFAULT_CHANGELOG: ChangelogEntry[] = [
     items: [
       {
         type: "new",
-        textEn: "Full Sakura rebranding across loader UI, executable metadata and desktop shortcut.",
-        textRu: "Полный ребрендинг в Sakura: новый интерфейс, ярлыки и название исполняемого файла.",
+        textEn: "Modern SakuraLoader UI with real-time status indicators and fast launch.",
+        textRu: "Современный интерфейс SakuraLoader с индикацией статуса и быстрым запуском.",
       },
       {
         type: "improved",
