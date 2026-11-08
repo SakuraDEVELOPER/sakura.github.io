@@ -1805,6 +1805,9 @@ export default function ProfilePage() {
   const [rolesError, setRolesError] = useState<string | null>(null);
   const [rolesSuccess, setRolesSuccess] = useState<string | null>(null);
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
+  const [adminPanelActiveTab, setAdminPanelActiveTab] = useState<"sub" | "roles" | "promos" | "security" | "edit">("sub");
+  const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
+  const [editProfileActiveTab, setEditProfileActiveTab] = useState<"general" | "avatar" | "music" | "security">("general");
   const [isBanSaving, setIsBanSaving] = useState(false);
   const [banError, setBanError] = useState<string | null>(null);
   const [banSuccess, setBanSuccess] = useState<string | null>(null);
@@ -7555,19 +7558,40 @@ export default function ProfilePage() {
                 </div> : null}
               </div>
               */}
-              {isOwner && activeProfile && (!isProfileControlsOpen || activeProfile.isBanned) ? <div className="rounded-[32px] border border-[#201517] bg-[radial-gradient(circle_at_top,rgba(255,183,197,0.14),transparent_72%),linear-gradient(180deg,#0d0d0d_0%,#090909_100%)] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">{t("Profile Settings", "Настройки профиля")}</p>
-                  {!activeProfile.isBanned ? <button type="button" onClick={() => setIsProfileControlsOpen(true)} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/45 hover:text-white">
-                    Manage Account
-                  </button> : null}
+              {isOwner && activeProfile ? (
+                <div className="rounded-[32px] border border-[#201517] bg-[radial-gradient(circle_at_top,rgba(255,183,197,0.14),transparent_72%),linear-gradient(180deg,#0d0d0d_0%,#090909_100%)] px-7 py-5 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">
+                        {t("Profile Settings", "Настройки профиля")}
+                      </p>
+                      <p className="mt-1 text-xs text-gray-400">
+                        {t(
+                          "Customise your nickname, login, avatar, theme song and password.",
+                          "Настройка отображаемого имени, логина, аватара, музыки профиля и безопасности."
+                        )}
+                      </p>
+                    </div>
+                    {!activeProfile.isBanned ? (
+                      <button
+                        type="button"
+                        onClick={() => setIsEditProfileModalOpen(true)}
+                        className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-[#ffb7c5]/40 bg-[#ffb7c5] px-5 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-black shadow-[0_0_20px_rgba(255,183,197,0.25)] transition hover:bg-white hover:scale-105"
+                      >
+                        <SakuraIcon className="h-3.5 w-3.5" />
+                        <span>{t("Edit Profile", "Редактировать профиль")}</span>
+                      </button>
+                    ) : null}
+                  </div>
+                  {activeProfile.isBanned ? (
+                    <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">
+                      {t("This account is banned. Profile editing is locked.", "Аккаунт заблокирован. Редактирование профиля недоступно.")}
+                    </p>
+                  ) : null}
                 </div>
-                {activeProfile.isBanned ? <p className="mt-3 text-sm leading-relaxed text-gray-400">
-                  This account is banned. Profile changes and new actions stay locked until a root account removes the ban.
-                </p> : null}
-              </div> : null}
+              ) : null}
 
-              {(!isOwner || !isProfileControlsOpen || activeProfile?.isBanned) ? <div className="rounded-[32px] border border-[#201517] bg-[#0d0d0d] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
+              <div className="rounded-[32px] border border-[#201517] bg-[#0d0d0d] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
                 <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">{t("Profile Comments", "Комментарии профиля")}</p>
                 {visibleCurrentUser && !isCurrentAccountBanned && !isCurrentAccountVerificationLocked ? (
                   <form onSubmit={handleCommentSubmit} className="mt-5">
@@ -7784,161 +7808,410 @@ export default function ProfilePage() {
                     })}
                   </div> : null}
                 </div>
-              </div> : null}
-
-              <div className="flex flex-col gap-6">
-              {isOwner && activeProfile && isProfileControlsOpen && !activeProfile.isBanned ? <div className="rounded-[32px] border border-[#201517] bg-[#0d0d0d] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">{t("Profile Name", "Имя профиля")}</p>
-                  <button type="button" onClick={() => setIsProfileControlsOpen(false)} className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white">
-                    {t("Back", "Назад")}
-                  </button>
-                </div>
-                <div className="mt-5">
-                  <label className="block">
-                    <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Name", "Имя")}</span>
-                    <input type="text" value={displayNameInput} maxLength={48} autoComplete="nickname" onChange={(event) => {
-                      setDisplayNameInput(event.target.value);
-                      setDisplayNameError(null);
-                      setDisplayNameSuccess(null);
-                    }} className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55" placeholder="Absolute" />
-                  </label>
-                  <p className="mt-2 text-xs leading-relaxed text-gray-500">{t("Displayed above your login in the profile header.", "Отображается над логином в шапке профиля.")}</p>
-                </div>
-                <div className="mt-5 flex flex-wrap items-center gap-3">
-                  <button type="button" onClick={handleDisplayNameSave} disabled={isDisplayNameSaving} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">{isDisplayNameSaving ? t("Saving...", "Сохранение...") : t("Save Name", "Сохранить имя")}</button>
-                </div>
-                {displayNameError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{displayNameError}</p> : null}
-                {displayNameSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{displayNameSuccess}</p> : null}
-              </div> : null}
-
-              {isOwner && activeProfile && isProfileControlsOpen && !activeProfile.isBanned ? <div className="rounded-[32px] border border-[#201517] bg-[#0d0d0d] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
-                <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">{hasUsername ? t("Login", "Логин") : t("Create Login", "Создать логин")}</p>
-                <p className="mt-3 text-sm leading-relaxed text-gray-400">{hasUsername ? t("This login is shown below your profile name and is used for sign-in.", "Этот логин показывается под именем профиля и используется для входа.") : t("This account does not have a login yet. Create one so it appears below your profile name and can be used for sign-in.", "У этого аккаунта пока нет логина. Создайте его, чтобы он отображался под именем профиля и использовался для входа.")}</p>
-                <div className="mt-5">
-                  <label className="block">
-                    <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Login", "Логин")}</span>
-                    <input ref={ownerUsernameInputRef} type="text" value={usernameInput} minLength={3} maxLength={24} autoComplete="username" onChange={(event) => {
-                      setUsernameInput(event.target.value);
-                      setUsernameError(null);
-                      setUsernameSuccess(null);
-                    }} className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55" placeholder="your_login" />
-                  </label>
-                  <p className="mt-2 text-xs leading-relaxed text-gray-500">{t("Login without spaces. Letters, numbers, `.`, `_`, and `-` are supported.", "Логин без пробелов. Поддерживаются буквы, цифры, `.`, `_` и `-`.")}</p>
-                </div>
-                {requiresUsernamePasswordConfirmation ? <div className="mt-5">
-                  <label className="block">
-                    <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Current Password", "Текущий пароль")}</span>
-                    <input type="password" value={usernamePasswordInput} autoComplete="current-password" onChange={(event) => {
-                      setUsernamePasswordInput(event.target.value);
-                      setUsernameError(null);
-                      setUsernameSuccess(null);
-                    }} className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55" placeholder={t("Enter current password", "Введите текущий пароль")} />
-                  </label>
-                </div> : null}
-                <div className="mt-5 flex flex-wrap items-center gap-3">
-                  <button type="button" onClick={handleUsernameSave} disabled={isUsernameSaving} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">{isUsernameSaving ? t("Saving...", "Сохранение...") : t("Save Login", "Сохранить логин")}</button>
-                </div>
-                {usernameError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{usernameError}</p> : null}
-                {usernameSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{usernameSuccess}</p> : null}
-              </div> : null}
-
-              {isOwner && activeProfile && isProfileControlsOpen && !activeProfile.isBanned ? <div className="rounded-[32px] border border-[#201517] bg-[#0d0d0d] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
-                <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">{t("Password", "Пароль")}</p>
-                <p className="mt-3 text-sm leading-relaxed text-gray-400">{t("Change password directly here or send a recovery email to the linked mailbox.", "Здесь можно сменить пароль или отправить письмо для восстановления на привязанную почту.")}</p>
-                {requiresUsernamePasswordConfirmation ? <div className="mt-5">
-                  <label className="block">
-                    <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Current Password", "Текущий пароль")}</span>
-                    <input type="password" value={currentPasswordInput} autoComplete="current-password" onChange={(event) => {
-                      setCurrentPasswordInput(event.target.value);
-                      setPasswordError(null);
-                      setPasswordSuccess(null);
-                    }} className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55" placeholder={t("Enter current password", "Введите текущий пароль")} />
-                  </label>
-                </div> : <p className="mt-5 text-xs leading-relaxed text-gray-500">{t("This account is not using email/password login. You can still use email recovery below.", "Этот аккаунт не использует вход по email/паролю. Ниже всё равно доступно восстановление по почте.")}</p>}
-                {requiresUsernamePasswordConfirmation ? <div className="mt-4">
-                  <label className="block">
-                    <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("New Password", "Новый пароль")}</span>
-                    <input type="password" value={newPasswordInput} autoComplete="new-password" onChange={(event) => {
-                      setNewPasswordInput(event.target.value);
-                      setPasswordError(null);
-                      setPasswordSuccess(null);
-                    }} className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55" placeholder={t("Minimum 6 characters", "Минимум 6 символов")} />
-                  </label>
-                </div> : null}
-                {requiresUsernamePasswordConfirmation ? <div className="mt-4">
-                  <label className="block">
-                    <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Confirm New Password", "Подтвердите новый пароль")}</span>
-                    <input type="password" value={confirmNewPasswordInput} autoComplete="new-password" onChange={(event) => {
-                      setConfirmNewPasswordInput(event.target.value);
-                      setPasswordError(null);
-                      setPasswordSuccess(null);
-                    }} className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55" placeholder="Repeat new password" />
-                  </label>
-                </div> : null}
-                <p className="mt-3 text-xs leading-relaxed text-gray-500">{t("Recovery emails may arrive in Spam/Junk.", "Письма для восстановления могут попасть в Спам.")}</p>
-                <div className="mt-5 flex flex-wrap items-center gap-3">
-                  {requiresUsernamePasswordConfirmation ? <button type="button" onClick={handlePasswordSave} disabled={isPasswordSaving || isPasswordResetSending} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">{isPasswordSaving ? t("Saving...", "Сохранение...") : t("Save Password", "Сохранить пароль")}</button> : null}
-                  <button type="button" onClick={handlePasswordResetRequest} disabled={isPasswordResetSending || isPasswordSaving || !activeProfile.email} className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60">{isPasswordResetSending ? t("Sending...", "Отправка...") : t("Send Reset Email", "Отправить письмо сброса")}</button>
-                </div>
-                {passwordError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{passwordError}</p> : null}
-                {passwordSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{passwordSuccess}</p> : null}
-              </div> : null}
-
-              {isOwner && isProfileControlsOpen && shouldShowVerificationBanner ? <div className="rounded-[32px] border border-[#4d3024] bg-[linear-gradient(180deg,#1a110d_0%,#120d0a_100%)] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
-                <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">Email not verified</p>
-                <p className="mt-3 text-sm leading-relaxed text-[#f3d2c5]">Verify your email to keep account access and login recovery enabled.</p>
-                <p className="mt-2 text-xs leading-relaxed text-[#d7b9ae]">If the letter does not appear in Inbox, check Spam/Junk.</p>
-                <div className="mt-5 flex flex-wrap items-center gap-3">
-                  <button type="button" onClick={handleResendVerification} disabled={isVerificationSending} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">{isVerificationSending ? "Sending..." : "Resend verification email"}</button>
-                </div>
-                {verificationError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{verificationError}</p> : null}
-                {verificationSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{verificationSuccess}</p> : null}
-              </div> : null}
-
-              {false && canManageRoleAssignments && activeProfile?.profileId ? <div className="rounded-[32px] border border-[#201517] bg-[#0d0d0d] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
-                <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">Role Access</p>
-                <p className="mt-3 text-xs leading-relaxed text-gray-400">Open any participant profile and manage its roles here. Root and co-owner accounts can save changes.</p>
-                <div className="mt-5">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">Assigned Roles</p>
-                  <div className="mt-3 flex flex-wrap gap-3">{normalizedDraftRoles.map((role) => {
-                    const isLastUserRole =
-                      normalizedDraftRoles.length === 1 &&
-                      normalizeRoleName(role) === "user";
-
-                    return <button key={role} type="button" title={roleBadgeLabel(role)} onClick={() => removeRole(role)} disabled={isLastUserRole || isRolesSaving} style={{ ...roleBadgeStyle(role), ...roleBadgeTextStyle }} className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border px-4 py-2 text-[11px] font-bold disabled:cursor-not-allowed disabled:opacity-60"><span aria-hidden="true" className="inline-flex items-center">{renderRoleBadgeText(role)}</span><span className="ml-2 text-[14px] leading-none">?</span></button>;
-                  })}</div>
-                </div>
-                <div className="mt-5">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">Available Roles</p>
-                  <div className="mt-3 flex flex-wrap gap-3">{availableRoleOptions.map((role) => <button key={role} type="button" title={roleBadgeLabel(role)} onClick={() => addRole(role)} disabled={isRolesSaving} className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border px-4 py-2 text-[11px] font-bold opacity-70 transition hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-40" style={{ ...roleBadgeTextStyle, borderColor: "#2c2c2c", backgroundColor: "#101010", color: "#9ca3af", boxShadow: "none" }}><span className="mr-2 text-[14px] leading-none">+</span><span aria-hidden="true" className="inline-flex items-center">{renderRoleBadgeText(role)}</span></button>)}</div>
-                </div>
-                <div className="mt-5 flex flex-wrap items-center gap-3">
-                  <button type="button" onClick={handleRolesSave} disabled={isRolesSaving || !hasRoleChanges} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">{isRolesSaving ? "Saving..." : "Save Roles"}</button>
-                  <button type="button" onClick={resetRoles} disabled={isRolesSaving || !hasRoleChanges} className="inline-flex items-center justify-center rounded-full border border-[#2b1b1e] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60">Reset</button>
-                </div>
-                {rolesError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{rolesError}</p> : null}
-                {rolesSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{rolesSuccess}</p> : null}
-              </div> : null}
-
-              {isOwner && isProfileControlsOpen && !activeProfile?.isBanned ? <div className="rounded-[32px] border border-[#201517] bg-[#0d0d0d] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
-                <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">{t("Avatar", "Аватар")}</p>
-                <div className="mt-5 rounded-[24px] border border-[#1d1d1d] bg-[#090909] p-4">
-                  <p className="text-sm font-semibold text-white">{hasActiveProfileAvatar ? t("Custom Avatar", "Пользовательский аватар") : t("Generated Avatar", "Сгенерированный аватар")}</p>
-                  <p className="mt-2 text-xs leading-relaxed text-gray-400">{t("Upload, replace, or delete your avatar here. PNG, JPG, and WEBP are available to all users. GIF, MP4, and WEBM require a higher profile tier.", "Здесь можно загрузить, заменить или удалить аватар. PNG, JPG и WEBP доступны всем пользователям. GIF, MP4 и WEBM требуют более высокого уровня профиля.")}</p>
-                  <div className="mt-4 flex flex-wrap items-center gap-3">
-                    <button type="button" onClick={() => avatarInputRef.current?.click()} disabled={isAvatarUploading || isAvatarDeleting} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">
-                      {isAvatarUploading ? t("Uploading...", "Загрузка...") : hasActiveProfileAvatar ? t("Replace Avatar", "Заменить аватар") : t("Upload Avatar", "Загрузить аватар")}
-                    </button>
-                    {hasActiveProfileAvatar ? <button type="button" onClick={handleAvatarDelete} disabled={isAvatarUploading || isAvatarDeleting} className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60">{isAvatarDeleting ? t("Deleting...", "Удаление...") : t("Delete Avatar", "Удалить аватар")}</button> : null}
-                    <input ref={avatarInputRef} type="file" accept={AVATAR_FILE_ACCEPT} onChange={handleAvatarChange} className="hidden" />
-                  </div>
-                  {avatarError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{avatarError}</p> : null}
-                  {avatarSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{avatarSuccess}</p> : null}
-                </div>
-              </div> : null}
-
               </div>
+
+              {/* User Self-Edit Profile Modal */}
+              {isEditProfileModalOpen && isOwner && activeProfile && (
+                <div className="fixed inset-0 z-[140] flex items-center justify-center p-4">
+                  <div
+                    className="absolute inset-0 bg-black/80 backdrop-blur-md"
+                    onClick={() => setIsEditProfileModalOpen(false)}
+                  />
+                  <div className="relative w-full max-w-xl overflow-hidden rounded-[32px] border border-[#ffb7c5]/35 bg-[#0c070a] shadow-[0_0_80px_rgba(255,183,197,0.2)]">
+                    {/* Modal Header */}
+                    <div className="border-b border-[#24151b] bg-[radial-gradient(circle_at_top,rgba(255,183,197,0.18),transparent_65%)] px-6 py-5">
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[#ffb7c5]/30 bg-[#1a0e13] text-[#ffb7c5]">
+                            <SakuraIcon className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <h2 className="text-base font-bold text-white">
+                              {t("Edit Profile", "Редактирование профиля")}
+                            </h2>
+                            <p className="text-xs text-gray-400">
+                              {primaryName} · @{activeProfile.login || "user"} · UID #{activeProfile.profileId}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setIsEditProfileModalOpen(false)}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#311c24] bg-[#140b0f] text-gray-400 hover:border-[#ffb7c5]/50 hover:text-white transition"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      {/* Tabs Bar */}
+                      <div className="mt-4 flex flex-wrap gap-1.5 border-t border-[#1f1217] pt-3">
+                        {[
+                          { id: "general", label: t("General", "Основное"), icon: "👤" },
+                          { id: "avatar", label: t("Avatar", "Аватар"), icon: "🖼️" },
+                          { id: "music", label: t("Theme Music", "Музыка темы"), icon: "🎵" },
+                          { id: "security", label: t("Security", "Безопасность"), icon: "🔒" },
+                        ].map((tab) => (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => setEditProfileActiveTab(tab.id as any)}
+                            className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition ${
+                              editProfileActiveTab === tab.id
+                                ? "bg-[#ffb7c5] text-black shadow-[0_0_14px_rgba(255,183,197,0.3)]"
+                                : "border border-[#23141a] bg-[#10090c] text-gray-400 hover:text-white"
+                            }`}
+                          >
+                            <span>{tab.icon}</span>
+                            <span>{tab.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Modal Body */}
+                    <div className="max-h-[70vh] overflow-y-auto px-6 py-5 space-y-4">
+                      {/* Tab 1: General */}
+                      {editProfileActiveTab === "general" && (
+                        <div className="space-y-4">
+                          <div className="rounded-2xl border border-[#23141a] bg-[#10090c] p-4">
+                            <label className="block">
+                              <span className="mb-1.5 block text-xs font-mono uppercase tracking-[0.16em] text-gray-400">
+                                {t("Displayed Name (Nickname)", "Отображаемое имя (Никнейм)")}
+                              </span>
+                              <input
+                                type="text"
+                                value={displayNameInput}
+                                maxLength={48}
+                                autoComplete="nickname"
+                                onChange={(e) => {
+                                  setDisplayNameInput(e.target.value);
+                                  setDisplayNameError(null);
+                                  setDisplayNameSuccess(null);
+                                }}
+                                className="w-full rounded-xl border border-[#2b1820] bg-[#080507] px-4 py-2.5 text-sm text-white outline-none focus:border-[#ffb7c5] transition"
+                                placeholder="Absolute"
+                              />
+                            </label>
+                            <p className="mt-1.5 text-[11px] text-gray-500">
+                              {t("Displayed at the top of your profile.", "Отображается вверху вашего профиля.")}
+                            </p>
+                            <div className="mt-3 flex items-center justify-between gap-3">
+                              <button
+                                type="button"
+                                onClick={handleDisplayNameSave}
+                                disabled={isDisplayNameSaving}
+                                className="rounded-full border border-[#ffb7c5]/40 bg-[#ffb7c5] px-4 py-1.5 text-xs font-bold uppercase tracking-[0.12em] text-black transition hover:bg-white disabled:opacity-50"
+                              >
+                                {isDisplayNameSaving ? t("Saving...", "Сохранение...") : t("Save Name", "Сохранить имя")}
+                              </button>
+                              {displayNameSuccess && (
+                                <span className="text-xs text-[#8ce5b2] font-medium">✓ {displayNameSuccess}</span>
+                              )}
+                              {displayNameError && (
+                                <span className="text-xs text-[#ff9aa9] font-medium">⚠ {displayNameError}</span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="rounded-2xl border border-[#23141a] bg-[#10090c] p-4">
+                            <label className="block">
+                              <span className="mb-1.5 block text-xs font-mono uppercase tracking-[0.16em] text-gray-400">
+                                {t("Sign-in Login", "Логин для входа")}
+                              </span>
+                              <input
+                                ref={ownerUsernameInputRef}
+                                type="text"
+                                value={usernameInput}
+                                minLength={3}
+                                maxLength={24}
+                                autoComplete="username"
+                                onChange={(e) => {
+                                  setUsernameInput(e.target.value);
+                                  setUsernameError(null);
+                                  setUsernameSuccess(null);
+                                }}
+                                className="w-full rounded-xl border border-[#2b1820] bg-[#080507] px-4 py-2.5 text-sm text-white outline-none focus:border-[#ffb7c5] transition"
+                                placeholder="your_login"
+                              />
+                            </label>
+                            <p className="mt-1.5 text-[11px] text-gray-500">
+                              {t("Letters, numbers, `.`, `_`, and `-` without spaces.", "Буквы, цифры, `.`, `_` и `-` без пробелов.")}
+                            </p>
+                            {requiresUsernamePasswordConfirmation && (
+                              <div className="mt-3">
+                                <span className="mb-1.5 block text-xs font-mono uppercase tracking-[0.16em] text-gray-400">
+                                  {t("Current Password (to confirm)", "Текущий пароль (для подтверждения)")}
+                                </span>
+                                <input
+                                  type="password"
+                                  value={usernamePasswordInput}
+                                  autoComplete="current-password"
+                                  onChange={(e) => {
+                                    setUsernamePasswordInput(e.target.value);
+                                    setUsernameError(null);
+                                    setUsernameSuccess(null);
+                                  }}
+                                  className="w-full rounded-xl border border-[#2b1820] bg-[#080507] px-4 py-2.5 text-sm text-white outline-none focus:border-[#ffb7c5] transition"
+                                  placeholder={t("Enter current password", "Введите текущий пароль")}
+                                />
+                              </div>
+                            )}
+                            <div className="mt-3 flex items-center justify-between gap-3">
+                              <button
+                                type="button"
+                                onClick={handleUsernameSave}
+                                disabled={isUsernameSaving}
+                                className="rounded-full border border-[#ffb7c5]/40 bg-[#ffb7c5] px-4 py-1.5 text-xs font-bold uppercase tracking-[0.12em] text-black transition hover:bg-white disabled:opacity-50"
+                              >
+                                {isUsernameSaving ? t("Saving...", "Сохранение...") : t("Save Login", "Сохранить логин")}
+                              </button>
+                              {usernameSuccess && (
+                                <span className="text-xs text-[#8ce5b2] font-medium">✓ {usernameSuccess}</span>
+                              )}
+                              {usernameError && (
+                                <span className="text-xs text-[#ff9aa9] font-medium">⚠ {usernameError}</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Tab 2: Avatar */}
+                      {editProfileActiveTab === "avatar" && (
+                        <div className="rounded-2xl border border-[#23141a] bg-[#10090c] p-5">
+                          <div className="flex flex-col sm:flex-row items-center gap-5">
+                            <div className="relative shrink-0">
+                              {hasActiveProfileAvatar ? (
+                                <AvatarMedia
+                                  src={activeProfileAvatarUrl ?? ""}
+                                  alt={primaryName}
+                                  loading="eager"
+                                  decoding="async"
+                                  className="h-28 w-28 rounded-3xl border border-[#ffb7c5]/30 object-cover shadow-[0_0_30px_rgba(255,183,197,0.2)]"
+                                />
+                              ) : (
+                                <div className="flex h-28 w-28 items-center justify-center rounded-3xl border border-[#ffb7c5]/30 bg-[#1a0e13] text-3xl font-black uppercase text-[#ffb7c5] shadow-[0_0_30px_rgba(255,183,197,0.2)]">
+                                  {initials}
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex-1 text-center sm:text-left">
+                              <p className="text-sm font-bold text-white">
+                                {hasActiveProfileAvatar ? t("Custom Avatar", "Пользовательский аватар") : t("Default Avatar", "Стандартный аватар")}
+                              </p>
+                              <p className="mt-1 text-xs text-gray-400">
+                                {t("Supported formats: PNG, JPG, WEBP, GIF (up to 5 MB).", "Поддерживаемые форматы: PNG, JPG, WEBP, GIF (до 5 МБ).")}
+                              </p>
+                              <div className="mt-4 flex flex-wrap items-center justify-center sm:justify-start gap-2.5">
+                                <button
+                                  type="button"
+                                  onClick={() => avatarInputRef.current?.click()}
+                                  disabled={isAvatarUploading || isAvatarDeleting}
+                                  className="rounded-full border border-[#ffb7c5]/40 bg-[#ffb7c5] px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-black transition hover:bg-white disabled:opacity-50"
+                                >
+                                  {isAvatarUploading ? t("Uploading...", "Загрузка...") : hasActiveProfileAvatar ? t("Replace Avatar", "Заменить аватар") : t("Upload Avatar", "Загрузить аватар")}
+                                </button>
+                                {hasActiveProfileAvatar && (
+                                  <button
+                                    type="button"
+                                    onClick={handleAvatarDelete}
+                                    disabled={isAvatarUploading || isAvatarDeleting}
+                                    className="rounded-full border border-[#ff5a54]/30 bg-[#16080b] px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-[#ff9aa9] hover:bg-[#ff5a54] hover:text-black transition disabled:opacity-50"
+                                  >
+                                    {isAvatarDeleting ? t("Deleting...", "Удаление...") : t("Delete", "Удалить")}
+                                  </button>
+                                )}
+                                <input ref={avatarInputRef} type="file" accept={AVATAR_FILE_ACCEPT} onChange={handleAvatarChange} className="hidden" />
+                              </div>
+                              {avatarSuccess && <p className="mt-2 text-xs text-[#8ce5b2]">✓ {avatarSuccess}</p>}
+                              {avatarError && <p className="mt-2 text-xs text-[#ff9aa9]">⚠ {avatarError}</p>}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Tab 3: Music Theme */}
+                      {editProfileActiveTab === "music" && (
+                        <div className="rounded-2xl border border-[#23141a] bg-[#10090c] p-5 space-y-4">
+                          <div>
+                            <label className="block">
+                              <span className="mb-1.5 block text-xs font-mono uppercase tracking-[0.16em] text-gray-400">
+                                {t("Theme Song (SoundCloud URL or Preset)", "Музыка профиля (SoundCloud URL или пресет)")}
+                              </span>
+                              <input
+                                type="text"
+                                list="profile-theme-track-options-modal"
+                                value={adminThemeSongInput}
+                                onChange={(e) => {
+                                  setAdminThemeSongInput(e.target.value);
+                                  setAdminThemeSongError(null);
+                                  setAdminThemeSongSuccess(null);
+                                }}
+                                placeholder="where-is-my-mind or https://soundcloud.com/..."
+                                className="w-full rounded-xl border border-[#2b1820] bg-[#080507] px-4 py-2.5 text-xs text-white outline-none focus:border-[#ffb7c5] transition"
+                              />
+                              <datalist id="profile-theme-track-options-modal">
+                                {PROFILE_THEME_OPTIONS.map((themeOption) => (
+                                  <option key={themeOption.key} value={themeOption.key}>
+                                    {themeOption.title}
+                                  </option>
+                                ))}
+                              </datalist>
+                            </label>
+                            <p className="mt-1.5 text-[11px] text-gray-500">
+                              {t("Current:", "Текущий трек:")} {profileThemeTitle ?? t("None", "Не задан")}
+                            </p>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2.5">
+                            <button
+                              type="button"
+                              onClick={() => adminThemeSongFileInputRef.current?.click()}
+                              disabled={isAdminThemeSongSaving || isAdminThemeSongUploading || isAdminThemeSongDeleting}
+                              className="rounded-full border border-[#3a2029] bg-[#170e13] px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-[#ffb7c5] hover:border-[#ffb7c5] transition disabled:opacity-50"
+                            >
+                              {isAdminThemeSongUploading ? t("Uploading...", "Загрузка...") : t("Upload Audio File", "Загрузить MP3")}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleAdminThemeSongSave}
+                              disabled={isAdminThemeSongSaving || isAdminThemeSongUploading || isAdminThemeSongDeleting}
+                              className="rounded-full border border-[#ffb7c5]/40 bg-[#ffb7c5] px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-black transition hover:bg-white disabled:opacity-50"
+                            >
+                              {isAdminThemeSongSaving ? t("Saving...", "Сохранение...") : t("Save Music", "Сохранить музыку")}
+                            </button>
+                            {profileThemeTitle && (
+                              <button
+                                type="button"
+                                onClick={handleAdminThemeSongDelete}
+                                disabled={isAdminThemeSongSaving || isAdminThemeSongUploading || isAdminThemeSongDeleting || isAdminThemeSongDeleteLocked}
+                                className="rounded-full border border-[#ff5a54]/30 bg-[#16080b] px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-[#ff9aa9] hover:bg-[#ff5a54] hover:text-black transition disabled:opacity-50"
+                              >
+                                {isAdminThemeSongDeleting ? t("Deleting...", "Удаление...") : t("Remove", "Удалить")}
+                              </button>
+                            )}
+                            <input
+                              ref={adminThemeSongFileInputRef}
+                              type="file"
+                              accept={PROFILE_THEME_AUDIO_FILE_ACCEPT}
+                              onChange={handleAdminThemeSongUpload}
+                              className="hidden"
+                            />
+                          </div>
+                          {adminThemeSongSuccess && <p className="text-xs text-[#8ce5b2]">✓ {adminThemeSongSuccess}</p>}
+                          {adminThemeSongError && <p className="text-xs text-[#ff9aa9]">⚠ {adminThemeSongError}</p>}
+                        </div>
+                      )}
+
+                      {/* Tab 4: Security */}
+                      {editProfileActiveTab === "security" && (
+                        <div className="space-y-4">
+                          {requiresUsernamePasswordConfirmation ? (
+                            <div className="rounded-2xl border border-[#23141a] bg-[#10090c] p-4 space-y-3">
+                              <p className="text-xs font-mono uppercase tracking-[0.16em] text-gray-400">
+                                {t("Change Password", "Смена пароля")}
+                              </p>
+                              <div>
+                                <span className="mb-1 block text-xs text-gray-500">{t("Current Password", "Текущий пароль")}</span>
+                                <input
+                                  type="password"
+                                  value={currentPasswordInput}
+                                  autoComplete="current-password"
+                                  onChange={(e) => {
+                                    setCurrentPasswordInput(e.target.value);
+                                    setPasswordError(null);
+                                    setPasswordSuccess(null);
+                                  }}
+                                  className="w-full rounded-xl border border-[#2b1820] bg-[#080507] px-4 py-2 text-xs text-white outline-none focus:border-[#ffb7c5] transition"
+                                  placeholder="••••••••"
+                                />
+                              </div>
+                              <div>
+                                <span className="mb-1 block text-xs text-gray-500">{t("New Password", "Новый пароль")}</span>
+                                <input
+                                  type="password"
+                                  value={newPasswordInput}
+                                  autoComplete="new-password"
+                                  onChange={(e) => {
+                                    setNewPasswordInput(e.target.value);
+                                    setPasswordError(null);
+                                    setPasswordSuccess(null);
+                                  }}
+                                  className="w-full rounded-xl border border-[#2b1820] bg-[#080507] px-4 py-2 text-xs text-white outline-none focus:border-[#ffb7c5] transition"
+                                  placeholder={t("Minimum 6 characters", "Минимум 6 символов")}
+                                />
+                              </div>
+                              <div>
+                                <span className="mb-1 block text-xs text-gray-500">{t("Confirm New Password", "Подтвердите новый пароль")}</span>
+                                <input
+                                  type="password"
+                                  value={confirmNewPasswordInput}
+                                  autoComplete="new-password"
+                                  onChange={(e) => {
+                                    setConfirmNewPasswordInput(e.target.value);
+                                    setPasswordError(null);
+                                    setPasswordSuccess(null);
+                                  }}
+                                  className="w-full rounded-xl border border-[#2b1820] bg-[#080507] px-4 py-2 text-xs text-white outline-none focus:border-[#ffb7c5] transition"
+                                  placeholder="••••••••"
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={handlePasswordSave}
+                                disabled={isPasswordSaving}
+                                className="rounded-full border border-[#ffb7c5]/40 bg-[#ffb7c5] px-4 py-1.5 text-xs font-bold uppercase tracking-[0.12em] text-black transition hover:bg-white disabled:opacity-50"
+                              >
+                                {isPasswordSaving ? t("Saving...", "Сохранение...") : t("Update Password", "Обновить пароль")}
+                              </button>
+                              {passwordSuccess && <p className="text-xs text-[#8ce5b2]">✓ {passwordSuccess}</p>}
+                              {passwordError && <p className="text-xs text-[#ff9aa9]">⚠ {passwordError}</p>}
+                            </div>
+                          ) : null}
+
+                          <div className="rounded-2xl border border-[#23141a] bg-[#10090c] p-4">
+                            <p className="text-xs font-mono uppercase tracking-[0.16em] text-gray-400 mb-1.5">
+                              {t("Password Recovery", "Восстановление пароля")}
+                            </p>
+                            <p className="text-xs text-gray-400 mb-3">
+                              {t("Send a password reset link to your linked email address.", "Отправить ссылку для сброса пароля на привязанную почту.")}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={handlePasswordResetRequest}
+                              disabled={isPasswordResetSending || !activeProfile.email}
+                              className="rounded-full border border-[#3a2029] bg-[#170e13] px-4 py-1.5 text-xs font-bold uppercase tracking-[0.12em] text-[#ffb7c5] hover:border-[#ffb7c5] transition disabled:opacity-50"
+                            >
+                              {isPasswordResetSending ? t("Sending...", "Отправка...") : t("Send Reset Email", "Отправить письмо сброса")}
+                            </button>
+                          </div>
+
+                          {shouldShowVerificationBanner && (
+                            <div className="rounded-2xl border border-[#4d2516] bg-[#170c08] p-4">
+                              <p className="text-xs font-mono uppercase tracking-[0.16em] text-[#f97316] mb-1.5">
+                                {t("Email Verification", "Подтверждение почты")}
+                              </p>
+                              <p className="text-xs text-gray-300 mb-3">
+                                {t("Verify your email to unlock all profile actions.", "Подтвердите почту для полного доступа к функциям.")}
+                              </p>
+                              <button
+                                type="button"
+                                onClick={handleResendVerification}
+                                disabled={isVerificationSending}
+                                className="rounded-full border border-[#f97316]/40 bg-[#f97316] px-4 py-1.5 text-xs font-bold uppercase tracking-[0.12em] text-black transition hover:bg-white disabled:opacity-50"
+                              >
+                                {isVerificationSending ? t("Sending...", "Отправка...") : t("Resend Email", "Отправить повторно")}
+                              </button>
+                              {verificationSuccess && <p className="mt-2 text-xs text-[#8ce5b2]">✓ {verificationSuccess}</p>}
+                              {verificationError && <p className="mt-2 text-xs text-[#ff9aa9]">⚠ {verificationError}</p>}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
             </div>
           </section>
@@ -8067,8 +8340,8 @@ export default function ProfilePage() {
               ) : null}
             </div>
           ) : null}
-          {!isAdminPanelOpen ? <div className="fixed bottom-4 right-[136px] z-[121] flex flex-col items-end gap-2">
-            {canOpenAdminPanel ? (
+          {!isAdminPanelOpen && canOpenAdminPanel ? (
+            <div className="fixed bottom-4 right-[208px] z-[121] flex items-center">
               <button
                 type="button"
                 onClick={() => {
@@ -8076,546 +8349,268 @@ export default function ProfilePage() {
                   loadAdminPromoCodes();
                 }}
                 aria-label="Open admin panel"
-                className={`inline-flex h-10 w-10 items-center justify-center rounded-full border text-base shadow-[0_0_24px_rgba(255,183,197,0.14)] transition hover:text-white ${
+                className={`group flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] shadow-[0_0_25px_rgba(255,183,197,0.18)] backdrop-blur-md transition-all hover:scale-105 ${
                   isTargetBanned
-                    ? "border-[#ff5a54]/50 bg-[#19090b] text-[#ffb3ad] hover:border-[#ff5a54]"
-                    : "border-[#ffb7c5]/35 bg-[#140d11] text-[#ffb7c5] hover:border-[#ffb7c5]/60"
+                    ? "border-[#ff5a54]/60 bg-[#1a0a0d] text-[#ffb3ad] hover:border-[#ff5a54] hover:shadow-[0_0_30px_rgba(255,90,84,0.3)]"
+                    : "border-[#ffb7c5]/40 bg-[#140b0f]/90 text-[#ffb7c5] hover:border-[#ffb7c5] hover:text-white hover:shadow-[0_0_30px_rgba(255,183,197,0.3)]"
                 }`}
               >
-                {"\uD83C\uDF38"}
+                <SakuraIcon className="h-3.5 w-3.5 transition group-hover:rotate-45" />
+                <span>{t("Admin Panel", "Админ-панель")}</span>
+                {isTargetBanned && (
+                  <span className="h-2 w-2 rounded-full bg-[#ff5a54] animate-pulse" />
+                )}
               </button>
-            ) : null}
-          </div> : null}
+            </div>
+          ) : null}
+
           {canOpenAdminPanel && isAdminPanelOpen ? (
-            <div className="fixed inset-0 z-50">
+            <div className="fixed inset-0 z-50 flex items-center justify-end">
               <button
                 type="button"
                 aria-label="Close admin panel"
                 onClick={() => setIsAdminPanelOpen(false)}
-                className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+                className="absolute inset-0 bg-black/75 backdrop-blur-sm transition-opacity"
               />
-              <aside className="absolute inset-y-4 right-4 flex w-[min(92vw,430px)] flex-col overflow-hidden rounded-[32px] border border-[#2a171c] bg-[#090909] shadow-[0_0_80px_rgba(255,183,197,0.12)]">
-                <div className="border-b border-[#1c1c1c] bg-[radial-gradient(circle_at_top,rgba(255,183,197,0.16),transparent_60%)] px-6 py-5">
+              <aside className="relative flex h-full w-[min(96vw,620px)] flex-col overflow-hidden border-l border-[#2a171c] bg-[#0a0709] shadow-[0_0_100px_rgba(255,183,197,0.15)]">
+                {/* Header */}
+                <div className="border-b border-[#1f1317] bg-[radial-gradient(circle_at_top,rgba(255,183,197,0.18),transparent_70%)] px-6 py-5">
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">{t("Admin Panel", "Админ-панель")}</p>
-                      <p className="mt-3 text-sm leading-relaxed text-gray-300">
-                        {t(`Root controls for profile #${activeProfile.profileId ?? "?"}.`, `Root-настройки профиля #${activeProfile.profileId ?? "?"}.`)}
-                      </p>
-                      <p className="mt-1 text-xs text-gray-500">
-                        {t("Managing", "Управление")} {primaryName}{hasUsername ? ` · @${activeProfile.login}` : ""}
+                      <div className="flex items-center gap-2">
+                        <SakuraIcon className="h-4 w-4 text-[#ffb7c5]" />
+                        <p className="font-mono text-xs uppercase tracking-[0.35em] text-[#ffb7c5]">
+                          {t("Admin Control Center", "Центр администрирования")}
+                        </p>
+                      </div>
+                      <h2 className="mt-1 text-base font-bold text-white">
+                        {primaryName} {hasUsername ? <span className="text-gray-400 font-mono text-xs font-normal">@{activeProfile.login}</span> : null}
+                      </h2>
+                      <p className="text-[11px] text-gray-500 font-mono">
+                        UID: #{activeProfile.profileId ?? "?"} {activeProfile.email ? `· ${activeProfile.email}` : ""}
                       </p>
                     </div>
                     <button
                       type="button"
                       onClick={() => setIsAdminPanelOpen(false)}
-                      className="relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#312228] bg-[#140d11] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white"
+                      className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#311c24] bg-[#160c10] text-gray-400 transition hover:border-[#ffb7c5]/50 hover:text-white"
                     >
-                      <span
-                        aria-hidden="true"
-                        className="pointer-events-none absolute left-1/2 top-1/2 h-[1.5px] w-4 -translate-x-1/2 -translate-y-1/2 rotate-45 rounded-full bg-current"
-                      />
-                      <span
-                        aria-hidden="true"
-                        className="pointer-events-none absolute left-1/2 top-1/2 h-[1.5px] w-4 -translate-x-1/2 -translate-y-1/2 -rotate-45 rounded-full bg-current"
-                      />
+                      ✕
                     </button>
                   </div>
+
+                  {/* Tab Navigation */}
+                  <div className="mt-4 flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                    {[
+                      { id: "sub", icon: "💎", label: t("Sub & HWID", "Подписка и HWID") },
+                      { id: "roles", icon: "👑", label: t("Roles", "Роли") },
+                      { id: "promos", icon: "🎟️", label: t("Promo Codes", "Промокоды") },
+                      { id: "security", icon: "🛡️", label: t("Security", "Безопасность") },
+                      { id: "edit", icon: "✏️", label: t("Moderation", "Модерация") },
+                    ].map((tab) => {
+                      const isActive = adminPanelActiveTab === tab.id;
+                      return (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => setAdminPanelActiveTab(tab.id as any)}
+                          className={`flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold uppercase tracking-[0.1em] transition ${
+                            isActive
+                              ? "border border-[#ffb7c5]/60 bg-[#ffb7c5] text-black shadow-[0_0_16px_rgba(255,183,197,0.25)]"
+                              : "border border-[#23151a] bg-[#120a0e] text-gray-400 hover:border-[#ffb7c5]/35 hover:text-white"
+                          }`}
+                        >
+                          <span>{tab.icon}</span>
+                          <span>{tab.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-                <div className="flex-1 overflow-y-auto px-6 py-5">
-                  <div className="space-y-5">
-                    <section className="rounded-[24px] border border-[#1d1d1d] bg-[#0d0d0d] p-5">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Status", "Статус")}</p>
-                          <p className="mt-2 text-sm font-semibold text-white">
-                            {isTargetBanned ? t("Account is banned", "Аккаунт заблокирован") : t("Account is active", "Аккаунт активен")}
-                          </p>
-                          {activeProfile.bannedAt ? (
-                            <p className="mt-1 text-xs text-gray-500">{t("Updated", "Обновлено")} {formatTime(activeProfile.bannedAt, locale)}</p>
-                          ) : null}
-                        </div>
-                        <span
-                          className={`inline-flex shrink-0 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${
-                            isTargetBanned
-                              ? "border-[#ff5a54]/40 bg-[#18090b] text-[#ffb3ad]"
-                              : "border-[#1f3b2f] bg-[#0d1713] text-[#8ce5b2]"
-                          }`}
-                        >
-                          {isTargetBanned ? t("Banned", "Заблокирован") : t("Active", "Активна")}
-                        </span>
-                      </div>
-                      <div className="mt-4 flex flex-wrap items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={handleBanToggle}
-                          disabled={isBanSaving || (isAdminSelfTarget && !isTargetBanned)}
-                          className={`inline-flex items-center justify-center rounded-full border px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                            isTargetBanned
-                              ? "border-[#1f3b2f] bg-[#0d1713] text-[#8ce5b2] hover:border-[#8ce5b2]/50 hover:text-white"
-                              : "border-[#ff5a54]/35 bg-[#ff5a54] text-black hover:bg-[#ff746f]"
-                          }`}
-                        >
-                          {isBanSaving ? t("Saving...", "Сохранение...") : isTargetBanned ? t("Unban Account", "Разблокировать аккаунт") : t("Ban Account", "Заблокировать аккаунт")}
-                        </button>
-                      </div>
-                      {isAdminSelfTarget && !isTargetBanned ? (
-                        <p className="mt-3 text-xs leading-relaxed text-gray-500">
-                          {t("Self-ban is blocked to prevent losing access to your root account.", "Самоблокировка запрещена, чтобы вы не потеряли доступ к root-аккаунту.")}
-                        </p>
-                      ) : null}
-                      {banError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{banError}</p> : null}
-                      {banSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{banSuccess}</p> : null}
-                    </section>
 
-                    <section className="rounded-[24px] border border-[#1d1d1d] bg-[#0d0d0d] p-5">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">
-                            {t("Subscription Access", "Доступ по подписке")}
-                          </p>
-                          <p className="mt-2 text-sm font-semibold text-white">
-                            {hasActiveSubscriptionRole
-                              ? t("Subscription is active", "Подписка активна")
-                              : t("Subscription is inactive", "Подписка неактивна")}
-                          </p>
+                {/* Tab Content Body */}
+                <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+                  {/* TAB 1: SUBSCRIPTION & HWID */}
+                  {adminPanelActiveTab === "sub" && (
+                    <div className="space-y-4">
+                      {/* Subscription Status Card */}
+                      <section className="rounded-[24px] border border-[#23151b] bg-[#10090d] p-5">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-400">
+                              {t("Subscription Access", "Доступ по подписке")}
+                            </p>
+                            <p className="mt-1 text-sm font-semibold text-white">
+                              {hasLifetimeRole
+                                ? t("Lifetime Subscription", "Подписка Навсегда (Lifetime)")
+                                : hasActiveSubscriptionRole
+                                ? t("Active Subscription", "Подписка активна")
+                                : t("No active subscription", "Подписка неактивна")}
+                            </p>
+                            <p className="mt-0.5 text-xs text-gray-400 font-mono">
+                              {profileSubscriptionUntilLabel}
+                            </p>
+                          </div>
+                          <span
+                            className={`inline-flex shrink-0 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${
+                              hasLifetimeRole
+                                ? "border-[#facc15]/40 bg-[#1f1a08] text-[#facc15]"
+                                : hasActiveSubscriptionRole
+                                ? "border-[#1f3b2f] bg-[#0d1713] text-[#8ce5b2]"
+                                : "border-[#3a3a3a] bg-[#111111] text-[#a3a3a3]"
+                            }`}
+                          >
+                            {hasLifetimeRole ? "Lifetime" : hasActiveSubscriptionRole ? t("Active", "Активна") : t("Inactive", "Неактивна")}
+                          </span>
                         </div>
-                        <span
-                          className={`inline-flex shrink-0 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${
-                            hasActiveSubscriptionRole
-                              ? "border-[#1f3b2f] bg-[#0d1713] text-[#8ce5b2]"
-                              : "border-[#3a3a3a] bg-[#111111] text-[#a3a3a3]"
-                          }`}
-                        >
-                          {hasActiveSubscriptionRole ? t("Active", "Активна") : t("Inactive", "Неактивна")}
-                        </span>
-                      </div>
-                      <div className="mt-4 flex flex-wrap items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={handleAdminGrantActiveSubscription}
-                          disabled={isAdminSubscriptionSaving || isRolesSaving || hasSubscriberRole || hasLifetimeRole}
-                          className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {isAdminSubscriptionSaving
-                            ? t("Saving...", "Сохранение...")
-                            : t("Grant Active Subscription", "Выдать активную подписку")}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleAdminGrantLifetimeSubscription}
-                          disabled={isAdminSubscriptionSaving || isRolesSaving || hasLifetimeRole}
-                          className="inline-flex items-center justify-center rounded-full border border-[#facc15]/45 bg-[#facc15] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#fde047] disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {isAdminSubscriptionSaving
-                            ? t("Saving...", "Saving...")
-                            : t("Grant Lifetime Subscription", "Grant Lifetime Subscription")}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleAdminRevokeActiveSubscription}
-                          disabled={isAdminSubscriptionSaving || isRolesSaving || !hasSubscriberRole}
-                          className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {isAdminSubscriptionSaving
-                            ? t("Saving...", "Saving...")
-                            : t("Revoke Active Subscription", "Revoke Active Subscription")}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleAdminRevokeLifetimeSubscription}
-                          disabled={isAdminSubscriptionSaving || isRolesSaving || !hasLifetimeRole}
-                          className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {isAdminSubscriptionSaving
-                            ? t("Saving...", "Saving...")
-                            : t("Revoke Lifetime Subscription", "Revoke Lifetime Subscription")}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleAdminToggleFreeze}
-                          disabled={isAdminSubscriptionSaving || isRolesSaving}
-                          className={`inline-flex items-center justify-center rounded-full border px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                            activeProfile?.isFrozen
-                              ? "border-[#f97316]/60 bg-gradient-to-r from-[#ea580c] to-[#f97316] text-white shadow-[0_0_16px_rgba(249,115,22,0.35)]"
-                              : "border-[#38bdf8]/40 bg-[#082f49] text-[#7dd3fc] hover:border-[#38bdf8] hover:text-white"
-                          }`}
-                        >
-                          {activeProfile?.isFrozen
-                            ? t("Unfreeze User", "Разморозить пользователя")
-                            : t("Freeze User", "Заморозить пользователя")}
-                        </button>
-                      </div>
-                      {hasSubscriberRole ? (
-                        <p className="mt-3 text-xs leading-relaxed text-gray-500">
-                          {t("This profile already has an active subscription role.", "У этого профиля уже есть роль активной подписки.")}
-                        </p>
-                      ) : null}
-                      {hasLifetimeRole ? (
-                        <p className="mt-3 text-xs leading-relaxed text-gray-500">
-                          {t("This profile already has a lifetime subscription role.", "This profile already has a lifetime subscription role.")}
-                        </p>
-                      ) : null}
-                      {hasTestPeriodRole && !hasSubscriberRole && !hasLifetimeRole ? (
-                        <p className="mt-3 text-xs leading-relaxed text-gray-500">
-                          {t("Granting active or lifetime subscription replaces the test period role.", "Granting active or lifetime subscription replaces the test period role.")}
-                        </p>
-                      ) : null}
-                      {adminSubscriptionError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{adminSubscriptionError}</p> : null}
-                      {adminSubscriptionSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{adminSubscriptionSuccess}</p> : null}
-                    </section>
 
-                    <section className="rounded-[24px] border border-[#1d1d1d] bg-[#0d0d0d] p-5">
-                      <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Sub Until & HWID", "Sub Until & HWID")}</p>
-                      <div className="mt-4">
-                        <p className="text-xs uppercase tracking-[0.22em] text-gray-500">{t("Sub Until", "Sub Until")}</p>
-                        <p className="mt-2 text-sm font-semibold text-white">{profileSubscriptionUntilLabel}</p>
+                        {/* Quick Grant / Revoke / Freeze Actions */}
+                        <div className="mt-4 grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={handleAdminGrantActiveSubscription}
+                            disabled={isAdminSubscriptionSaving || isRolesSaving || hasSubscriberRole || hasLifetimeRole}
+                            className="inline-flex items-center justify-center rounded-xl border border-[#ffb7c5]/30 bg-[#ffb7c5] px-3 py-2 text-xs font-bold uppercase tracking-[0.1em] text-black transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {isAdminSubscriptionSaving ? t("Saving...", "Сохранение...") : t("Grant 30 Days", "Выдать 30 дней")}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleAdminGrantLifetimeSubscription}
+                            disabled={isAdminSubscriptionSaving || isRolesSaving || hasLifetimeRole}
+                            className="inline-flex items-center justify-center rounded-xl border border-[#facc15]/45 bg-[#facc15] px-3 py-2 text-xs font-bold uppercase tracking-[0.1em] text-black transition hover:bg-[#fde047] disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {isAdminSubscriptionSaving ? t("Saving...", "Сохранение...") : t("Grant Lifetime", "Выдать навсегда")}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleAdminRevokeActiveSubscription}
+                            disabled={isAdminSubscriptionSaving || isRolesSaving || !hasSubscriberRole}
+                            className="inline-flex items-center justify-center rounded-xl border border-[#3a2029] bg-[#160c11] px-3 py-2 text-xs font-bold uppercase tracking-[0.1em] text-[#ffb7c5] transition hover:border-[#ffb7c5] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {t("Revoke 30D", "Снять подписку")}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleAdminRevokeLifetimeSubscription}
+                            disabled={isAdminSubscriptionSaving || isRolesSaving || !hasLifetimeRole}
+                            className="inline-flex items-center justify-center rounded-xl border border-[#3a2029] bg-[#160c11] px-3 py-2 text-xs font-bold uppercase tracking-[0.1em] text-[#ffb7c5] transition hover:border-[#ffb7c5] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {t("Revoke Lifetime", "Снять Lifetime")}
+                          </button>
+                        </div>
+
+                        {/* Freeze Button */}
+                        <div className="mt-3">
+                          <button
+                            type="button"
+                            onClick={handleAdminToggleFreeze}
+                            disabled={isAdminSubscriptionSaving || isRolesSaving}
+                            className={`w-full inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] transition disabled:opacity-50 ${
+                              activeProfile?.isFrozen
+                                ? "border-[#f97316]/60 bg-gradient-to-r from-[#ea580c] to-[#f97316] text-white shadow-[0_0_16px_rgba(249,115,22,0.35)]"
+                                : "border-[#38bdf8]/40 bg-[#082f49]/60 text-[#7dd3fc] hover:border-[#38bdf8] hover:text-white"
+                            }`}
+                          >
+                            <span>{activeProfile?.isFrozen ? "❄️" : "⏸️"}</span>
+                            <span>{activeProfile?.isFrozen ? t("Unfreeze Subscription", "Разморозить подписку") : t("Freeze Subscription", "Заморозить подписку")}</span>
+                          </button>
+                        </div>
+
+                        {adminSubscriptionError && <p className="mt-3 text-xs text-[#ff9aa9]">⚠ {adminSubscriptionError}</p>}
+                        {adminSubscriptionSuccess && <p className="mt-3 text-xs text-[#8ce5b2]">✓ {adminSubscriptionSuccess}</p>}
+                      </section>
+
+                      {/* Precise Expiry & Offsets Card */}
+                      <section className="rounded-[24px] border border-[#23151b] bg-[#10090d] p-5">
+                        <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-400">
+                          {t("Set Expiration Date", "Точная дата окончания")}
+                        </p>
                         {hasLifetimeRole ? (
-                          <p className="mt-3 text-xs leading-relaxed text-gray-500">
-                            {t("Lifetime subscription has no end date.", "Lifetime subscription has no end date.")}
+                          <p className="mt-2 text-xs text-gray-400">
+                            {t("Lifetime subscription has no end date.", "У подписки Lifetime нет даты окончания.")}
                           </p>
                         ) : (
                           <>
-                            <label className="mt-3 block">
+                            <div className="mt-3">
                               <input
                                 type="datetime-local"
                                 value={adminSubscriptionUntilInput}
-                                onChange={(event) => {
-                                  setAdminSubscriptionUntilInput(event.target.value);
+                                onChange={(e) => {
+                                  setAdminSubscriptionUntilInput(e.target.value);
                                   setAdminSubscriptionUntilError(null);
                                   setAdminSubscriptionUntilSuccess(null);
                                 }}
-                                className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55"
+                                className="w-full rounded-xl border border-[#2e1a22] bg-[#080507] px-4 py-2.5 text-xs text-white outline-none focus:border-[#ffb7c5]"
                               />
-                            </label>
-                            <div className="mt-4 flex flex-wrap items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => applyAdminSubscriptionUntilOffset({ days: 1 })}
-                                disabled={isAdminSubscriptionUntilSaving || isAdminHwidResetting}
-                                className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                {t("+1 Day", "+1 Day")}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => applyAdminSubscriptionUntilOffset({ days: 3 })}
-                                disabled={isAdminSubscriptionUntilSaving || isAdminHwidResetting}
-                                className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                {t("+3 Days", "+3 Days")}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => applyAdminSubscriptionUntilOffset({ days: 7 })}
-                                disabled={isAdminSubscriptionUntilSaving || isAdminHwidResetting}
-                                className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                {t("+1 Week", "+1 Week")}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => applyAdminSubscriptionUntilOffset({ months: 1 })}
-                                disabled={isAdminSubscriptionUntilSaving || isAdminHwidResetting}
-                                className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                {t("+1 Month", "+1 Month")}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => applyAdminSubscriptionUntilOffset({ years: 1 })}
-                                disabled={isAdminSubscriptionUntilSaving || isAdminHwidResetting}
-                                className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                {t("+1 Year", "+1 Year")}
-                              </button>
                             </div>
-                            <div className="mt-3 flex flex-wrap items-center gap-3">
+                            <div className="mt-3 flex flex-wrap gap-1.5">
+                              {[
+                                { label: "+1D", days: 1 },
+                                { label: "+3D", days: 3 },
+                                { label: "+1W", days: 7 },
+                                { label: "+1M", months: 1 },
+                                { label: "+1Y", years: 1 },
+                              ].map((btn, idx) => (
+                                <button
+                                  key={idx}
+                                  type="button"
+                                  onClick={() => applyAdminSubscriptionUntilOffset(btn.months ? { months: btn.months } : btn.years ? { years: btn.years } : { days: btn.days! })}
+                                  disabled={isAdminSubscriptionUntilSaving}
+                                  className="rounded-lg border border-[#311c24] bg-[#140b0f] px-2.5 py-1 text-xs font-mono font-bold text-[#ffb7c5] hover:border-[#ffb7c5] transition"
+                                >
+                                  {btn.label}
+                                </button>
+                              ))}
+                            </div>
+                            <div className="mt-3">
                               <button
                                 type="button"
                                 onClick={handleAdminSubscriptionUntilSave}
-                                disabled={isAdminSubscriptionUntilSaving || isAdminHwidResetting}
-                                className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60"
+                                disabled={isAdminSubscriptionUntilSaving}
+                                className="rounded-xl border border-[#ffb7c5]/40 bg-[#ffb7c5] px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-black transition hover:bg-white disabled:opacity-50"
                               >
-                                {isAdminSubscriptionUntilSaving ? t("Saving...", "Saving...") : t("Save Sub Until", "Save Sub Until")}
+                                {isAdminSubscriptionUntilSaving ? t("Saving...", "Сохранение...") : t("Save Date", "Сохранить дату")}
                               </button>
                             </div>
-                            {adminSubscriptionUntilError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{adminSubscriptionUntilError}</p> : null}
-                            {adminSubscriptionUntilSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{adminSubscriptionUntilSuccess}</p> : null}
+                            {adminSubscriptionUntilError && <p className="mt-2 text-xs text-[#ff9aa9]">⚠ {adminSubscriptionUntilError}</p>}
+                            {adminSubscriptionUntilSuccess && <p className="mt-2 text-xs text-[#8ce5b2]">✓ {adminSubscriptionUntilSuccess}</p>}
                           </>
                         )}
-                      </div>
-                      <div className="mt-6">
-                        <p className="text-xs uppercase tracking-[0.22em] text-gray-500">HWID</p>
-                        <p className="mt-2 break-all rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-xs text-gray-300">
-                          {profileHwid ?? t("Not set", "Not set")}
-                        </p>
-                        <div className="mt-4 flex flex-wrap items-center gap-3">
+                      </section>
+
+                      {/* HWID Management Card */}
+                      <section className="rounded-[24px] border border-[#23151b] bg-[#10090d] p-5">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-400">HWID Binding</p>
+                            <p className="mt-1 font-mono text-xs text-gray-300 break-all">
+                              {profileHwid ?? t("Not bound to any hardware", "Не привязан к железу")}
+                            </p>
+                          </div>
                           <button
                             type="button"
                             onClick={handleAdminResetHwid}
-                            disabled={isAdminHwidResetting || isAdminSubscriptionUntilSaving || !profileHwid}
-                            className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={isAdminHwidResetting || !profileHwid}
+                            className="inline-flex shrink-0 items-center justify-center rounded-xl border border-[#ffb7c5]/30 bg-[#160c11] px-3.5 py-2 text-xs font-bold uppercase tracking-[0.12em] text-[#ffb7c5] transition hover:border-[#ffb7c5] hover:text-white disabled:opacity-50"
                           >
-                            {isAdminHwidResetting ? t("Resetting...", "Resetting...") : t("Reset HWID", "Reset HWID")}
+                            {isAdminHwidResetting ? t("Resetting...", "Сброс...") : t("Reset HWID", "Сбросить HWID")}
                           </button>
                         </div>
-                        {adminHwidError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{adminHwidError}</p> : null}
-                        {adminHwidSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{adminHwidSuccess}</p> : null}
-                      </div>
-                    </section>
+                        {adminHwidError && <p className="mt-2 text-xs text-[#ff9aa9]">⚠ {adminHwidError}</p>}
+                        {adminHwidSuccess && <p className="mt-2 text-xs text-[#8ce5b2]">✓ {adminHwidSuccess}</p>}
+                      </section>
+                    </div>
+                  )}
 
-                    <section className="rounded-[24px] border border-[#1d1d1d] bg-[#0d0d0d] p-5">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Email Verification", "Подтверждение почты")}</p>
-                          <p className="mt-2 text-sm font-semibold text-white">
-                            {targetVerificationStatus === "no-email"
-                              ? t("No email attached", "Почта не привязана")
-                              : targetVerificationStatus === "locked"
-                                ? t("Verification required", "Требуется подтверждение")
-                                : targetVerificationStatus === "verified"
-                                  ? t("Email verified", "Почта подтверждена")
-                                  : t("State unknown", "Статус неизвестен")}
-                          </p>
-                          {activeProfile.email ? (
-                            <p className="mt-1 text-xs text-gray-500">{activeProfile.email}</p>
-                          ) : (
-                            <p className="mt-1 text-xs text-gray-500">{t("This account does not have a stored email.", "У этого аккаунта нет сохранённой почты.")}</p>
-                          )}
-                        </div>
-                        <span
-                          className={`inline-flex shrink-0 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${
-                            targetVerificationStatus === "no-email"
-                              ? "border-[#2b2b2b] bg-[#101010] text-gray-400"
-                              : targetVerificationStatus === "locked"
-                                ? "border-[#ffb7c5]/35 bg-[#140d11] text-[#ffb7c5]"
-                                : targetVerificationStatus === "verified"
-                                  ? "border-[#1f3b2f] bg-[#0d1713] text-[#8ce5b2]"
-                                  : "border-[#6b5b22] bg-[#171308] text-[#f4e2a2]"
-                          }`}
-                        >
-                          {targetVerificationStatus === "no-email"
-                            ? t("Unavailable", "Недоступно")
-                            : targetVerificationStatus === "locked"
-                              ? t("Locked", "Заблокировано")
-                              : targetVerificationStatus === "verified"
-                                ? t("Verified", "Подтверждено")
-                                : t("Unknown", "Неизвестно")}
-                        </span>
-                      </div>
-                      <div className="mt-4 flex flex-wrap items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={handleAdminVerificationToggle}
-                          disabled={
-                            isAdminVerificationSaving ||
-                            !activeProfile.email ||
-                            (isAdminSelfTarget && isTargetVerified)
-                          }
-                          className={`inline-flex items-center justify-center rounded-full border px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                            isTargetVerificationLocked
-                              ? "border-[#1f3b2f] bg-[#0d1713] text-[#8ce5b2] hover:border-[#8ce5b2]/50 hover:text-white"
-                              : "border-[#ffb7c5]/35 bg-[#ffb7c5] text-black hover:bg-[#ffc8d3]"
-                          }`}
-                        >
-                          {isAdminVerificationSaving
-                            ? t("Saving...", "Сохранение...")
-                            : isTargetVerificationLocked || targetVerificationStatus === "unknown"
-                              ? t("Mark Verified", "Отметить подтверждённой")
-                              : t("Revoke Verification", "Отозвать подтверждение")}
-                        </button>
-                      </div>
-                      {isAdminSelfTarget && isTargetVerified ? (
-                        <p className="mt-3 text-xs leading-relaxed text-gray-500">
-                          {t("Self-revoke is blocked to prevent losing access to your own root account.", "Самоотзыв запрещён, чтобы вы не потеряли доступ к своему root-аккаунту.")}
+                  {/* TAB 2: ROLES */}
+                  {adminPanelActiveTab === "roles" && (
+                    <div className="space-y-4">
+                      <section className="rounded-[24px] border border-[#23151b] bg-[#10090d] p-5">
+                        <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-[#ffb7c5]">
+                          {t("Assigned Roles", "Назначенные роли")}
                         </p>
-                      ) : null}
-                      {adminVerificationError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{adminVerificationError}</p> : null}
-                      {adminVerificationSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{adminVerificationSuccess}</p> : null}
-                    </section>
-
-                    <section className="rounded-[24px] border border-[#1d1d1d] bg-[#0d0d0d] p-5">
-                      <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Password Recovery", "Восстановление пароля")}</p>
-                      <p className="mt-3 text-xs leading-relaxed text-gray-400">
-                        {t("Send a reset link to the linked email address for this account.", "Отправьте ссылку для сброса на привязанную почту этого аккаунта.")}
-                      </p>
-                      <div className="mt-4 flex flex-wrap items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={handleAdminPasswordResetRequest}
-                          disabled={isAdminPasswordResetSending || isAccountDeleting}
-                          className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {isAdminPasswordResetSending ? t("Sending...", "Отправка...") : t("Send Reset Link", "Отправить ссылку сброса")}
-                        </button>
-                      </div>
-                      {adminPasswordResetError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{adminPasswordResetError}</p> : null}
-                      {adminPasswordResetSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{adminPasswordResetSuccess}</p> : null}
-                    </section>
-
-                    <section className="rounded-[24px] border border-[#3b1e24] bg-[#0d0d0d] p-5">
-                      <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-[#ff9aa9]">{t("Danger Zone", "Опасная зона")}</p>
-                      <p className="mt-3 text-xs leading-relaxed text-gray-400">
-                        {t("Account deletion is available only for the current signed-in account.", "Удаление аккаунта доступно только для текущего авторизованного аккаунта.")}
-                      </p>
-                      <div className="mt-4 flex flex-wrap items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={handleDeleteAccount}
-                          disabled={!isAdminSelfTarget || isAccountDeleting || isAdminPasswordResetSending}
-                          className="inline-flex items-center justify-center rounded-full border border-[#ff5a54]/35 bg-[#ff5a54] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ff746f] disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {isAccountDeleting ? t("Deleting...", "Удаление...") : t("Delete Account", "Удалить аккаунт")}
-                        </button>
-                      </div>
-                      {!isAdminSelfTarget ? (
-                        <p className="mt-3 text-xs leading-relaxed text-gray-500">
-                          {t("Open your own profile to use account deletion.", "Откройте свой профиль, чтобы использовать удаление аккаунта.")}
-                        </p>
-                      ) : null}
-                      {deleteAccountError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{deleteAccountError}</p> : null}
-                    </section>
-
-                    <section className="rounded-[24px] border border-[#1d1d1d] bg-[#0d0d0d] p-5">
-                      <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Profile Name", "Имя профиля")}</p>
-                      <label className="mt-4 block">
-                        <span className="mb-2 block text-xs text-gray-500">{t("Displayed name", "Отображаемое имя")}</span>
-                        <input
-                          type="text"
-                          value={displayNameInput}
-                          maxLength={48}
-                          autoComplete="nickname"
-                          onChange={(event) => {
-                            setDisplayNameInput(event.target.value);
-                            setDisplayNameError(null);
-                            setDisplayNameSuccess(null);
-                          }}
-                          className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55"
-                          placeholder="Absolute"
-                        />
-                      </label>
-                      <div className="mt-4 flex flex-wrap items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={handleDisplayNameSave}
-                          disabled={isDisplayNameSaving}
-                          className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {isDisplayNameSaving ? t("Saving...", "Сохранение...") : t("Save Name", "Сохранить имя")}
-                        </button>
-                      </div>
-                      {displayNameError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{displayNameError}</p> : null}
-                      {displayNameSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{displayNameSuccess}</p> : null}
-                    </section>
-
-                    <section className="rounded-[24px] border border-[#1d1d1d] bg-[#0d0d0d] p-5">
-                      <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Login", "Логин")}</p>
-                      <label className="mt-4 block">
-                        <span className="mb-2 block text-xs text-gray-500">{t("Sign-in login", "Логин для входа")}</span>
-                        <input
-                          ref={adminUsernameInputRef}
-                          type="text"
-                          value={usernameInput}
-                          minLength={3}
-                          maxLength={24}
-                          autoComplete="username"
-                          onChange={(event) => {
-                            setUsernameInput(event.target.value);
-                            setUsernameError(null);
-                            setUsernameSuccess(null);
-                          }}
-                          className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55"
-                          placeholder="your_login"
-                        />
-                      </label>
-                      <p className="mt-2 text-xs leading-relaxed text-gray-500">{t("Login without spaces. Letters, numbers, `.`, `_`, and `-` are supported.", "Логин без пробелов. Поддерживаются буквы, цифры, `.`, `_` и `-`.")}</p>
-                      <div className="mt-4 flex flex-wrap items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={handleUsernameSave}
-                          disabled={isUsernameSaving}
-                          className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {isUsernameSaving ? t("Saving...", "Сохранение...") : t("Save Login", "Сохранить логин")}
-                        </button>
-                      </div>
-                      {usernameError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{usernameError}</p> : null}
-                      {usernameSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{usernameSuccess}</p> : null}
-                    </section>
-
-                    <section className="rounded-[24px] border border-[#1d1d1d] bg-[#0d0d0d] p-5">
-                      <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Profile Music", "Profile Music")}</p>
-                      <label className="mt-4 block">
-                        <span className="mb-2 block text-xs text-gray-500">{t("Theme track / URL", "Theme track / URL")}</span>
-                        <input
-                          type="text"
-                          list="profile-theme-track-options"
-                          value={adminThemeSongInput}
-                          onChange={(event) => {
-                            setAdminThemeSongInput(event.target.value);
-                            setAdminThemeSongError(null);
-                            setAdminThemeSongSuccess(null);
-                          }}
-                          className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55"
-                          placeholder="where-is-my-mind or https://..."
-                        />
-                        <datalist id="profile-theme-track-options">
-                          {PROFILE_THEME_OPTIONS.map((themeOption) => (
-                            <option key={themeOption.key} value={themeOption.key}>
-                              {themeOption.title}
-                            </option>
-                          ))}
-                        </datalist>
-                        <p className="mt-2 text-xs leading-relaxed text-gray-500">
-                          SoundCloud URLs and direct audio links are supported.
-                        </p>
-                        <input
-                          ref={adminThemeSongFileInputRef}
-                          type="file"
-                          accept={PROFILE_THEME_AUDIO_FILE_ACCEPT}
-                          onChange={handleAdminThemeSongUpload}
-                          className="hidden"
-                        />
-                      </label>
-                      <div className="mt-4 flex flex-wrap items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() => adminThemeSongFileInputRef.current?.click()}
-                          disabled={isAdminThemeSongSaving || isAdminThemeSongUploading || isAdminThemeSongDeleting}
-                          className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {isAdminThemeSongUploading ? t("Uploading...", "Загрузка...") : t("Upload Music", "Upload Music")}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleAdminThemeSongDelete}
-                          disabled={isAdminThemeSongSaving || isAdminThemeSongUploading || isAdminThemeSongDeleting || isAdminThemeSongDeleteLocked}
-                          className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ff9aa9] transition hover:border-[#ff9aa9]/50 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {isAdminThemeSongDeleting ? t("Deleting...", "Удаление...") : t("Delete Track", "Delete Track")}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleAdminThemeSongSave}
-                          disabled={isAdminThemeSongSaving || isAdminThemeSongUploading || isAdminThemeSongDeleting}
-                          className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {isAdminThemeSongSaving ? t("Saving...", "Сохранение...") : t("Save Music", "Save Music")}
-                        </button>
-                        <span className="text-xs text-gray-500">
-                          {t("Current:", "Current:")} {profileThemeTitle ?? t("None", "None")}
-                        </span>
-                      </div>
-                      {adminThemeSongError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{adminThemeSongError}</p> : null}
-                      {adminThemeSongSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{adminThemeSongSuccess}</p> : null}
-                    </section>
-
-                    <section className="rounded-[24px] border border-[#1d1d1d] bg-[#0d0d0d] p-5">
-                      <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Roles", "Роли")}</p>
-                      <div className="mt-4">
-                        <p className="text-xs uppercase tracking-[0.22em] text-gray-500">{t("Assigned", "Назначены")}</p>
-                        <div className="mt-3 flex flex-wrap gap-3">
+                        <div className="mt-3 flex flex-wrap gap-2">
                           {normalizedDraftRoles.map((role) => {
                             const isLastUserRole =
                               normalizedDraftRoles.length === 1 &&
@@ -8629,225 +8624,179 @@ export default function ProfilePage() {
                                 onClick={() => removeRole(role)}
                                 disabled={isLastUserRole || isRolesSaving}
                                 style={{ ...roleBadgeStyle(role), ...roleBadgeTextStyle }}
-                                className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border px-4 py-2 text-[11px] font-bold disabled:cursor-not-allowed disabled:opacity-60"
+                                className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 py-1.5 text-xs font-bold transition hover:opacity-80 disabled:opacity-50"
                               >
-                                <span aria-hidden="true" className="inline-flex items-center">{renderRoleBadgeText(role)}</span>
-                                <span className="ml-2 text-[14px] leading-none">?</span>
+                                <span>{renderRoleBadgeText(role)}</span>
+                                <span className="ml-1 text-sm font-bold text-red-400">×</span>
                               </button>
                             );
                           })}
                         </div>
-                      </div>
-                      <div className="mt-5">
-                        <p className="text-xs uppercase tracking-[0.22em] text-gray-500">{t("Available", "Доступны")}</p>
-                        <div className="mt-3 flex flex-wrap gap-3">
-                          {availableRoleOptions.map((role) => (
-                            <button
-                              key={role}
-                              type="button"
-                              title={roleBadgeLabel(role)}
-                              onClick={() => addRole(role)}
-                              disabled={isRolesSaving}
-                              className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border px-4 py-2 text-[11px] font-bold opacity-70 transition hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-40"
-                              style={{ ...roleBadgeTextStyle, borderColor: "#2c2c2c", backgroundColor: "#101010", color: "#9ca3af", boxShadow: "none" }}
-                            >
-                              <span className="mr-2 text-[14px] leading-none">+</span>
-                              <span aria-hidden="true" className="inline-flex items-center">{renderRoleBadgeText(role)}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="mt-5 flex flex-wrap items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={handleRolesSave}
-                          disabled={isRolesSaving || !hasRoleChanges}
-                          className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {isRolesSaving ? t("Saving...", "Сохранение...") : t("Save Roles", "Сохранить роли")}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={resetRoles}
-                          disabled={isRolesSaving || !hasRoleChanges}
-                          className="inline-flex items-center justify-center rounded-full border border-[#2b1b1e] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {t("Reset", "Сбросить")}
-                        </button>
-                      </div>
-                      {rolesError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{rolesError}</p> : null}
-                      {rolesSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{rolesSuccess}</p> : null}
-                    </section>
 
-                    <section className="rounded-[24px] border border-[#1d1d1d] bg-[#0d0d0d] p-5">
-                      <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">{t("Avatar", "Аватар")}</p>
-                      <p className="mt-3 text-xs leading-relaxed text-gray-400">{t("Upload, replace, or delete the avatar for this account. PNG, JPG, and WEBP are available to all users. GIF, MP4, and WEBM require a higher profile tier.", "Здесь можно загрузить, заменить или удалить аватар этого аккаунта. PNG, JPG и WEBP доступны всем пользователям. GIF, MP4 и WEBM требуют более высокого уровня профиля.")}</p>
-                      <div className="mt-4 flex flex-wrap items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() => adminAvatarInputRef.current?.click()}
-                          disabled={isAvatarUploading || isAvatarDeleting}
-                          className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {isAvatarUploading ? t("Uploading...", "Загрузка...") : hasActiveProfileAvatar ? t("Replace Avatar", "Заменить аватар") : t("Upload Avatar", "Загрузить аватар")}
-                        </button>
-                        {hasActiveProfileAvatar ? (
+                        <div className="mt-6 border-t border-[#1e1318] pt-4">
+                          <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-400">
+                            {t("Available Roles to Add", "Доступные роли для добавления")}
+                          </p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {availableRoleOptions.map((role) => (
+                              <button
+                                key={role}
+                                type="button"
+                                title={roleBadgeLabel(role)}
+                                onClick={() => addRole(role)}
+                                disabled={isRolesSaving}
+                                className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-[#2a1720] bg-[#140b0f] px-3.5 py-1.5 text-xs font-semibold text-gray-400 transition hover:border-[#ffb7c5]/50 hover:text-white disabled:opacity-40"
+                              >
+                                <span className="text-[#ffb7c5] font-bold">+</span>
+                                <span>{renderRoleBadgeText(role)}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="mt-6 flex items-center gap-3 border-t border-[#1e1318] pt-4">
                           <button
                             type="button"
-                            onClick={handleAvatarDelete}
-                            disabled={isAvatarUploading || isAvatarDeleting}
-                            className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                            onClick={handleRolesSave}
+                            disabled={isRolesSaving || !hasRoleChanges}
+                            className="rounded-full border border-[#ffb7c5]/40 bg-[#ffb7c5] px-5 py-2 text-xs font-bold uppercase tracking-[0.12em] text-black transition hover:bg-white disabled:opacity-50"
                           >
-                            {isAvatarDeleting ? t("Deleting...", "Удаление...") : t("Delete Avatar", "Удалить аватар")}
+                            {isRolesSaving ? t("Saving...", "Сохранение...") : t("Save Roles", "Сохранить роли")}
                           </button>
-                        ) : null}
-                        <input
-                          ref={adminAvatarInputRef}
-                          type="file"
-                          accept={AVATAR_FILE_ACCEPT}
-                          onChange={handleAvatarChange}
-                          className="hidden"
-                        />
-                      </div>
-                      {avatarError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{avatarError}</p> : null}
-                      {avatarSuccess ? <p className="mt-3 text-xs leading-relaxed text-[#8ce5b2]">{avatarSuccess}</p> : null}
-                    </section>
-                    {/* Promo Codes Management Section */}
-                    <section className="rounded-[24px] border border-[#ffb7c5]/25 bg-[radial-gradient(circle_at_top_left,rgba(255,183,197,0.06),transparent_60%),#0d0d0d] p-5 shadow-[0_0_24px_rgba(255,183,197,0.06)]">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2">
-                          
+                          <button
+                            type="button"
+                            onClick={resetRoles}
+                            disabled={isRolesSaving || !hasRoleChanges}
+                            className="rounded-full border border-[#2a1720] bg-[#140b0f] px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-[#ffb7c5] transition hover:border-[#ffb7c5] hover:text-white disabled:opacity-50"
+                          >
+                            {t("Reset Changes", "Сбросить изменения")}
+                          </button>
+                        </div>
+                        {rolesError && <p className="mt-3 text-xs text-[#ff9aa9]">⚠ {rolesError}</p>}
+                        {rolesSuccess && <p className="mt-3 text-xs text-[#8ce5b2]">✓ {rolesSuccess}</p>}
+                      </section>
+                    </div>
+                  )}
+
+                  {/* TAB 3: PROMO CODES */}
+                  {adminPanelActiveTab === "promos" && (
+                    <div className="space-y-4">
+                      {/* Generator Card */}
+                      <section className="rounded-[24px] border border-[#ffb7c5]/25 bg-[radial-gradient(circle_at_top_left,rgba(255,183,197,0.06),transparent_60%),#10090d] p-5 shadow-[0_0_24px_rgba(255,183,197,0.06)]">
+                        <div className="flex items-center justify-between gap-3">
                           <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-[#ffb7c5]">
                             {t("Promo Codes Generator", "Генератор промокодов")}
                           </p>
+                          <button
+                            type="button"
+                            onClick={loadAdminPromoCodes}
+                            disabled={isAdminPromoLoading}
+                            className="text-xs text-gray-400 hover:text-white transition"
+                          >
+                            {isAdminPromoLoading ? t("Loading...", "Загрузка...") : t("Refresh List", "Обновить список")}
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          onClick={loadAdminPromoCodes}
-                          disabled={isAdminPromoLoading}
-                          className="text-xs text-gray-400 hover:text-white transition"
-                          title={t("Refresh list", "Обновить список")}
-                        >
-                          {isAdminPromoLoading ? t("Loading...", "Загрузка...") : t("Refresh", "Обновить")}
-                        </button>
-                      </div>
-                      <p className="mt-2 text-xs leading-relaxed text-gray-400">
-                        {t(
-                          "Generate unique promo codes for subscription access. Only administrators can create and manage codes.",
-                          "Создание уникальных промокодов для активации подписки. Только администраторы могут генерировать коды."
-                        )}
-                      </p>
 
-                      {/* Promo Code Creation Form */}
-                      <div className="mt-4 rounded-2xl border border-[#25171c] bg-[#120a0e] p-4 space-y-3.5">
-                        <div className="flex flex-col sm:flex-row gap-2">
-                          <div className="relative flex-1">
+                        <div className="mt-4 space-y-3.5">
+                          <div className="flex flex-col sm:flex-row gap-2">
                             <input
                               type="text"
                               value={adminPromoCodeInput}
                               onChange={(e) => setAdminPromoCodeInput(e.target.value.toUpperCase())}
                               placeholder={t("Code (e.g. SAKURA-VIP)", "Промокод (например, SAKURA-VIP)")}
                               maxLength={32}
-                              className="w-full rounded-xl border border-[#311c24] bg-[#090909] px-3.5 py-2 text-xs font-mono font-bold uppercase text-white outline-none placeholder:text-gray-600 focus:border-[#ffb7c5]/50"
+                              className="flex-1 rounded-xl border border-[#311c24] bg-[#090507] px-3.5 py-2 text-xs font-mono font-bold uppercase text-white outline-none focus:border-[#ffb7c5]"
                             />
+                            <button
+                              type="button"
+                              onClick={generateRandomPromoCode}
+                              className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[#3a2a31] bg-[#160c11] px-4 py-2 text-xs font-semibold text-[#ffb7c5] transition hover:bg-[#22131b]"
+                            >
+                              🎲 <span>{t("Random", "Случайный")}</span>
+                            </button>
                           </div>
-                          <button
-                            type="button"
-                            onClick={generateRandomPromoCode}
-                            className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[#3a2a31] bg-[#180e14] px-3.5 py-2 text-xs font-semibold text-[#ffb7c5] transition hover:bg-[#22131b]"
-                          >
-                            
-                            <span>{t("Random", "Случайный")}</span>
-                          </button>
-                        </div>
 
-                        {/* Duration Presets */}
-                        <div>
-                          <p className="mb-1.5 text-[10px] font-mono uppercase tracking-[0.18em] text-gray-400">
-                            {t("Duration", "Длительность")}
-                          </p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {[
-                              { label: t("1 Day", "1 День"), days: 1 },
-                              { label: t("3 Days", "3 Дня"), days: 3 },
-                              { label: t("7 Days", "7 Дней"), days: 7 },
-                              { label: t("14 Days", "14 Дней"), days: 14 },
-                              { label: t("30 Days", "30 Дней"), days: 30 },
-                              { label: t("90 Days", "90 Дней"), days: 90 },
-                              { label: t("365 Days", "1 Год"), days: 365 },
-                              { label: t("Lifetime", "Навсегда"), days: 0 },
-                            ].map((preset) => {
-                              const isSelected = adminPromoDaysInput === preset.days;
-                              return (
-                                <button
-                                  key={preset.days}
-                                  type="button"
-                                  onClick={() => setAdminPromoDaysInput(preset.days)}
-                                  className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold transition ${
-                                    isSelected
-                                      ? "border border-[#ffb7c5]/60 bg-[#ffb7c5] text-black shadow-[0_0_12px_rgba(255,183,197,0.3)]"
-                                      : "border border-[#2a1a21] bg-[#0d090b] text-gray-400 hover:text-white"
-                                  }`}
-                                >
-                                  {preset.label}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {/* Duration presets */}
                           <div>
                             <p className="mb-1.5 text-[10px] font-mono uppercase tracking-[0.18em] text-gray-400">
-                              {t("Max Activations", "Макс. использований")}
+                              {t("Duration", "Длительность")}
                             </p>
-                            <input
-                              type="number"
-                              min={1}
-                              max={9999}
-                              value={adminPromoUsesInput}
-                              onChange={(e) => setAdminPromoUsesInput(Math.max(1, parseInt(e.target.value) || 1))}
-                              className="w-full rounded-xl border border-[#311c24] bg-[#090909] px-3.5 py-1.5 text-xs text-white outline-none focus:border-[#ffb7c5]/50"
-                            />
+                            <div className="flex flex-wrap gap-1.5">
+                              {[
+                                { label: t("1 Day", "1 День"), days: 1 },
+                                { label: t("3 Days", "3 Дня"), days: 3 },
+                                { label: t("7 Days", "7 Дней"), days: 7 },
+                                { label: t("14 Days", "14 Дней"), days: 14 },
+                                { label: t("30 Days", "30 Дней"), days: 30 },
+                                { label: t("90 Days", "90 Дней"), days: 90 },
+                                { label: t("365 Days", "1 Год"), days: 365 },
+                                { label: t("Lifetime", "Навсегда"), days: 0 },
+                              ].map((preset) => {
+                                const isSelected = adminPromoDaysInput === preset.days;
+                                return (
+                                  <button
+                                    key={preset.days}
+                                    type="button"
+                                    onClick={() => setAdminPromoDaysInput(preset.days)}
+                                    className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold transition ${
+                                      isSelected
+                                        ? "border border-[#ffb7c5]/60 bg-[#ffb7c5] text-black shadow-[0_0_12px_rgba(255,183,197,0.3)]"
+                                        : "border border-[#2a1a21] bg-[#090507] text-gray-400 hover:text-white"
+                                    }`}
+                                  >
+                                    {preset.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
                           </div>
-                          <div>
-                            <p className="mb-1.5 text-[10px] font-mono uppercase tracking-[0.18em] text-gray-400">
-                              {t("Note / Description", "Примечание")}
-                            </p>
-                            <input
-                              type="text"
-                              maxLength={64}
-                              value={adminPromoNoteInput}
-                              onChange={(e) => setAdminPromoNoteInput(e.target.value)}
-                              placeholder={t("e.g. VK Giveaway", "например, розыгрыш")}
-                              className="w-full rounded-xl border border-[#311c24] bg-[#090909] px-3.5 py-1.5 text-xs text-white outline-none placeholder:text-gray-600 focus:border-[#ffb7c5]/50"
-                            />
-                          </div>
-                        </div>
 
-                        <div className="pt-1 flex items-center justify-between gap-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <p className="mb-1.5 text-[10px] font-mono uppercase tracking-[0.18em] text-gray-400">
+                                {t("Max Activations", "Макс. использований")}
+                              </p>
+                              <input
+                                type="number"
+                                min={1}
+                                max={9999}
+                                value={adminPromoUsesInput}
+                                onChange={(e) => setAdminPromoUsesInput(Math.max(1, parseInt(e.target.value) || 1))}
+                                className="w-full rounded-xl border border-[#311c24] bg-[#090507] px-3.5 py-1.5 text-xs text-white outline-none focus:border-[#ffb7c5]"
+                              />
+                            </div>
+                            <div>
+                              <p className="mb-1.5 text-[10px] font-mono uppercase tracking-[0.18em] text-gray-400">
+                                {t("Note / Description", "Примечание")}
+                              </p>
+                              <input
+                                type="text"
+                                maxLength={64}
+                                value={adminPromoNoteInput}
+                                onChange={(e) => setAdminPromoNoteInput(e.target.value)}
+                                placeholder={t("e.g. VK Giveaway", "например, розыгрыш")}
+                                className="w-full rounded-xl border border-[#311c24] bg-[#090507] px-3.5 py-1.5 text-xs text-white outline-none placeholder:text-gray-600 focus:border-[#ffb7c5]"
+                              />
+                            </div>
+                          </div>
+
                           <button
                             type="button"
                             onClick={handleAdminCreatePromo}
                             disabled={isAdminPromoCreating}
                             className="inline-flex items-center justify-center gap-2 rounded-full border border-[#ffb7c5]/40 bg-[#ffb7c5] px-5 py-2 text-xs font-bold uppercase tracking-[0.14em] text-black shadow-[0_0_16px_rgba(255,183,197,0.25)] transition hover:bg-white disabled:opacity-60"
                           >
-                            
                             <span>{isAdminPromoCreating ? t("Creating...", "Создание...") : t("Create Promo Code", "Создать промокод")}</span>
                           </button>
+
+                          {adminPromoError && <p className="text-xs text-[#ff9aa9]">⚠ {adminPromoError}</p>}
+                          {adminPromoSuccess && <p className="text-xs text-[#8ce5b2]">✓ {adminPromoSuccess}</p>}
                         </div>
+                      </section>
 
-                        {adminPromoError && (
-                          <p className="text-xs text-[#ff9aa9] leading-relaxed">{adminPromoError}</p>
-                        )}
-                        {adminPromoSuccess && (
-                          <p className="text-xs text-[#8ce5b2] leading-relaxed">{adminPromoSuccess}</p>
-                        )}
-                      </div>
-
-                      {/* Promo Codes List */}
-                      <div className="mt-4">
-                        <p className="mb-2 text-[10px] font-mono uppercase tracking-[0.2em] text-gray-400">
+                      {/* Active Promo Codes List Card */}
+                      <section className="rounded-[24px] border border-[#23151b] bg-[#10090d] p-5">
+                        <p className="mb-3 text-[10px] font-mono uppercase tracking-[0.2em] text-gray-400">
                           {t("Active Promo Codes", "Активные промокоды")} ({adminPromoList.length})
                         </p>
                         {adminPromoList.length === 0 ? (
@@ -8855,14 +8804,14 @@ export default function ProfilePage() {
                             {t("No promo codes generated yet.", "Пока нет созданных промокодов.")}
                           </div>
                         ) : (
-                          <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
+                          <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
                             {adminPromoList.map((promo) => (
                               <div
                                 key={promo.id || promo.code}
-                                className="flex items-center justify-between gap-3 rounded-xl border border-[#281b21] bg-[#110a0e] px-3.5 py-2.5 text-xs"
+                                className="flex items-center justify-between gap-3 rounded-xl border border-[#281b21] bg-[#090507] px-3.5 py-2.5 text-xs"
                               >
                                 <div className="min-w-0 flex-1">
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex flex-wrap items-center gap-2">
                                     <span className="font-mono font-bold tracking-wider text-[#ffb7c5]">
                                       {promo.code}
                                     </span>
@@ -8903,7 +8852,7 @@ export default function ProfilePage() {
                                 <button
                                   type="button"
                                   onClick={() => handleAdminDeletePromo(promo.id || promo.code)}
-                                  className="rounded bg-[#1e1217] px-2 py-0.5 text-[10px] text-gray-400 hover:text-[#ff5a54] transition"
+                                  className="rounded bg-[#1e1217] px-2.5 py-1 text-[11px] text-gray-400 hover:text-[#ff5a54] transition"
                                 >
                                   {t("Delete", "Удалить")}
                                 </button>
@@ -8911,9 +8860,312 @@ export default function ProfilePage() {
                             ))}
                           </div>
                         )}
-                      </div>
-                    </section>
-                  </div>
+                      </section>
+                    </div>
+                  )}
+
+                  {/* TAB 4: SECURITY & BAN */}
+                  {adminPanelActiveTab === "security" && (
+                    <div className="space-y-4">
+                      {/* Email Verification Card */}
+                      <section className="rounded-[24px] border border-[#23151b] bg-[#10090d] p-5">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-400">
+                              {t("Email Verification", "Подтверждение почты")}
+                            </p>
+                            <p className="mt-1 text-sm font-semibold text-white">
+                              {targetVerificationStatus === "no-email"
+                                ? t("No email attached", "Почта не привязана")
+                                : targetVerificationStatus === "locked"
+                                ? t("Verification required", "Требуется подтверждение")
+                                : targetVerificationStatus === "verified"
+                                ? t("Email verified", "Почта подтверждена")
+                                : t("State unknown", "Статус неизвестен")}
+                            </p>
+                            <p className="text-xs text-gray-500 font-mono">
+                              {activeProfile.email || t("No email stored", "Нет сохраненной почты")}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleAdminVerificationToggle}
+                            disabled={
+                              isAdminVerificationSaving ||
+                              !activeProfile.email ||
+                              (isAdminSelfTarget && isTargetVerified)
+                            }
+                            className={`rounded-xl px-4 py-2 text-xs font-bold uppercase tracking-[0.1em] transition disabled:opacity-50 ${
+                              isTargetVerificationLocked
+                                ? "border border-[#1f3b2f] bg-[#0d1713] text-[#8ce5b2] hover:border-[#8ce5b2]"
+                                : "border border-[#ffb7c5]/35 bg-[#ffb7c5] text-black hover:bg-white"
+                            }`}
+                          >
+                            {isAdminVerificationSaving
+                              ? t("Saving...", "Сохранение...")
+                              : isTargetVerificationLocked || targetVerificationStatus === "unknown"
+                              ? t("Mark Verified", "Отметить подтверждённой")
+                              : t("Revoke Verification", "Отозвать подтверждение")}
+                          </button>
+                        </div>
+                        {isAdminSelfTarget && isTargetVerified && (
+                          <p className="mt-2 text-xs text-gray-500">
+                            {t("Self-revoke is blocked to prevent losing access.", "Самоотзыв заблокирован.")}
+                          </p>
+                        )}
+                        {adminVerificationError && <p className="mt-2 text-xs text-[#ff9aa9]">⚠ {adminVerificationError}</p>}
+                        {adminVerificationSuccess && <p className="mt-2 text-xs text-[#8ce5b2]">✓ {adminVerificationSuccess}</p>}
+                      </section>
+
+                      {/* Password Reset Card */}
+                      <section className="rounded-[24px] border border-[#23151b] bg-[#10090d] p-5">
+                        <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-400">
+                          {t("Password Recovery", "Восстановление пароля")}
+                        </p>
+                        <p className="mt-1 text-xs text-gray-400">
+                          {t("Send a password reset link to the user's email.", "Отправить ссылку для сброса пароля на почту пользователя.")}
+                        </p>
+                        <div className="mt-3">
+                          <button
+                            type="button"
+                            onClick={handleAdminPasswordResetRequest}
+                            disabled={isAdminPasswordResetSending || isAccountDeleting || !activeProfile.email}
+                            className="rounded-xl border border-[#3a2029] bg-[#160c11] px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-[#ffb7c5] hover:border-[#ffb7c5] hover:text-white transition disabled:opacity-50"
+                          >
+                            {isAdminPasswordResetSending ? t("Sending...", "Отправка...") : t("Send Reset Link", "Отправить ссылку сброса")}
+                          </button>
+                        </div>
+                        {adminPasswordResetError && <p className="mt-2 text-xs text-[#ff9aa9]">⚠ {adminPasswordResetError}</p>}
+                        {adminPasswordResetSuccess && <p className="mt-2 text-xs text-[#8ce5b2]">✓ {adminPasswordResetSuccess}</p>}
+                      </section>
+
+                      {/* Ban / Unban Card */}
+                      <section className="rounded-[24px] border border-[#23151b] bg-[#10090d] p-5">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-400">
+                              {t("Account Ban Status", "Блокировка аккаунта")}
+                            </p>
+                            <p className="mt-1 text-sm font-semibold text-white">
+                              {isTargetBanned ? t("Account is banned", "Аккаунт заблокирован") : t("Account is in good standing", "Аккаунт не заблокирован")}
+                            </p>
+                            {activeProfile.bannedAt && (
+                              <p className="text-xs text-gray-500 font-mono">
+                                {t("Banned on", "Забанен")}: {formatTime(activeProfile.bannedAt, locale)}
+                              </p>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleBanToggle}
+                            disabled={isBanSaving || (isAdminSelfTarget && !isTargetBanned)}
+                            className={`rounded-xl px-4 py-2 text-xs font-bold uppercase tracking-[0.1em] transition disabled:opacity-50 ${
+                              isTargetBanned
+                                ? "border border-[#1f3b2f] bg-[#0d1713] text-[#8ce5b2] hover:border-[#8ce5b2]"
+                                : "border border-[#ff5a54]/50 bg-[#ff5a54] text-black hover:bg-[#ff746f]"
+                            }`}
+                          >
+                            {isBanSaving ? t("Saving...", "Сохранение...") : isTargetBanned ? t("Unban Account", "Разблокировать аккаунт") : t("Ban Account", "Заблокировать аккаунт")}
+                          </button>
+                        </div>
+                        {isAdminSelfTarget && !isTargetBanned && (
+                          <p className="mt-2 text-xs text-gray-500">
+                            {t("Self-ban is blocked to prevent losing root access.", "Самоблокировка запрещена.")}
+                          </p>
+                        )}
+                        {banError && <p className="mt-2 text-xs text-[#ff9aa9]">⚠ {banError}</p>}
+                        {banSuccess && <p className="mt-2 text-xs text-[#8ce5b2]">✓ {banSuccess}</p>}
+                      </section>
+
+                      {/* Danger Zone: Account Deletion */}
+                      <section className="rounded-[24px] border border-[#4a1a20] bg-[#14080a] p-5">
+                        <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-[#ff746f]">
+                          {t("Danger Zone", "Опасная зона")}
+                        </p>
+                        <p className="mt-1 text-xs text-gray-400">
+                          {t("Account deletion is permanent and cannot be undone. Only available when viewing your own account.", "Удаление аккаунта необратимо. Доступно только для текущего авторизованного аккаунта.")}
+                        </p>
+                        <div className="mt-3">
+                          <button
+                            type="button"
+                            onClick={handleDeleteAccount}
+                            disabled={!isAdminSelfTarget || isAccountDeleting || isAdminPasswordResetSending}
+                            className="rounded-xl border border-[#ff5a54]/50 bg-[#ff5a54] px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-black hover:bg-[#ff746f] transition disabled:opacity-40"
+                          >
+                            {isAccountDeleting ? t("Deleting...", "Удаление...") : t("Delete Account", "Удалить аккаунт")}
+                          </button>
+                        </div>
+                        {deleteAccountError && <p className="mt-2 text-xs text-[#ff9aa9]">⚠ {deleteAccountError}</p>}
+                      </section>
+                    </div>
+                  )}
+
+                  {/* TAB 5: PROFILE MODERATION */}
+                  {adminPanelActiveTab === "edit" && (
+                    <div className="space-y-4">
+                      {/* Display Name Moderation */}
+                      <section className="rounded-[24px] border border-[#23151b] bg-[#10090d] p-5">
+                        <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-400">
+                          {t("Display Name", "Отображаемое имя")}
+                        </p>
+                        <div className="mt-3 flex gap-2">
+                          <input
+                            type="text"
+                            value={displayNameInput}
+                            maxLength={48}
+                            onChange={(e) => {
+                              setDisplayNameInput(e.target.value);
+                              setDisplayNameError(null);
+                              setDisplayNameSuccess(null);
+                            }}
+                            className="flex-1 rounded-xl border border-[#2e1a22] bg-[#080507] px-3.5 py-2 text-xs text-white outline-none focus:border-[#ffb7c5]"
+                            placeholder="Sakura Player"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleDisplayNameSave}
+                            disabled={isDisplayNameSaving}
+                            className="rounded-xl border border-[#ffb7c5]/40 bg-[#ffb7c5] px-4 py-2 text-xs font-bold uppercase tracking-[0.1em] text-black hover:bg-white transition disabled:opacity-50"
+                          >
+                            {isDisplayNameSaving ? t("Saving...", "...") : t("Save", "Сохранить")}
+                          </button>
+                        </div>
+                        {displayNameError && <p className="mt-2 text-xs text-[#ff9aa9]">⚠ {displayNameError}</p>}
+                        {displayNameSuccess && <p className="mt-2 text-xs text-[#8ce5b2]">✓ {displayNameSuccess}</p>}
+                      </section>
+
+                      {/* Login Moderation */}
+                      <section className="rounded-[24px] border border-[#23151b] bg-[#10090d] p-5">
+                        <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-400">
+                          {t("Login / Username", "Логин аккаунта")}
+                        </p>
+                        <div className="mt-3 flex gap-2">
+                          <input
+                            ref={adminUsernameInputRef}
+                            type="text"
+                            value={usernameInput}
+                            minLength={3}
+                            maxLength={24}
+                            onChange={(e) => {
+                              setUsernameInput(e.target.value);
+                              setUsernameError(null);
+                              setUsernameSuccess(null);
+                            }}
+                            className="flex-1 rounded-xl border border-[#2e1a22] bg-[#080507] px-3.5 py-2 text-xs text-white outline-none focus:border-[#ffb7c5]"
+                            placeholder="username"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleUsernameSave}
+                            disabled={isUsernameSaving}
+                            className="rounded-xl border border-[#ffb7c5]/40 bg-[#ffb7c5] px-4 py-2 text-xs font-bold uppercase tracking-[0.1em] text-black hover:bg-white transition disabled:opacity-50"
+                          >
+                            {isUsernameSaving ? t("Saving...", "...") : t("Save", "Сохранить")}
+                          </button>
+                        </div>
+                        {usernameError && <p className="mt-2 text-xs text-[#ff9aa9]">⚠ {usernameError}</p>}
+                        {usernameSuccess && <p className="mt-2 text-xs text-[#8ce5b2]">✓ {usernameSuccess}</p>}
+                      </section>
+
+                      {/* Avatar Moderation */}
+                      <section className="rounded-[24px] border border-[#23151b] bg-[#10090d] p-5">
+                        <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-400">
+                          {t("Avatar Moderation", "Модерация аватара")}
+                        </p>
+                        <p className="mt-1 text-xs text-gray-400">
+                          {t("Replace or delete the avatar on this account.", "Заменить или удалить аватар пользователя.")}
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => adminAvatarInputRef.current?.click()}
+                            disabled={isAvatarUploading || isAvatarDeleting}
+                            className="rounded-xl border border-[#ffb7c5]/40 bg-[#ffb7c5] px-4 py-2 text-xs font-bold uppercase tracking-[0.1em] text-black hover:bg-white transition disabled:opacity-50"
+                          >
+                            {isAvatarUploading ? t("Uploading...", "Загрузка...") : hasActiveProfileAvatar ? t("Replace Avatar", "Заменить аватар") : t("Upload Avatar", "Загрузить аватар")}
+                          </button>
+                          {hasActiveProfileAvatar && (
+                            <button
+                              type="button"
+                              onClick={handleAvatarDelete}
+                              disabled={isAvatarUploading || isAvatarDeleting}
+                              className="rounded-xl border border-[#3a2029] bg-[#160c11] px-4 py-2 text-xs font-bold uppercase tracking-[0.1em] text-[#ff9aa9] hover:border-[#ff9aa9] transition disabled:opacity-50"
+                            >
+                              {isAvatarDeleting ? t("Deleting...", "Удаление...") : t("Delete Avatar", "Удалить аватар")}
+                            </button>
+                          )}
+                          <input
+                            ref={adminAvatarInputRef}
+                            type="file"
+                            accept={AVATAR_FILE_ACCEPT}
+                            onChange={handleAvatarChange}
+                            className="hidden"
+                          />
+                        </div>
+                        {avatarError && <p className="mt-2 text-xs text-[#ff9aa9]">⚠ {avatarError}</p>}
+                        {avatarSuccess && <p className="mt-2 text-xs text-[#8ce5b2]">✓ {avatarSuccess}</p>}
+                      </section>
+
+                      {/* Theme Song Moderation */}
+                      <section className="rounded-[24px] border border-[#23151b] bg-[#10090d] p-5">
+                        <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-400">
+                          {t("Theme Song", "Музыка профиля")}
+                        </p>
+                        <p className="mt-1 text-xs text-gray-400">
+                          {t("Current song:", "Текущий трек:")} {profileThemeTitle ?? t("None", "Нет")}
+                        </p>
+                        <div className="mt-3 space-y-2">
+                          <input
+                            type="text"
+                            list="profile-theme-track-options"
+                            value={adminThemeSongInput}
+                            onChange={(e) => {
+                              setAdminThemeSongInput(e.target.value);
+                              setAdminThemeSongError(null);
+                              setAdminThemeSongSuccess(null);
+                            }}
+                            className="w-full rounded-xl border border-[#2e1a22] bg-[#080507] px-3.5 py-2 text-xs text-white outline-none focus:border-[#ffb7c5]"
+                            placeholder="SoundCloud / MP3 URL"
+                          />
+                          <div className="flex flex-wrap gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => adminThemeSongFileInputRef.current?.click()}
+                              disabled={isAdminThemeSongSaving || isAdminThemeSongUploading || isAdminThemeSongDeleting}
+                              className="rounded-xl border border-[#3a2029] bg-[#160c11] px-3.5 py-2 text-xs font-semibold text-[#ffb7c5] hover:border-[#ffb7c5] transition disabled:opacity-50"
+                            >
+                              📁 {isAdminThemeSongUploading ? t("Uploading...", "Загрузка...") : t("Upload MP3", "Загрузить MP3")}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleAdminThemeSongSave}
+                              disabled={isAdminThemeSongSaving || isAdminThemeSongUploading || isAdminThemeSongDeleting}
+                              className="rounded-xl border border-[#ffb7c5]/40 bg-[#ffb7c5] px-4 py-2 text-xs font-bold text-black hover:bg-white transition disabled:opacity-50"
+                            >
+                              {isAdminThemeSongSaving ? t("Saving...", "...") : t("Save Track", "Сохранить трек")}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleAdminThemeSongDelete}
+                              disabled={isAdminThemeSongSaving || isAdminThemeSongUploading || isAdminThemeSongDeleting || isAdminThemeSongDeleteLocked}
+                              className="rounded-xl border border-[#3a2029] bg-[#160c11] px-3.5 py-2 text-xs font-semibold text-[#ff9aa9] hover:border-[#ff9aa9] transition disabled:opacity-50"
+                            >
+                              {isAdminThemeSongDeleting ? t("Deleting...", "...") : t("Delete Track", "Удалить")}
+                            </button>
+                            <input
+                              ref={adminThemeSongFileInputRef}
+                              type="file"
+                              accept={PROFILE_THEME_AUDIO_FILE_ACCEPT}
+                              onChange={handleAdminThemeSongUpload}
+                              className="hidden"
+                            />
+                          </div>
+                        </div>
+                        {adminThemeSongError && <p className="mt-2 text-xs text-[#ff9aa9]">⚠ {adminThemeSongError}</p>}
+                        {adminThemeSongSuccess && <p className="mt-2 text-xs text-[#8ce5b2]">✓ {adminThemeSongSuccess}</p>}
+                      </section>
+                    </div>
+                  )}
                 </div>
               </aside>
             </div>

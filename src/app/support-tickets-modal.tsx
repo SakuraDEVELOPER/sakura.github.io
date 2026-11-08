@@ -550,6 +550,8 @@ export default function SupportTicketsModal({
                 </label>
                 <input
                   type="text"
+                  autoComplete="off"
+                  name="support_contact_field"
                   value={contact}
                   onChange={(e) => setContact(e.target.value)}
                   placeholder="@telegram_handle or Discord username"
