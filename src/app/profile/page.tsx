@@ -7565,21 +7565,14 @@ export default function ProfilePage() {
                       <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">
                         {t("Profile Settings", "Настройки профиля")}
                       </p>
-                      <p className="mt-1 text-xs text-gray-400">
-                        {t(
-                          "Customise your nickname, login, avatar, theme song and password.",
-                          "Настройка отображаемого имени, логина, аватара, музыки профиля и безопасности."
-                        )}
-                      </p>
                     </div>
                     {!activeProfile.isBanned ? (
                       <button
                         type="button"
                         onClick={() => setIsEditProfileModalOpen(true)}
-                        className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-[#ffb7c5]/40 bg-[#ffb7c5] px-5 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-black shadow-[0_0_20px_rgba(255,183,197,0.25)] transition hover:bg-white hover:scale-105"
+                        className="inline-flex shrink-0 items-center justify-center rounded-full border border-[#ffb7c5]/40 bg-[#ffb7c5] px-5 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-black shadow-[0_0_20px_rgba(255,183,197,0.25)] transition hover:bg-white hover:scale-105"
                       >
-                        <SakuraIcon className="h-3.5 w-3.5" />
-                        <span>{t("Edit Profile", "Редактировать профиль")}</span>
+                        {t("Edit Profile", "Редактировать профиль")}
                       </button>
                     ) : null}
                   </div>
