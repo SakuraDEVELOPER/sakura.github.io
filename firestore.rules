@@ -50,13 +50,7 @@ service cloud.firestore {
           "co-owner",
           "Co-owner",
           "owner",
-          "Owner",
-          "super administrator",
-          "Super Administrator",
-          "administrator",
-          "Administrator",
-          "admin",
-          "Admin"
+          "Owner"
         ])
       );
     }

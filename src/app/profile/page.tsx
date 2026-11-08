@@ -1515,10 +1515,7 @@ const roleCommentAuthorStyle = (role: string | null | undefined): CSSProperties 
 const ROLE_MANAGER_NAMES = new Set([
   "root",
   "co-owner",
-  "owner",
-  "super administrator",
-  "administrator",
-  "admin"
+  "owner"
 ]);
 const COMMENT_MODERATOR_ROLE_NAMES = new Set([
   "root",
