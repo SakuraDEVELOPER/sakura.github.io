@@ -42,3 +42,4 @@ yarn-error.log*
 next-env.d.ts
 
 tmp_head_profile_page.tsx
+supabase/.temp/

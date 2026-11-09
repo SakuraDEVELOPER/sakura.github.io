@@ -1,0 +1,519 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.4";
+
+const corsHeaders = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-headers": "authorization, x-client-info, apikey, content-type",
+  "access-control-allow-methods": "POST, OPTIONS",
+};
+
+const jsonResponse = (status: number, payload: Record<string, unknown>) =>
+  new Response(JSON.stringify(payload), {
+    status,
+    headers: {
+      ...corsHeaders,
+      "content-type": "application/json; charset=utf-8",
+    },
+  });
+
+const FIREBASE_API_KEY = "AIzaSyAnZQt5NWXGOWuz3STh_vy-dSENVBM9_ZY";
+const JWT_SECRET = Deno.env.get("JWT_SECRET") || "sakura-auth-secret-2026";
+
+const PAYLOAD_KEYS: Record<string, { key: string; cipher_sha256: string }> = {
+  "0b7a0076fbfa46f0b27c81679c7bbb9e": {
+    key: "887ba4a5178bb3355ec493d894423ae6fb2d972e20ef27ddd78438a2625fe155",
+    cipher_sha256: "14bd92cc3c9fc8e116c596b3394f98ce1d5f8cdb3685497ceaa898d4c8d37773",
+  },
+  "26dd238b75c24d5ba195b15369ab5180": {
+    key: "39d412370f50853b6051187e2b3d03d8a33dee30ab8cf3ec6e254de1873af8a9",
+    cipher_sha256: "7abb809c0668b8d523aa48074f1195dfa84368841181df0cf67e576bcc1144de",
+  },
+  "5ff8ed3945524599b4507e107d5d6748": {
+    key: "2a9335ee23fba008b431de81e4f219c72031c29a691f896523bf464094eedd6a",
+    cipher_sha256: "b7ce0e1160cf4b1533ddea80a3df8f01017b3f10c00949617791a00fd910aaa7",
+  },
+  "bc3ec3dfc8ef4c75b8dda19ef7db99e1": {
+    key: "f00a7e0325ff0e0c1bfd23ddd47bed6882272f8e6015ec2c702d76e893de392f",
+    cipher_sha256: "374e44c97e7e90819fde0590c36eeb8cde6056b141ddbede4068c03bbf67df86",
+  },
+  "f91a149d09bc456d955a177e5b21a5fc": {
+    key: "5368efecbfcdc48b53cd5566bba0b268ae823faab7a6f53afdb16bfeaa7b30a1",
+    cipher_sha256: "a1da6d2e77d7a3d1e7856a8ef4e7393063eb5d6566442b10a397bd3342740972",
+  },
+};
+
+// ECDSA P-256 Private Key (PKCS#8 PEM)
+const PRIVATE_KEY_PEM = `-----BEGIN PRIVATE KEY-----
+MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgQ38Kx+5yMvyFv4T9
+yVOZv2HnrkGMUa/9VPpXyOh+pCOhRANCAASX0JDuqL8R3GDvh0Qx7n08UoO+KnKJ
+FkoJJMSK9SvlgtQRJVk5uMAuyD0qb+v99qo7noEB/IC/eoswLqjrJmnu
+-----END PRIVATE KEY-----`;
+
+function pemToBinary(pem: string): Uint8Array {
+  const b64 = pem.replace(/-----[^-]+-----/g, "").replace(/\s+/g, "");
+  const binStr = atob(b64);
+  const len = binStr.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binStr.charCodeAt(i);
+  }
+  return bytes;
+}
+
+let cachedSigningKey: CryptoKey | null = null;
+async function getSigningKey(): Promise<CryptoKey> {
+  if (cachedSigningKey) return cachedSigningKey;
+  const der = pemToBinary(PRIVATE_KEY_PEM);
+  cachedSigningKey = await crypto.subtle.importKey(
+    "pkcs8",
+    der,
+    { name: "ECDSA", namedCurve: "P-256" },
+    false,
+    ["sign"]
+  );
+  return cachedSigningKey;
+}
+
+async function sha256Hex(text: string): Promise<string> {
+  const data = new TextEncoder().encode(text);
+  const hashBuf = await crypto.subtle.digest("SHA-256", data);
+  const hashArr = Array.from(new Uint8Array(hashBuf));
+  return hashArr.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function base64Encode(bytes: Uint8Array): string {
+  let binStr = "";
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binStr += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binStr);
+}
+
+// Compact token without dots, spaces or invalid characters for Windows strspn/strlen<=128
+async function createToken(profileId: number, login: string, hwid = ""): Promise<string> {
+  const iat = Math.floor(Date.now() / 1000);
+  const safeLogin = login.replace(/[^A-Za-z0-9_-]/g, "");
+  const safeHwid = hwid.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 32);
+  const data = safeHwid ? `${profileId}_${safeLogin}_${iat}_${safeHwid}` : `${profileId}_${safeLogin}_${iat}`;
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(JWT_SECRET),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const sigBuf = await crypto.subtle.sign("HMAC", key, enc.encode(data));
+  const sigHex = Array.from(new Uint8Array(sigBuf))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
+    .slice(0, 32);
+  return `${data}_${sigHex}`;
+}
+
+async function verifyToken(token: string): Promise<{ profile_id: number; login: string; hwid: string } | null> {
+  try {
+    if (!token || token.length > 128) return null;
+    const parts = token.split("_");
+    if (parts.length !== 4 && parts.length !== 5) return null;
+
+    let profileIdStr = "";
+    let login = "";
+    let iatStr = "";
+    let hwid = "";
+    let sigHex = "";
+
+    if (parts.length === 5) {
+      [profileIdStr, login, iatStr, hwid, sigHex] = parts;
+    } else {
+      [profileIdStr, login, iatStr, sigHex] = parts;
+    }
+
+    const profileId = Number(profileIdStr);
+    const iat = Number(iatStr);
+    if (!Number.isFinite(profileId) || !Number.isFinite(iat)) return null;
+    if (Date.now() / 1000 > iat + 30 * 86400) return null;
+
+    const data = hwid ? `${profileId}_${login}_${iat}_${hwid}` : `${profileId}_${login}_${iat}`;
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      "raw",
+      enc.encode(JWT_SECRET),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"]
+    );
+    const sigBuf = await crypto.subtle.sign("HMAC", key, enc.encode(data));
+    const expectedSigHex = Array.from(new Uint8Array(sigBuf))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("")
+      .slice(0, 32);
+
+    if (sigHex !== expectedSigHex) return null;
+    return { profile_id: profileId, login, hwid };
+  } catch {
+    return null;
+  }
+}
+
+const SUBSCRIBED_ROLES = new Set([
+  "subscriber",
+  "sub",
+  "test period",
+  "trial",
+  "admin",
+  "root",
+  "owner",
+  "co-owner",
+  "lifetime",
+  "sponsor",
+  "support",
+  "tester",
+]);
+
+function checkHasSubscription(roles: string[]): boolean {
+  return roles.some((r) => SUBSCRIBED_ROLES.has(r.toLowerCase().trim()));
+}
+
+function determinePlan(roles: string[]): string {
+  const premRoles = ["subscriber", "sub", "admin", "root", "owner", "co-owner", "lifetime", "sponsor"];
+  return roles.some((r) => premRoles.includes(r.toLowerCase().trim())) ? "prem" : "trial";
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  const url = new URL(req.url);
+  const path = url.pathname.replace(/^\/auth/, "");
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+  const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  const supabase = createClient(supabaseUrl, supabaseKey);
+
+  try {
+    // 1. LOGIN ROUTE (/login or /v1/login)
+    if (path.endsWith("/login") || path.endsWith("/v1/login")) {
+      const body = await req.json().catch(() => ({}));
+      const identifier = String(body.login || "").trim();
+      const password = String(body.password || "");
+      const hwid = String(body.hwid || "");
+
+      if (!identifier || !password) {
+        return jsonResponse(400, { code: "BAD_INPUT" });
+      }
+
+      // Resolve email if username was provided
+      let email = identifier;
+      if (!identifier.includes("@")) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("email")
+          .ilike("login", identifier)
+          .maybeSingle();
+
+        if (profile?.email) {
+          email = profile.email;
+        } else {
+          return jsonResponse(401, { code: "INVALID_CREDENTIALS" });
+        }
+      }
+
+      // Authenticate with Firebase Auth
+      const firebaseRes = await fetch(
+        `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password, returnSecureToken: true }),
+        }
+      );
+
+      const firebaseData = await firebaseRes.json();
+      if (!firebaseRes.ok || !firebaseData.localId) {
+        return jsonResponse(401, { code: "INVALID_CREDENTIALS" });
+      }
+
+      // Query profile from Supabase
+      const { data: userProfile, error: profileErr } = await supabase
+        .from("profiles")
+        .select("profile_id, login, email, roles, is_banned")
+        .eq("firebase_uid", firebaseData.localId)
+        .maybeSingle();
+
+      if (profileErr || !userProfile) {
+        return jsonResponse(404, { code: "USER_NOT_FOUND" });
+      }
+
+      if (userProfile.is_banned) {
+        return jsonResponse(403, { code: "BANNED" });
+      }
+
+      const roles = Array.isArray(userProfile.roles)
+        ? userProfile.roles.map((r: string) => r.toLowerCase().trim())
+        : [];
+
+      if (!checkHasSubscription(roles)) {
+        return jsonResponse(403, { code: "NO_SUBSCRIPTION" });
+      }
+
+      const token = await createToken(userProfile.profile_id, userProfile.login || identifier, hwid);
+
+      return jsonResponse(200, {
+        token,
+        account: String(userProfile.profile_id),
+        login: userProfile.login || identifier,
+      });
+    }
+
+    // 2. DEVICE REMEMBER ROUTE (/device/remember or /v1/device/remember)
+    if (path.endsWith("/device/remember") || path.endsWith("/v1/device/remember")) {
+      const authHeader = req.headers.get("authorization") || "";
+      const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+      const session = await verifyToken(token);
+      if (!session) {
+        return jsonResponse(401, { code: "UNAUTHORIZED" });
+      }
+      return jsonResponse(200, { refresh: token });
+    }
+
+    // 3. DEVICE FORGET ROUTE (/device/forget or /v1/device/forget)
+    if (path.endsWith("/device/forget") || path.endsWith("/v1/device/forget")) {
+      return jsonResponse(200, { status: "ok" });
+    }
+
+    // 4. DEVICE RESUME ROUTE (/device/resume or /v1/device/resume)
+    if (path.endsWith("/device/resume") || path.endsWith("/v1/device/resume")) {
+      const body = await req.json().catch(() => ({}));
+      const refreshToken = String(body.refresh || "").trim();
+      const session = await verifyToken(refreshToken);
+      if (!session) {
+        return jsonResponse(401, { code: "UNAUTHORIZED" });
+      }
+
+      const { data: userProfile } = await supabase
+        .from("profiles")
+        .select("profile_id, login, roles, is_banned")
+        .eq("profile_id", session.profile_id)
+        .maybeSingle();
+
+      if (!userProfile || userProfile.is_banned) {
+        return jsonResponse(403, { code: "BANNED" });
+      }
+
+      const roles = Array.isArray(userProfile.roles)
+        ? userProfile.roles.map((r: string) => r.toLowerCase().trim())
+        : [];
+
+      if (!checkHasSubscription(roles)) {
+        return jsonResponse(403, { code: "NO_SUBSCRIPTION" });
+      }
+
+      const newToken = await createToken(userProfile.profile_id, userProfile.login || session.login, session.hwid);
+
+      return jsonResponse(200, {
+        token: newToken,
+        steam: "0",
+        login: userProfile.login || session.login,
+        account: String(userProfile.profile_id),
+      });
+    }
+
+    // 5. SDK TICKET ROUTE (/sdk-ticket or /v1/sdk-ticket)
+    if (path.endsWith("/sdk-ticket") || path.endsWith("/v1/sdk-ticket")) {
+      const authHeader = req.headers.get("authorization") || "";
+      const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+      const session = await verifyToken(token);
+      if (!session) {
+        return jsonResponse(401, { code: "UNAUTHORIZED" });
+      }
+      const body = await req.json().catch(() => ({}));
+      const hwid = String(body.hwid || session.hwid || "").trim();
+      return jsonResponse(200, {
+        token,
+        hwid,
+        steam: "0",
+        status: "ok",
+      });
+    }
+
+    // 5.5. PAYLOAD KEY ROUTE (/payload-key or /v1/payload-key)
+    if (path.endsWith("/payload-key") || path.endsWith("/v1/payload-key")) {
+      const authHeader = req.headers.get("authorization") || "";
+      const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+      const session = await verifyToken(token);
+      if (!session) {
+        return jsonResponse(401, { code: "UNAUTHORIZED" });
+      }
+
+      const body = await req.json().catch(() => ({}));
+      const id = String(body.id || "").trim();
+      const hwid = String(body.hwid || session.hwid || "").trim();
+      const steam = String(body.steam || "0").trim();
+      const nonce = String(body.nonce || "").trim();
+
+      const { data: currentProfile } = await supabase
+        .from("profiles")
+        .select("roles, is_banned, login")
+        .eq("profile_id", session.profile_id)
+        .maybeSingle();
+
+      if (!currentProfile || currentProfile.is_banned) {
+        return jsonResponse(403, { code: "BANNED" });
+      }
+
+      const currentRoles = Array.isArray(currentProfile.roles)
+        ? currentProfile.roles.map((r: string) => r.toLowerCase().trim())
+        : [];
+
+      if (!checkHasSubscription(currentRoles)) {
+        return jsonResponse(403, { code: "NO_SUBSCRIPTION" });
+      }
+
+      const artifact = PAYLOAD_KEYS[id];
+      if (!artifact) {
+        return jsonResponse(404, { code: "PACKAGE_UNAVAILABLE" });
+      }
+
+      const now = Math.floor(Date.now() / 1000);
+      const subexp = now + 30 * 86400;
+      const sid = await sha256Hex(token);
+
+      const claims = {
+        iss: "guard-sakura-v1",
+        aud: "loader",
+        sid,
+        sub: String(session.profile_id),
+        login: currentProfile.login || session.login,
+        plan: determinePlan(currentRoles),
+        hwid,
+        steam: steam || "0",
+        nonce,
+        iat: now,
+        exp: now + 30,
+        subexp,
+        kind: "payload-key",
+        artifact: id,
+        cipher_sha256: artifact.cipher_sha256,
+        key: artifact.key,
+      };
+
+      const payloadJson = JSON.stringify(claims);
+      const payloadBytes = new TextEncoder().encode(payloadJson);
+      const payloadB64 = base64Encode(payloadBytes);
+
+      const signingKey = await getSigningKey();
+      const sigBuf = await crypto.subtle.sign(
+        { name: "ECDSA", hash: "SHA-256" },
+        signingKey,
+        payloadBytes
+      );
+      const sigB64 = base64Encode(new Uint8Array(sigBuf));
+
+      return jsonResponse(200, {
+        payload: payloadB64,
+        signature: sigB64,
+      });
+    }
+
+    // 6. LEASE ROUTE (/loader-lease, /v1/loader-lease, /lease, /v1/lease)
+    if (
+      path.endsWith("/loader-lease") ||
+      path.endsWith("/v1/loader-lease") ||
+      path.endsWith("/lease") ||
+      path.endsWith("/v1/lease")
+    ) {
+      const authHeader = req.headers.get("authorization") || "";
+      const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+      const session = await verifyToken(token);
+
+      if (!session) {
+        return jsonResponse(401, { code: "UNAUTHORIZED" });
+      }
+
+      const body = await req.json().catch(() => ({}));
+      const hwid = String(body.hwid || "").trim();
+      const steam = String(body.steam || "0").trim();
+      const nonce = String(body.nonce || "").trim();
+
+      const { data: currentProfile } = await supabase
+        .from("profiles")
+        .select("roles, is_banned, login")
+        .eq("profile_id", session.profile_id)
+        .maybeSingle();
+
+      if (!currentProfile || currentProfile.is_banned) {
+        return jsonResponse(403, { code: "BANNED" });
+      }
+
+      const currentRoles = Array.isArray(currentProfile.roles)
+        ? currentProfile.roles.map((r: string) => r.toLowerCase().trim())
+        : [];
+
+      if (!checkHasSubscription(currentRoles)) {
+        return jsonResponse(403, { code: "NO_SUBSCRIPTION" });
+      }
+
+      const isSdk = path.includes("/v1/lease") || path.endsWith("/lease");
+      const now = Math.floor(Date.now() / 1000);
+      const subexp = now + 30 * 86400; // 30 days active sub
+      const sid = await sha256Hex(token);
+
+      const leaseObj = {
+        iss: "guard-sakura-v1",
+        aud: isSdk ? "sdk" : "loader",
+        nonce,
+        hwid,
+        steam: steam || "0",
+        sid,
+        plan: determinePlan(currentRoles),
+        iat: now,
+        exp: now + 60, // 60 seconds lease validity (VM strictly requires exp - iat <= 90)
+        subexp,
+        sub: String(session.profile_id),
+        login: currentProfile.login || session.login,
+      };
+
+      const payloadJson = JSON.stringify(leaseObj);
+      const payloadBytes = new TextEncoder().encode(payloadJson);
+      const payloadB64 = base64Encode(payloadBytes);
+
+      // Sign with ECDSA P-256 (produces IEEE P1363 64-byte raw signature)
+      const signingKey = await getSigningKey();
+      const sigBuf = await crypto.subtle.sign(
+        { name: "ECDSA", hash: "SHA-256" },
+        signingKey,
+        payloadBytes
+      );
+      const sigB64 = base64Encode(new Uint8Array(sigBuf));
+
+      return jsonResponse(200, {
+        payload: payloadB64,
+        signature: sigB64,
+      });
+    }
+
+    // 7. GAME BIND ROUTE (/game/bind or /v1/game/bind)
+    if (path.endsWith("/bind") || path.endsWith("/game/bind")) {
+      return jsonResponse(200, { status: "ok" });
+    }
+
+    // 8. STATS ROUTE (/game/stats or /v1/game/stats)
+    if (path.endsWith("/stats") || path.endsWith("/game/stats")) {
+      return jsonResponse(200, { status: "ok" });
+    }
+
+    // 9. LOGOUT ROUTE (/logout or /v1/logout)
+    if (path.endsWith("/logout") || path.endsWith("/v1/logout")) {
+      return jsonResponse(200, { status: "ok" });
+    }
+
+    return jsonResponse(404, { code: "NOT_FOUND", path });
+  } catch (error) {
+    console.error("Auth Edge Function error:", error);
+    return jsonResponse(500, {
+      code: "SERVER_ERROR",
+      message: error instanceof Error ? error.message : "Internal error",
+    });
+  }
+});
