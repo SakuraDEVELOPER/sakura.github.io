@@ -7813,18 +7813,13 @@ export default function ProfilePage() {
                     {/* Modal Header */}
                     <div className="border-b border-[#24151b] bg-[radial-gradient(circle_at_top,rgba(255,183,197,0.18),transparent_65%)] px-6 py-5">
                       <div className="flex items-center justify-between gap-4">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[#ffb7c5]/30 bg-[#1a0e13] text-[#ffb7c5]">
-                            <SakuraIcon className="h-5 w-5" />
-                          </div>
-                          <div>
-                            <h2 className="text-base font-bold text-white">
-                              {t("Edit Profile", "Редактирование профиля")}
-                            </h2>
-                            <p className="text-xs text-gray-400">
-                              {primaryName} · @{activeProfile.login || "user"} · UID #{activeProfile.profileId}
-                            </p>
-                          </div>
+                        <div>
+                          <h2 className="text-base font-bold text-white">
+                            {t("Edit Profile", "Редактирование профиля")}
+                          </h2>
+                          <p className="text-xs text-gray-400">
+                            {primaryName} · @{activeProfile.login || "user"} · UID #{activeProfile.profileId}
+                          </p>
                         </div>
                         <button
                           type="button"
@@ -7838,22 +7833,21 @@ export default function ProfilePage() {
                       {/* Tabs Bar */}
                       <div className="mt-4 flex flex-wrap gap-1.5 border-t border-[#1f1217] pt-3">
                         {[
-                          { id: "general", label: t("General", "Основное"), icon: "👤" },
-                          { id: "avatar", label: t("Avatar", "Аватар"), icon: "🖼️" },
-                          { id: "music", label: t("Theme Music", "Музыка темы"), icon: "🎵" },
-                          { id: "security", label: t("Security", "Безопасность"), icon: "🔒" },
+                          { id: "general", label: t("General", "Основное") },
+                          { id: "avatar", label: t("Avatar", "Аватар") },
+                          { id: "music", label: t("Theme Music", "Музыка темы") },
+                          { id: "security", label: t("Security", "Безопасность") },
                         ].map((tab) => (
                           <button
                             key={tab.id}
                             type="button"
                             onClick={() => setEditProfileActiveTab(tab.id as any)}
-                            className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition ${
+                            className={`rounded-xl px-3.5 py-1.5 text-xs font-bold transition ${
                               editProfileActiveTab === tab.id
                                 ? "bg-[#ffb7c5] text-black shadow-[0_0_14px_rgba(255,183,197,0.3)]"
                                 : "border border-[#23141a] bg-[#10090c] text-gray-400 hover:text-white"
                             }`}
                           >
-                            <span>{tab.icon}</span>
                             <span>{tab.label}</span>
                           </button>
                         ))}
@@ -8419,11 +8413,11 @@ export default function ProfilePage() {
                   {/* Tab Navigation */}
                   <div className="mt-4 flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
                     {[
-                      { id: "sub", icon: "💎", label: t("Sub & HWID", "Подписка и HWID") },
-                      { id: "roles", icon: "👑", label: t("Roles", "Роли") },
-                      { id: "promos", icon: "🎟️", label: t("Promo Codes", "Промокоды") },
-                      { id: "security", icon: "🛡️", label: t("Security", "Безопасность") },
-                      { id: "edit", icon: "✏️", label: t("Moderation", "Модерация") },
+                      { id: "sub", label: t("Sub & HWID", "Подписка и HWID") },
+                      { id: "roles", label: t("Roles", "Роли") },
+                      { id: "promos", label: t("Promo Codes", "Промокоды") },
+                      { id: "security", label: t("Security", "Безопасность") },
+                      { id: "edit", label: t("Moderation", "Модерация") },
                     ].map((tab) => {
                       const isActive = adminPanelActiveTab === tab.id;
                       return (
@@ -8431,13 +8425,12 @@ export default function ProfilePage() {
                           key={tab.id}
                           type="button"
                           onClick={() => setAdminPanelActiveTab(tab.id as any)}
-                          className={`flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold uppercase tracking-[0.1em] transition ${
+                          className={`flex shrink-0 items-center rounded-full px-3.5 py-1.5 text-xs font-bold uppercase tracking-[0.1em] transition ${
                             isActive
                               ? "border border-[#ffb7c5]/60 bg-[#ffb7c5] text-black shadow-[0_0_16px_rgba(255,183,197,0.25)]"
                               : "border border-[#23151a] bg-[#120a0e] text-gray-400 hover:border-[#ffb7c5]/35 hover:text-white"
                           }`}
                         >
-                          <span>{tab.icon}</span>
                           <span>{tab.label}</span>
                         </button>
                       );
