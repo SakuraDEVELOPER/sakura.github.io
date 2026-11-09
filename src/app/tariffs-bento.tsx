@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocaleText } from "@/lib/ui-locale";
 import { SakuraIcon } from "./sakura-icon";
 
 const FUNPAY_OFFER_URL = "https://funpay.com/lots/offer?id=67099133";
 const FUNPAY_ICON_URL = "https://funpay.com/favicon.ico";
 const OPEN_AUTH_MODAL_EVENT = "sakura-open-auth-modal";
+const TRIAL_CLAIMED_STORAGE_KEY = "sakura_trial_claimed";
 
 export type TariffsBentoProps = {
   currentUser?: {
@@ -33,20 +34,60 @@ export function TariffsBento({
   const [claimSuccessMessage, setClaimSuccessMessage] = useState<string | null>(null);
   const [claimErrorMessage, setClaimErrorMessage] = useState<string | null>(null);
   const [hasClaimedLocal, setHasClaimedLocal] = useState(false);
+  const [hasClaimedStorage] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return (
+        window.localStorage.getItem(TRIAL_CLAIMED_STORAGE_KEY) === "true" ||
+        (Boolean(currentUser?.uid) &&
+          window.localStorage.getItem(`${TRIAL_CLAIMED_STORAGE_KEY}_${currentUser?.uid}`) === "true")
+      );
+    } catch {
+      return false;
+    }
+  });
 
   const isLoggedIn = Boolean(currentUser && !currentUser.isAnonymous);
 
+  const hasActiveSubscription = Boolean(
+    currentUser?.subscriptionUntil &&
+      new Date(currentUser.subscriptionUntil).getTime() > Date.now()
+  );
+
   const hasAlreadyClaimed = Boolean(
     hasClaimedLocal ||
+    hasClaimedStorage ||
     currentUser?.hasClaimedTrial === true ||
+    hasActiveSubscription ||
     currentUser?.roles?.some((r) => {
       const lower = String(r).toLowerCase().trim();
-      return lower === "test period" || lower === "trial";
+      return (
+        lower === "test period" ||
+        lower === "trial" ||
+        lower === "subscriber" ||
+        lower === "sub" ||
+        lower === "lifetime" ||
+        lower === "admin" ||
+        lower === "root" ||
+        lower === "owner"
+      );
     }) ||
     currentUser?.activationHistory?.some(
       (item) => item.type === "trial" || item.code === "7-DAYS-TRIAL"
     )
   );
+
+  // Sync to local storage to eliminate hydration layout shift on subsequent loads
+  useEffect(() => {
+    if (hasAlreadyClaimed && typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(TRIAL_CLAIMED_STORAGE_KEY, "true");
+        if (currentUser?.uid) {
+          window.localStorage.setItem(`${TRIAL_CLAIMED_STORAGE_KEY}_${currentUser.uid}`, "true");
+        }
+      } catch {}
+    }
+  }, [hasAlreadyClaimed, currentUser?.uid]);
 
   const handleOpenAuth = () => {
     if (typeof window === "undefined") return;
