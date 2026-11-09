@@ -8,7 +8,6 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSPro
 import { AvatarMedia, AVATAR_FILE_ACCEPT } from "../avatar-media";
 import { HeaderSocialLinks } from "../header-social-links";
 import { SakuraIcon } from "../sakura-icon";
-import { TariffsBento } from "../tariffs-bento";
 import { SiteOnlineBadge } from "../site-online-badge";
 import {
   deleteSupabaseCommentMedia,
@@ -5785,6 +5784,34 @@ export default function ProfilePage() {
     }
   };
 
+  const hasAlreadyClaimedTrial = Boolean(
+    activeProfile?.hasClaimedTrial === true ||
+    activeProfile?.activationHistory?.some(
+      (item) => item.type === "trial" || item.code === "7-DAYS-TRIAL"
+    )
+  );
+
+  const [isClaimingTrial, setIsClaimingTrial] = useState(false);
+  const [trialClaimSuccess, setTrialClaimSuccess] = useState<string | null>(null);
+  const [trialClaimError, setTrialClaimError] = useState<string | null>(null);
+
+  const handleClaimTrial = async () => {
+    const bridge = getWindowState().sakuraFirebaseAuth;
+    if (!bridge?.claimFreeTrial) return;
+    setIsClaimingTrial(true);
+    setTrialClaimError(null);
+    setTrialClaimSuccess(null);
+    try {
+      await bridge.claimFreeTrial();
+      setTrialClaimSuccess(t("7 days of free trial activated!", "7 дней бесплатного теста успешно активировано!"));
+      window.location.reload();
+    } catch (err: any) {
+      setTrialClaimError(err?.message || t("Failed to activate trial.", "Не удалось активировать тест."));
+    } finally {
+      setIsClaimingTrial(false);
+    }
+  };
+
   const handleFreezeSubscription = async () => {
     const bridge = getWindowState().sakuraFirebaseAuth;
     if (!bridge?.freezeSubscription) return;
@@ -7364,6 +7391,16 @@ export default function ProfilePage() {
                                 <span>{isFreezingSubscription ? t("Freezing...", "Заморозка...") : t("Freeze Subscription", "Заморозить")}</span>
                               </button>
                             )}
+                            {isOwner && !hasAlreadyClaimedTrial && !hasLifetimeRole && (
+                              <button
+                                type="button"
+                                onClick={handleClaimTrial}
+                                disabled={isClaimingTrial}
+                                className="inline-flex items-center gap-2 rounded-full border border-[#ffb7c5]/40 bg-[#160d11] px-4 py-2 text-xs font-bold text-[#ffb7c5] transition hover:border-[#ffb7c5] hover:bg-[#ffb7c5] hover:text-black disabled:opacity-50"
+                              >
+                                <span>{isClaimingTrial ? t("Activating...", "Активация...") : t("+7 Days Trial", "+7 дней теста")}</span>
+                              </button>
+                            )}
                             <a
                               href={FUNPAY_SUBSCRIPTION_URL}
                               target="_blank"
@@ -7389,17 +7426,37 @@ export default function ProfilePage() {
                             )}
                           </p>
                           <div className="mt-4 flex flex-wrap items-center gap-3">
+                            {isOwner && !hasAlreadyClaimedTrial && (
+                              <button
+                                type="button"
+                                onClick={handleClaimTrial}
+                                disabled={isClaimingTrial}
+                                className="inline-flex items-center gap-2 rounded-full border border-[#ffb7c5]/50 bg-[#ffb7c5] px-5 py-2.5 text-xs font-bold uppercase tracking-[0.12em] text-black shadow-[0_0_20px_rgba(255,183,197,0.3)] transition hover:bg-white hover:scale-105 disabled:opacity-50"
+                              >
+                                <span>{isClaimingTrial ? t("Activating...", "Активация...") : t("Get 7 Days Free", "Получить 7 дней теста")}</span>
+                              </button>
+                            )}
                             <a
                               href={FUNPAY_SUBSCRIPTION_URL}
                               target="_blank"
                               rel="noopener noreferrer"
                               onClick={handleFunPayLinkClick}
-                              className="inline-flex items-center gap-2 rounded-full border border-[#ffb7c5]/40 bg-[#ffb7c5] px-5 py-2.5 text-xs font-bold text-black shadow-[0_0_18px_rgba(255,183,197,0.3)] transition hover:bg-white hover:scale-105"
+                              className="inline-flex items-center gap-2 rounded-full border border-[#3a2a31] bg-[#140d11] px-5 py-2.5 text-xs font-bold text-[#ffb7c5] transition hover:border-[#ffb7c5]/45 hover:text-white"
                             >
                               <img src={FUNPAY_ICON_URL} alt="FunPay" loading="lazy" decoding="async" className="h-4 w-4 rounded-sm" />
                               <span>{t("Buy on FunPay", "Купить на FunPay")}</span>
                             </a>
                           </div>
+                          {trialClaimSuccess && (
+                            <p className="mt-2 text-xs text-[#8ce5b2] font-medium flex items-center gap-1.5">
+                              <span>✓</span> {trialClaimSuccess}
+                            </p>
+                          )}
+                          {trialClaimError && (
+                            <p className="mt-2 text-xs text-[#ff9aa9] font-medium flex items-center gap-1.5">
+                              <span>⚠</span> {trialClaimError}
+                            </p>
+                          )}
                         </div>
                       )}
 
@@ -7415,20 +7472,7 @@ export default function ProfilePage() {
                         </p>
                       )}
 
-                      {/* Tariffs Bento Grid */}
-                      {isOwner && (
-                        <div className="mt-5 border-t border-[#23171b] pt-4">
-                          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#ffb7c5] mb-3">
-                            {t("Tariff Plans", "Тарифные планы")}
-                          </p>
-                          <TariffsBento
-                            currentUser={activeProfile}
-                            onClaimSuccess={() => {
-                              window.location.reload();
-                            }}
-                          />
-                        </div>
-                      )}
+
 
                       {/* Promo Code Activation Box (for own profile) */}
                       {isOwner && (
