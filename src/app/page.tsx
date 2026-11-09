@@ -357,6 +357,16 @@ function normalizeRoleName(role: string) {
     return "sponsor";
   }
 
+  if (
+    compactRole === "sakura" ||
+    compactRole === "sakuradev" ||
+    compactRole === "sakuracheat" ||
+    role.includes("🌸") ||
+    role.includes("\uD83C\uDF38")
+  ) {
+    return "sakura";
+  }
+
   if (compactRole === "subscriber") {
     return "subscriber";
   }
@@ -433,6 +443,15 @@ function roleChipStyle(role: string | null | undefined): CSSProperties {
       backgroundColor: "#0a1328",
       color: "#d8e3ff",
       boxShadow: "0 0 18px rgba(79,124,255,0.22)",
+    };
+  }
+
+  if (normalizedRole === "sakura") {
+    return {
+      borderColor: "#52525b",
+      backgroundColor: "#18181b",
+      color: "#d1d5db",
+      boxShadow: "0 0 16px rgba(255, 255, 255, 0.08)",
     };
   }
 

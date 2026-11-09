@@ -1283,8 +1283,8 @@ const renderRoleBadgeText = (role: string): React.ReactNode => {
 
   if (isSakuraRole) {
     return (
-      <span className="inline-flex items-center gap-1.5">
-        <SakuraIcon className="h-3.5 w-3.5 shrink-0 inline-block align-middle" />
+      <span className="inline-flex items-center gap-1.5 text-gray-300">
+        <SakuraIcon className="h-3.5 w-3.5 shrink-0 inline-block align-middle" stroke="#d1d5db" fill="#6b7280" />
         <span>{cleanLabel}</span>
       </span>
     );
@@ -1355,10 +1355,10 @@ const roleBadgeStyle = (role: string): CSSProperties => {
 
   if (normalizedRole === "sakura") {
     return {
-      borderColor: "#ffb7c5",
-      backgroundColor: "#1f1015",
-      color: "#ffc2cf",
-      boxShadow: "0 0 18px rgba(255,183,197,0.25)",
+      borderColor: "#52525b",
+      backgroundColor: "#18181b",
+      color: "#d1d5db",
+      boxShadow: "0 0 16px rgba(255, 255, 255, 0.08)",
     };
   }
 
@@ -1542,7 +1542,7 @@ const roleCommentAuthorColor = (role: string | null | undefined) => {
   }
 
   if (normalizedRole === "sakura") {
-    return "#ffb7c5";
+    return "#d1d5db";
   }
 
   if (normalizedRole === "subscriber") {
