@@ -7288,23 +7288,33 @@ export default function ProfilePage() {
                     <div className="mt-5 rounded-[22px] border border-[#24171b] bg-[radial-gradient(circle_at_top_left,rgba(255,183,197,0.08),transparent_62%),#090909] p-5">
                       {hasLifetimeRole ? (
                         /* Lifetime Profile View */
-                        <div>
-                          <div>
-                            <p className="text-base font-bold text-white">
-                              {t("Sakura Lifetime Access", "Sakura — Полный доступ навсегда")}
-                            </p>
-                            <p className="mt-1 text-xs leading-relaxed text-gray-400">
-                              {t(
-                                "You have permanent unlimited access to all features and future updates of Sakura.",
-                                "У вас активирован постоянный неограниченный доступ ко всем функциям чита Sakura."
-                              )}
-                            </p>
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div className="flex items-center gap-3.5">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-amber-500/40 bg-amber-500/10 shadow-[0_0_20px_rgba(245,158,11,0.15)]">
+                              <SakuraIcon
+                                className="h-6 w-6 text-amber-400"
+                                stroke="#fbbf24"
+                                fill="#f59e0b"
+                              />
+                            </div>
+                            <div>
+                              <p className="text-base font-black uppercase tracking-tight text-white">
+                                {t("Sakura Lifetime", "Sakura Lifetime")}
+                              </p>
+                              <p className="text-xs text-amber-200/70 font-mono mt-0.5">
+                                {t(
+                                  "Permanent access • All updates included",
+                                  "Бессрочный доступ • Все обновления"
+                                )}
+                              </p>
+                            </div>
                           </div>
-                          <div className="mt-4 flex flex-wrap items-center gap-3">
+
+                          <div className="shrink-0">
                             <button
                               type="button"
                               disabled
-                              className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-5 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-black opacity-60 cursor-not-allowed"
+                              className="inline-flex items-center justify-center rounded-xl border border-[#ffb7c5]/30 bg-[#ffb7c5] px-5 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-black opacity-60 cursor-not-allowed"
                             >
                               {t("Download SakuraLoader.exe", "Скачать SakuraLoader.exe")}
                             </button>
