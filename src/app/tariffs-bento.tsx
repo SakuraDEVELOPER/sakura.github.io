@@ -15,6 +15,7 @@ export type TariffsBentoProps = {
     hasClaimedTrial?: boolean;
     activationHistory?: Array<{ type?: string; code?: string }>;
     subscriptionUntil?: string | null;
+    roles?: string[];
   } | null;
   onClaimSuccess?: (result: { durationDays: number; newUntil: string }) => void;
   className?: string;
@@ -38,6 +39,10 @@ export function TariffsBento({
   const hasAlreadyClaimed = Boolean(
     hasClaimedLocal ||
     currentUser?.hasClaimedTrial === true ||
+    currentUser?.roles?.some((r) => {
+      const lower = String(r).toLowerCase().trim();
+      return lower === "test period" || lower === "trial";
+    }) ||
     currentUser?.activationHistory?.some(
       (item) => item.type === "trial" || item.code === "7-DAYS-TRIAL"
     )
@@ -104,56 +109,51 @@ export function TariffsBento({
   if (variant === "compact") {
     return (
       <div className={`w-full space-y-2.5 ${className}`}>
-        {/* 1. Trial: 7 Days */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-sky-500/30 bg-gradient-to-r from-[#09151e] to-[#060b10] p-3.5 px-4 shadow-[0_0_15px_rgba(56,189,248,0.08)] transition hover:border-sky-500/50">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-sky-500/40 bg-sky-500/15 text-sky-400">
-              <SakuraIcon
-                className="h-5 w-5 text-sky-400"
-                stroke="#38bdf8"
-                fill="#0284c7"
-              />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-black uppercase text-white tracking-wide">
-                  {t("7 Days Test", "7 Дней Тест")}
-                </span>
-                <span className="rounded-full border border-sky-500/40 bg-sky-500/10 px-2 py-0.5 font-mono text-[9px] font-bold uppercase text-sky-400">
-                  {t("Free", "0 ₽ • 1 раз")}
-                </span>
+        {/* 1. Trial: 7 Days - Hides when already claimed */}
+        {!hasAlreadyClaimed && (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-sky-500/30 bg-gradient-to-r from-[#09151e] to-[#060b10] p-3.5 px-4 shadow-[0_0_15px_rgba(56,189,248,0.08)] transition hover:border-sky-500/50">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-sky-500/40 bg-sky-500/15 text-sky-400">
+                <SakuraIcon
+                  className="h-5 w-5 text-sky-400"
+                  stroke="#38bdf8"
+                  fill="#0284c7"
+                />
               </div>
-              <p className="text-[11px] text-gray-400">
-                {t("Full-featured trial access for new players", "Полный ознакомительный доступ для тестирования")}
-              </p>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-black uppercase text-white tracking-wide">
+                    {t("7 Days Test", "7 Дней Тест")}
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-400">
+                  {t("Full-featured trial access for new players", "Полный ознакомительный доступ для тестирования")}
+                </p>
+              </div>
+            </div>
+
+            <div className="shrink-0 flex items-center">
+              {isLoggedIn ? (
+                <button
+                  type="button"
+                  onClick={handleClaimTrial}
+                  disabled={isClaiming}
+                  className="inline-flex items-center justify-center rounded-xl border border-sky-400/50 bg-sky-400 px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-black shadow-[0_0_15px_rgba(56,189,248,0.3)] transition hover:bg-white hover:scale-105 active:scale-95 disabled:opacity-50"
+                >
+                  {isClaiming ? t("Activating...", "Активация...") : t("Get 7 Days Free", "Получить тест")}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleOpenAuth}
+                  className="inline-flex items-center justify-center rounded-xl border border-sky-500/40 bg-[#09151e] px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-sky-400 transition hover:bg-sky-400 hover:text-black"
+                >
+                  {t("Login to Claim", "Войти и получить")}
+                </button>
+              )}
             </div>
           </div>
-
-          <div className="shrink-0 flex items-center">
-            {hasAlreadyClaimed ? (
-              <span className="inline-flex items-center rounded-xl border border-gray-800 bg-[#0d1418] px-3.5 py-1.5 font-mono text-[11px] font-bold uppercase tracking-wider text-gray-500 cursor-not-allowed">
-                {t("✓ Claimed", "✓ Активирован")}
-              </span>
-            ) : isLoggedIn ? (
-              <button
-                type="button"
-                onClick={handleClaimTrial}
-                disabled={isClaiming}
-                className="inline-flex items-center justify-center rounded-xl border border-sky-400/50 bg-sky-400 px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-black shadow-[0_0_15px_rgba(56,189,248,0.3)] transition hover:bg-white hover:scale-105 active:scale-95 disabled:opacity-50"
-              >
-                {isClaiming ? t("Activating...", "Активация...") : t("Get 7 Days Free", "Получить тест")}
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleOpenAuth}
-                className="inline-flex items-center justify-center rounded-xl border border-sky-500/40 bg-[#09151e] px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-sky-400 transition hover:bg-sky-400 hover:text-black"
-              >
-                {t("Login to Claim", "Войти и получить")}
-              </button>
-            )}
-          </div>
-        </div>
+        )}
 
         {/* 2. Popular: 30 Days */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border-2 border-[#ffb7c5]/60 bg-gradient-to-r from-[#221019] via-[#150a10] to-[#0f070b] p-3.5 px-4 shadow-[0_0_25px_rgba(255,183,197,0.15)] transition hover:border-[#ffb7c5]">
@@ -165,9 +165,6 @@ export function TariffsBento({
               <div className="flex items-center gap-2">
                 <span className="text-sm font-black uppercase text-white tracking-wide">
                   {t("30 Days Access", "30 Дней Доступа")}
-                </span>
-                <span className="rounded-full bg-[#ffb7c5] px-2 py-0.5 font-mono text-[9px] font-black uppercase tracking-wider text-black">
-                  ★ {t("Popular", "Хит")}
                 </span>
               </div>
               <p className="text-[11px] text-gray-300">
@@ -189,7 +186,7 @@ export function TariffsBento({
           </div>
         </div>
 
-        {/* 3. Lifetime: Soon */}
+        {/* 3. Lifetime */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-amber-500/30 bg-gradient-to-r from-[#19140b] to-[#0c0905] p-3.5 px-4 shadow-[0_0_15px_rgba(245,158,11,0.06)] transition hover:border-amber-500/50">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber-500/40 bg-amber-500/15 text-amber-400">
@@ -198,14 +195,11 @@ export function TariffsBento({
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-sm font-black uppercase text-white tracking-wide">
-                  {t("Lifetime Access", "Навсегда (Lifetime)")}
-                </span>
-                <span className="rounded-full border border-amber-500/50 bg-amber-500/20 px-2 py-0.5 font-mono text-[9px] font-black uppercase tracking-wider text-amber-300">
-                  SOON
+                  {t("Lifetime Access", "Навсегда")}
                 </span>
               </div>
               <p className="text-[11px] text-gray-400">
-                {t("Unlimited permanent access with all future updates", "Пожизненный доступ ко всем обновлениям")}
+                {t("Unlimited permanent access", "Пожизненный доступ")}
               </p>
             </div>
           </div>
@@ -233,107 +227,88 @@ export function TariffsBento({
 
   return (
     <div className={`w-full ${className}`}>
-      {/* Bento Grid: 3 Clean Tariffs */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        {/* TARIFF 1: 7 DAYS (FREE TRIAL) */}
-        <div className="relative flex flex-col justify-between rounded-[22px] border border-sky-500/25 bg-gradient-to-b from-[#09151e] to-[#060b10] p-5 sm:p-6 shadow-[0_0_25px_rgba(56,189,248,0.06)] transition hover:border-sky-500/45 hover:shadow-[0_0_35px_rgba(56,189,248,0.12)]">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-0.5 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-sky-400">
-                {t("1 per account", "1 раз на аккаунт")}
-              </span>
+      {/* Bento Grid: Clean Tariffs */}
+      <div className={`grid grid-cols-1 gap-4 ${hasAlreadyClaimed ? "md:grid-cols-2 max-w-4xl mx-auto" : "md:grid-cols-3"}`}>
+        {/* TARIFF 1: 7 DAYS (FREE TRIAL) - Hides when already claimed */}
+        {!hasAlreadyClaimed && (
+          <div className="relative flex flex-col justify-between rounded-[22px] border border-sky-500/25 bg-gradient-to-b from-[#09151e] to-[#060b10] p-5 sm:p-6 shadow-[0_0_25px_rgba(56,189,248,0.06)] transition hover:border-sky-500/45 hover:shadow-[0_0_35px_rgba(56,189,248,0.12)]">
+            <div>
+              <div className="mt-4">
+                <h3 className="text-xl font-black uppercase tracking-tight text-white flex items-center gap-2">
+                  <span>{t("7 Days", "7 Дней")}</span>
+                  <SakuraIcon
+                    className="h-5 w-5 text-sky-400"
+                    stroke="#38bdf8"
+                    fill="#0284c7"
+                  />
+                </h3>
+                <p className="mt-1 text-xs text-gray-400 leading-relaxed">
+                  {t(
+                    "Full-featured trial to test Sakura before purchasing.",
+                    "Полный ознакомительный доступ для тестирования чита."
+                  )}
+                </p>
+              </div>
+
+              <div className="mt-4 flex items-baseline gap-2 border-b border-[#12222d] pb-4">
+                <span className="text-3xl font-black text-sky-400">0 ₽</span>
+                <span className="font-mono text-xs text-gray-500 uppercase">
+                  / {t("free", "бесплатно")}
+                </span>
+              </div>
+
+              <ul className="mt-4 space-y-2 text-xs text-gray-300">
+                <li className="flex items-center gap-2">
+                  <span className="text-sky-400 font-bold">✓</span>
+                  <span>{t("All cheat features & combat scripts", "Все функции чита и боевые скрипты")}</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-sky-400 font-bold">✓</span>
+                  <span>{t("Built-in Humanizer & safety layer", "Безопасный Humanizer и обход")}</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-sky-400 font-bold">✓</span>
+                  <span>{t("Inventory Skinchanger & Maphack", "Скинченджер и мапхак")}</span>
+                </li>
+              </ul>
             </div>
 
-            <div className="mt-4">
-              <h3 className="text-xl font-black uppercase tracking-tight text-white flex items-center gap-2">
-                <span>{t("7 Days", "7 Дней")}</span>
-                <SakuraIcon
-                  className="h-5 w-5 text-sky-400"
-                  stroke="#38bdf8"
-                  fill="#0284c7"
-                />
-              </h3>
-              <p className="mt-1 text-xs text-gray-400 leading-relaxed">
-                {t(
-                  "Full-featured trial to test Sakura before purchasing.",
-                  "Полный ознакомительный доступ для тестирования чита."
-                )}
-              </p>
-            </div>
+            <div className="mt-5">
+              {isLoggedIn ? (
+                <button
+                  type="button"
+                  onClick={handleClaimTrial}
+                  disabled={isClaiming}
+                  className="w-full rounded-xl border border-sky-400/50 bg-sky-400 py-2.5 sm:py-3 text-xs font-bold uppercase tracking-[0.14em] text-black shadow-[0_0_24px_rgba(56,189,248,0.3)] transition hover:bg-white hover:scale-[1.02] active:scale-95 disabled:opacity-50"
+                >
+                  {isClaiming ? t("Activating...", "Активация...") : t("Claim 7 Days Free", "Получить 7 дней теста")}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleOpenAuth}
+                  className="w-full rounded-xl border border-sky-500/40 bg-[#09151e] py-2.5 sm:py-3 text-xs font-bold uppercase tracking-[0.14em] text-sky-400 shadow-[0_0_18px_rgba(56,189,248,0.15)] transition hover:border-sky-400 hover:bg-sky-400 hover:text-black hover:scale-[1.02] active:scale-95"
+                >
+                  {t("Login to Claim Trial", "Войти и получить тест")}
+                </button>
+              )}
 
-            <div className="mt-4 flex items-baseline gap-2 border-b border-[#12222d] pb-4">
-              <span className="text-3xl font-black text-sky-400">0 ₽</span>
-              <span className="font-mono text-xs text-gray-500 uppercase">
-                / {t("free", "бесплатно")}
-              </span>
+              {claimSuccessMessage && (
+                <p className="mt-2 text-center text-xs text-[#8ce5b2] font-medium">
+                  {claimSuccessMessage}
+                </p>
+              )}
+              {claimErrorMessage && (
+                <p className="mt-2 text-center text-xs text-[#ff9aa9] font-medium">
+                  ⚠ {claimErrorMessage}
+                </p>
+              )}
             </div>
-
-            <ul className="mt-4 space-y-2 text-xs text-gray-300">
-              <li className="flex items-center gap-2">
-                <span className="text-sky-400 font-bold">✓</span>
-                <span>{t("All cheat features & combat scripts", "Все функции чита и боевые скрипты")}</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="text-sky-400 font-bold">✓</span>
-                <span>{t("Built-in Humanizer & safety layer", "Безопасный Humanizer и обход")}</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="text-sky-400 font-bold">✓</span>
-                <span>{t("Inventory Skinchanger & Maphack", "Скинченджер и мапхак")}</span>
-              </li>
-            </ul>
           </div>
-
-          <div className="mt-5">
-            {hasAlreadyClaimed ? (
-              <button
-                type="button"
-                disabled
-                className="w-full rounded-xl border border-gray-800 bg-[#0d1418] py-2.5 sm:py-3 text-xs font-bold uppercase tracking-[0.14em] text-gray-500 opacity-60 cursor-not-allowed"
-              >
-                {t("✓ Trial Already Claimed", "✓ Тест уже активирован")}
-              </button>
-            ) : isLoggedIn ? (
-              <button
-                type="button"
-                onClick={handleClaimTrial}
-                disabled={isClaiming}
-                className="w-full rounded-xl border border-sky-400/50 bg-sky-400 py-2.5 sm:py-3 text-xs font-bold uppercase tracking-[0.14em] text-black shadow-[0_0_24px_rgba(56,189,248,0.3)] transition hover:bg-white hover:scale-[1.02] active:scale-95 disabled:opacity-50"
-              >
-                {isClaiming ? t("Activating...", "Активация...") : t("Claim 7 Days Free", "Получить 7 дней теста")}
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleOpenAuth}
-                className="w-full rounded-xl border border-sky-500/40 bg-[#09151e] py-2.5 sm:py-3 text-xs font-bold uppercase tracking-[0.14em] text-sky-400 shadow-[0_0_18px_rgba(56,189,248,0.15)] transition hover:border-sky-400 hover:bg-sky-400 hover:text-black hover:scale-[1.02] active:scale-95"
-              >
-                {t("Login to Claim Trial", "Войти и получить тест")}
-              </button>
-            )}
-
-            {claimSuccessMessage && (
-              <p className="mt-2 text-center text-xs text-[#8ce5b2] font-medium">
-                {claimSuccessMessage}
-              </p>
-            )}
-            {claimErrorMessage && (
-              <p className="mt-2 text-center text-xs text-[#ff9aa9] font-medium">
-                ⚠ {claimErrorMessage}
-              </p>
-            )}
-          </div>
-        </div>
+        )}
 
         {/* TARIFF 2: 30 DAYS (POPULAR / FUNPAY) */}
         <div className="relative flex flex-col justify-between rounded-[22px] border-2 border-[#ffb7c5] bg-[radial-gradient(ellipse_at_top,#26111b_0%,#10080c_80%)] p-5 sm:p-6 shadow-[0_0_40px_rgba(255,183,197,0.22)] transition hover:shadow-[0_0_55px_rgba(255,183,197,0.32)]">
-          {/* Top Popular Glow Ribbon */}
-          <div className="absolute top-0 right-0 left-0 flex justify-center">
-            <span className="rounded-b-lg bg-[#ffb7c5] px-3.5 py-0.5 text-[9px] font-black uppercase tracking-[0.2em] text-black shadow-[0_0_20px_rgba(255,183,197,0.5)]">
-              ★ {t("Most Popular", "Хит продаж")}
-            </span>
-          </div>
-
           <div className="pt-1">
             <div className="mt-3 flex items-center justify-between">
               <h3 className="text-xl font-black uppercase tracking-tight text-white flex items-center gap-2">
@@ -389,15 +364,9 @@ export function TariffsBento({
           </div>
         </div>
 
-        {/* TARIFF 3: LIFETIME (SOON) */}
+        {/* TARIFF 3: LIFETIME */}
         <div className="relative flex flex-col justify-between rounded-[22px] border border-amber-500/25 bg-gradient-to-b from-[#18130a] to-[#0d0a06] p-5 sm:p-6 shadow-[0_0_25px_rgba(245,158,11,0.06)] transition hover:border-amber-500/40">
           <div>
-            <div className="flex items-center justify-between">
-              <span className="rounded-full border border-amber-500/50 bg-amber-500/15 px-2.5 py-0.5 font-mono text-[9px] font-black uppercase tracking-wider text-amber-300">
-                SOON
-              </span>
-            </div>
-
             <div className="mt-3">
               <h3 className="text-xl font-black uppercase tracking-tight text-white flex items-center gap-2">
                 <span>{t("Lifetime", "Навсегда")}</span>
@@ -410,7 +379,7 @@ export function TariffsBento({
               <p className="mt-1 text-xs text-gray-400 leading-relaxed">
                 {t(
                   "Unlimited permanent access to all Sakura builds & updates.",
-                  "Пожизненный неограниченный доступ ко всем обновлениям."
+                  "Пожизненный неограниченный доступ."
                 )}
               </p>
             </div>

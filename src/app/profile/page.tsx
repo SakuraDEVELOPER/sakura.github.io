@@ -7319,8 +7319,8 @@ export default function ProfilePage() {
                               </p>
                               <p className="text-xs text-amber-200/70 font-mono mt-0.5">
                                 {t(
-                                  "Permanent access • All updates included",
-                                  "Бессрочный доступ • Все обновления"
+                                  "Permanent access",
+                                  "Бессрочный доступ"
                                 )}
                               </p>
                             </div>
