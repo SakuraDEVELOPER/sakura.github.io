@@ -512,6 +512,78 @@ Deno.serve(async (req) => {
       return jsonResponse(200, { status: "ok" });
     }
 
+    // 10. SUPPORT NOTIFICATION ROUTE (/support-notify or /v1/support-notify)
+    if (path.endsWith("/support-notify") || path.endsWith("/v1/support-notify")) {
+      if (req.method !== "POST") {
+        return jsonResponse(405, { code: "METHOD_NOT_ALLOWED" });
+      }
+
+      const body = await req.json().catch(() => ({}));
+      const ticketId = String(body.ticketId || "").slice(0, 32);
+      const category = String(body.category || "other").slice(0, 32);
+      const authorLogin = String(body.authorLogin || "Guest").slice(0, 64);
+      const authorProfileId = String(body.authorProfileId || "?").slice(0, 16);
+      const contact = String(body.contact || "Не указан").slice(0, 128);
+      let messageText = String(body.message || "").slice(0, 2000);
+
+      // Security: Strip dangerous mentions from message to prevent Discord abuse
+      messageText = messageText.replace(/@(everyone|here)/gi, "@\u200B$1");
+
+      const categoryNames: Record<string, string> = {
+        payment: "Оплата / Промокоды",
+        loader: "Запуск / SakuraLoader",
+        cheat: "Чит / Функции",
+        other: "Общий вопрос",
+      };
+
+      const discordWebhook = Deno.env.get("DISCORD_WEBHOOK_URL") || "";
+      if (discordWebhook && discordWebhook.startsWith("https://discord.com/api/webhooks/")) {
+        const payload = {
+          username: "Sakura Support Bot",
+          avatar_url: "https://sakuradeveloper.github.io/favicon.ico",
+          embeds: [
+            {
+              title: `🌸 Новый тикет #${ticketId.slice(-6)} [${categoryNames[category] || category}]`,
+              description: messageText || "Без текста",
+              color: 0xffb7c5,
+              fields: [
+                {
+                  name: "Пользователь",
+                  value: `@${authorLogin} (ID #${authorProfileId})`,
+                  inline: true,
+                },
+                {
+                  name: "Контакт для связи",
+                  value: contact,
+                  inline: true,
+                },
+                {
+                  name: "Статус",
+                  value: "Открыт",
+                  inline: true,
+                },
+              ],
+              footer: {
+                text: "Sakura Cheat Support System • " + new Date().toISOString().slice(0, 19).replace("T", " "),
+              },
+            },
+          ],
+        };
+
+        try {
+          await fetch(discordWebhook, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+        } catch (webhookErr) {
+          console.error("Failed to forward support ticket to Discord:", webhookErr);
+        }
+      }
+
+      return jsonResponse(200, { status: "ok" });
+    }
+
     return jsonResponse(404, { code: "NOT_FOUND", path });
   } catch (error) {
     console.error("Auth Edge Function error:", error);

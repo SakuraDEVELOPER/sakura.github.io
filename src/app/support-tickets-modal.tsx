@@ -25,10 +25,6 @@ export type SupportTicket = {
   messages: TicketMessage[];
 };
 
-// Default Discord Webhook URL can be stored in settings or handled via server edge function
-const DEFAULT_DISCORD_WEBHOOK_KEY = "sakura_discord_webhook_url";
-const DEFAULT_DISCORD_WEBHOOK_URL = "";
-
 export default function SupportTicketsModal({
   isOpen,
   onClose,
@@ -56,10 +52,6 @@ export default function SupportTicketsModal({
   const [replyText, setReplyText] = useState("");
   const [isSendingReply, setIsSendingReply] = useState(false);
 
-  // Admin Discord Webhook Config State
-  const [discordWebhookUrl, setDiscordWebhookUrl] = useState("");
-  const [isSavingWebhook, setIsSavingWebhook] = useState(false);
-
   useEffect(() => {
     if (typeof window === "undefined") return;
     const user = (window as any).sakuraCurrentUserSnapshot;
@@ -69,27 +61,6 @@ export default function SupportTicketsModal({
       ["root", "co-owner", "owner"].includes(String(r).trim().toLowerCase())
     );
     setIsAdmin(adminCheck);
-
-    const savedWebhook = window.localStorage.getItem(DEFAULT_DISCORD_WEBHOOK_KEY) || DEFAULT_DISCORD_WEBHOOK_URL;
-    setDiscordWebhookUrl(savedWebhook);
-
-    // Also sync global webhook URL from Firestore meta/settings
-    try {
-      const db = (window as any).firebaseFirestoreDb;
-      const doc = (window as any).firebaseDoc;
-      const getDoc = (window as any).firebaseGetDoc;
-      if (db && doc && getDoc) {
-        getDoc(doc(db, "meta", "settings"))
-          .then((snap: any) => {
-            if (snap.exists() && snap.data()?.discordWebhookUrl) {
-              const url = snap.data().discordWebhookUrl;
-              setDiscordWebhookUrl(url);
-              window.localStorage.setItem(DEFAULT_DISCORD_WEBHOOK_KEY, url);
-            }
-          })
-          .catch(() => {});
-      }
-    } catch {}
   }, [isOpen]);
 
   useEffect(() => {
@@ -139,71 +110,21 @@ export default function SupportTicketsModal({
   };
 
   const sendDiscordNotification = async (ticket: SupportTicket, initialText: string) => {
-    let webhook =
-      discordWebhookUrl ||
-      (typeof window !== "undefined" ? window.localStorage.getItem(DEFAULT_DISCORD_WEBHOOK_KEY) : null) ||
-      DEFAULT_DISCORD_WEBHOOK_URL;
-    if (!webhook || !webhook.startsWith("http")) {
-      try {
-        const db = (window as any).firebaseFirestoreDb;
-        const doc = (window as any).firebaseDoc;
-        const getDoc = (window as any).firebaseGetDoc;
-        if (db && doc && getDoc) {
-          const snap = await getDoc(doc(db, "meta", "settings"));
-          if (snap.exists() && snap.data()?.discordWebhookUrl) {
-            webhook = snap.data().discordWebhookUrl;
-          }
-        }
-      } catch {}
-    }
-    if (!webhook || !webhook.startsWith("http")) return;
-
     try {
-      const categoryNames: Record<string, string> = {
-        payment: "Оплата / Промокоды",
-        loader: "Запуск / SakuraLoader",
-        cheat: "Чит / Функции",
-        other: "Общий вопрос",
-      };
-
-      const payload = {
-        username: "Sakura Support Bot",
-        embeds: [
-          {
-            title: `🌸 Новый тикет #${ticket.id.slice(-6)} [${categoryNames[ticket.category] || ticket.category}]`,
-            description: initialText,
-            color: 0xffb7c5,
-            fields: [
-              {
-                name: "Пользователь",
-                value: `@${ticket.authorLogin} (ID #${ticket.authorProfileId ?? "?"})`,
-                inline: true,
-              },
-              {
-                name: "Контакт для связи",
-                value: ticket.contact || "Не указан",
-                inline: true,
-              },
-              {
-                name: "Статус",
-                value: "Открыт",
-                inline: true,
-              },
-            ],
-            footer: {
-              text: "Sakura Cheat Support System • " + new Date().toISOString().slice(0, 19).replace("T", " "),
-            },
-          },
-        ],
-      };
-
-      await fetch(webhook, {
+      await fetch("https://cwiljdpxgawxglgciily.supabase.co/functions/v1/auth/support-notify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          ticketId: ticket.id,
+          category: ticket.category,
+          authorLogin: ticket.authorLogin,
+          authorProfileId: ticket.authorProfileId,
+          contact: ticket.contact,
+          message: initialText,
+        }),
       });
     } catch (err) {
-      console.warn("Failed to dispatch Discord webhook:", err);
+      console.warn("Failed to dispatch support notification via Edge Function proxy:", err);
     }
   };
 
@@ -594,45 +515,23 @@ export default function SupportTicketsModal({
             /* Tickets List View (My Tickets or Admin Inbox) */
             <div className="space-y-3">
               {isAdmin && activeTab === "admin" && (
-                /* Admin Discord Webhook Settings Accordion */
+                /* Admin Discord Notification Status Banner */
                 <div className="mb-4 rounded-2xl border border-[#26171d] bg-[#110a0e] p-3.5">
-                  <p className="text-[10px] font-mono uppercase text-gray-400 tracking-[0.2em] mb-1.5">
-                    {t("Discord Webhook Integration", "Discord Webhook (Уведомления в канал)")}
-                  </p>
-                  <div className="flex gap-2">
-                    <input
-                      type="url"
-                      placeholder="https://discord.com/api/webhooks/..."
-                      value={discordWebhookUrl}
-                      onChange={(e) => setDiscordWebhookUrl(e.target.value)}
-                      className="flex-1 rounded-xl border border-[#28181f] bg-[#0c080a] px-3 py-1.5 text-xs text-gray-300 outline-none focus:border-[#ffb7c5]"
-                    />
-                    <button
-                      type="button"
-                      disabled={isSavingWebhook}
-                      onClick={async () => {
-                        const trimmed = discordWebhookUrl.trim();
-                        window.localStorage.setItem(DEFAULT_DISCORD_WEBHOOK_KEY, trimmed);
-                        setIsSavingWebhook(true);
-                        try {
-                          const db = (window as any).firebaseFirestoreDb;
-                          const doc = (window as any).firebaseDoc;
-                          const setDoc = (window as any).firebaseSetDoc;
-                          if (db && doc && setDoc) {
-                            await setDoc(doc(db, "meta", "settings"), { discordWebhookUrl: trimmed }, { merge: true });
-                          }
-                          alert(t("Discord Webhook saved for all visitors!", "Discord Webhook сохранён для всех пользователей!"));
-                        } catch (err) {
-                          console.warn("Could not save to Firestore meta/settings:", err);
-                          alert(t("Saved to browser storage.", "Сохранено в памяти браузера."));
-                        } finally {
-                          setIsSavingWebhook(false);
-                        }
-                      }}
-                      className="rounded-xl border border-[#ffb7c5]/30 bg-[#ffb7c5] px-3.5 py-1.5 text-xs font-bold text-black hover:bg-white transition disabled:opacity-50"
-                    >
-                      {isSavingWebhook ? t("Saving...", "Сохранение...") : t("Save", "Сохранить")}
-                    </button>
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-[10px] font-mono uppercase text-[#ffb7c5] tracking-[0.2em]">
+                        {t("Discord Webhook Proxy: Active", "Discord Webhook Proxy: Активен")}
+                      </p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">
+                        {t(
+                          "Notifications are securely proxied through Edge Functions (URL hidden from client).",
+                          "Уведомления безопасно проксируются через Edge Functions (URL скрыт от браузера)."
+                        )}
+                      </p>
+                    </div>
+                    <span className="shrink-0 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+                      {t("Secure", "Защищено")}
+                    </span>
                   </div>
                 </div>
               )}
