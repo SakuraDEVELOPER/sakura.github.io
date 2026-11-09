@@ -1483,6 +1483,7 @@ const firebaseModuleScript = `
           subscriptionUntil: resolveSubscriptionUntil(details, null),
           isFrozen: details.isFrozen === true,
           frozenAt: typeof details.frozenAt === "string" ? details.frozenAt : null,
+          lastFrozenAt: typeof details.lastFrozenAt === "string" ? details.lastFrozenAt : null,
           frozenRemainingMs: typeof details.frozenRemainingMs === "number" ? details.frozenRemainingMs : null,
           roles: normalizeRoles(details.roles),
           isBanned: details.isBanned === true,
@@ -1533,6 +1534,7 @@ const firebaseModuleScript = `
     subscriptionUntil: resolveSubscriptionUntil(details, null),
     isFrozen: details.isFrozen === true,
     frozenAt: typeof details.frozenAt === "string" ? details.frozenAt : null,
+    lastFrozenAt: typeof details.lastFrozenAt === "string" ? details.lastFrozenAt : null,
     frozenRemainingMs: typeof details.frozenRemainingMs === "number" ? details.frozenRemainingMs : null,
     roles: normalizeRoles(details.roles),
     isBanned: details.isBanned === true,
@@ -4902,12 +4904,30 @@ const firebaseModuleScript = `
       if (roles.some((r) => ["lifetime", "root", "owner", "co-owner"].includes(r.toLowerCase()))) {
         throw createFirebaseError("subscription/lifetime-freeze", "Бессрочную подписку (Lifetime) не требуется замораживать.");
       }
-      if (roles.some((r) => ["test period", "trial"].includes(r.toLowerCase()))) {
-        throw createFirebaseError("subscription/trial-freeze", "Пробный период (Test Period) нельзя заморозить.");
+      const latestActivation = Array.isArray(data.activationHistory) ? data.activationHistory[0] : null;
+      const isTrialActive = Boolean(
+        roles.some((r) => ["test period", "trial"].includes(r.toLowerCase())) ||
+        (data.hasClaimedTrial && latestActivation?.type === "trial")
+      );
+      if (isTrialActive) {
+        throw createFirebaseError("subscription/trial-freeze", "Тестовую подписку (7 Дней) нельзя заморозить.");
+      }
+      const now = Date.now();
+      const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
+      const lastFrozenAtStr = data.lastFrozenAt || (Array.isArray(data.activationHistory) ? data.activationHistory.find((item) => item.type === "freeze")?.activatedAt : null);
+      if (lastFrozenAtStr) {
+        const lastFrozenTime = new Date(lastFrozenAtStr).getTime();
+        const diffMs = now - lastFrozenTime;
+        if (diffMs < ONE_MONTH_MS) {
+          const daysLeft = Math.ceil((ONE_MONTH_MS - diffMs) / (24 * 60 * 60 * 1000));
+          throw createFirebaseError(
+            "subscription/freeze-cooldown",
+            "Заморозка доступна только 1 раз в 30 дней. Следующая заморозка будет доступна через " + daysLeft + " дн."
+          );
+        }
       }
       const untilStr = data.subscriptionUntil || data.subscription_until;
       const untilTime = untilStr ? new Date(untilStr).getTime() : 0;
-      const now = Date.now();
       const remainingMs = Math.max(0, untilTime - now);
       if (remainingMs < 3600000) {
         throw createFirebaseError("subscription/no-remaining", "Недостаточно оставшегося времени для заморозки (минимум 1 час).");
@@ -4923,6 +4943,7 @@ const firebaseModuleScript = `
       const updatePayload = {
         isFrozen: true,
         frozenAt: new Date().toISOString(),
+        lastFrozenAt: new Date().toISOString(),
         frozenRemainingMs: remainingMs,
         activationHistory: updatedFreezeHistory,
         updatedAt: new Date().toISOString()

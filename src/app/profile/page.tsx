@@ -66,6 +66,7 @@ type UserProfile = {
   trialClaimedAt?: string | null;
   isFrozen?: boolean;
   frozenAt?: string | null;
+  lastFrozenAt?: string | null;
   frozenRemainingMs?: number | null;
   activationHistory?: ActivationRecord[];
   referredBy?: string | null;
@@ -3183,6 +3184,21 @@ export default function ProfilePage() {
   const hasSubscriberRole = normalizedProfileRoleSet.has("subscriber");
   const hasLifetimeRole = normalizedProfileRoleSet.has("lifetime");
   const hasTestPeriodRole = normalizedProfileRoleSet.has("test period");
+  const isTrialSubscription = Boolean(
+    hasTestPeriodRole ||
+    (activeProfile?.hasClaimedTrial &&
+      activeProfile?.activationHistory?.[0]?.type === "trial")
+  );
+  const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
+  const lastFrozenAtStr =
+    activeProfile?.lastFrozenAt ||
+    activeProfile?.activationHistory?.find((item) => item.type === "freeze")?.activatedAt ||
+    null;
+  const lastFrozenTime = lastFrozenAtStr ? new Date(lastFrozenAtStr).getTime() : 0;
+  const freezeCooldownRemainingMs = Math.max(0, ONE_MONTH_MS - (Date.now() - lastFrozenTime));
+  const isFreezeOnCooldown = lastFrozenTime > 0 && freezeCooldownRemainingMs > 0;
+  const freezeCooldownDays = Math.ceil(freezeCooldownRemainingMs / (24 * 60 * 60 * 1000));
+
   const hasPaidSubscriptionRole = hasSubscriberRole || hasLifetimeRole;
   const hasActiveSubscriptionRole = hasPaidSubscriptionRole || hasTestPeriodRole;
   const normalizedProfileRoles = profileRoles;
@@ -7361,7 +7377,7 @@ export default function ProfilePage() {
                               {t("Sakura Subscription", "Подписка Sakura")}
                             </p>
                             <p className="mt-0.5 text-xs text-gray-400">
-                              {hasTestPeriodRole ? t("Test Period Access", "Пробный период") : t("Active Full Access", "Активный полный доступ")}
+                              {isTrialSubscription ? t("Test Period (7 Days)", "Пробный период (7 Дней)") : t("Active Full Access", "Активный полный доступ")}
                             </p>
                           </div>
                           <div className="mt-3.5 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -7392,15 +7408,29 @@ export default function ProfilePage() {
                             >
                               {t("Download Loader", "Скачать лоадер")}
                             </button>
-                            {isOwner && !hasTestPeriodRole && (
-                              <button
-                                type="button"
-                                onClick={handleFreezeSubscription}
-                                disabled={isFreezingSubscription}
-                                className="inline-flex items-center justify-center rounded-full border border-[#38bdf8]/40 bg-[#082f49]/50 px-4 py-2 text-xs font-bold text-[#7dd3fc] transition hover:border-[#38bdf8] hover:text-white disabled:opacity-60"
-                              >
-                                <span>{isFreezingSubscription ? t("Freezing...", "Заморозка...") : t("Freeze Subscription", "Заморозить")}</span>
-                              </button>
+                            {isOwner && !isTrialSubscription && !hasLifetimeRole && (
+                              isFreezeOnCooldown ? (
+                                <button
+                                  type="button"
+                                  disabled
+                                  title={t(
+                                    `Freeze cooldown active. Available only once every 30 days. Next freeze in ${freezeCooldownDays} days.`,
+                                    `Заморозка доступна только 1 раз в 30 дней. Следующая заморозка через ${freezeCooldownDays} дн.`
+                                  )}
+                                  className="inline-flex items-center justify-center rounded-full border border-gray-800 bg-[#141012] px-4 py-2 text-xs font-bold text-gray-500 opacity-60 cursor-not-allowed"
+                                >
+                                  <span>{t(`Freeze (${freezeCooldownDays}d)`, `Заморозка (${freezeCooldownDays} дн.)`)}</span>
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={handleFreezeSubscription}
+                                  disabled={isFreezingSubscription}
+                                  className="inline-flex items-center justify-center rounded-full border border-[#38bdf8]/40 bg-[#082f49]/50 px-4 py-2 text-xs font-bold text-[#7dd3fc] transition hover:border-[#38bdf8] hover:text-white disabled:opacity-60"
+                                >
+                                  <span>{isFreezingSubscription ? t("Freezing...", "Заморозка...") : t("Freeze Subscription", "Заморозить")}</span>
+                                </button>
+                              )
                             )}
                             {isOwner && !hasAlreadyClaimedTrial && !hasLifetimeRole && (
                               <button
