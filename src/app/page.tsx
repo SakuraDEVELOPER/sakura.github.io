@@ -9,6 +9,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { AvatarMedia } from "./avatar-media";
 import { HeaderSocialLinks } from "./header-social-links";
 import { SakuraIcon } from "./sakura-icon";
+import { TariffsBento } from "./tariffs-bento";
 import { SiteOnlineBadge } from "./site-online-badge";
 import { readCachedAuthSnapshot } from "@/lib/auth-snapshot-cache";
 import { writeCachedProfileSnapshot } from "@/lib/profile-cache";
@@ -95,6 +96,8 @@ type AuthUserSnapshot = {
   loginHistory: string[];
   visitHistory: VisitHistoryEntry[];
   presence: PresenceSnapshot | null;
+  hasClaimedTrial?: boolean;
+  trialClaimedAt?: string | null;
 };
 
 type FirebaseAuthBridge = {
@@ -118,6 +121,7 @@ type FirebaseAuthBridge = {
   refreshVerificationStatus: () => Promise<AuthUserSnapshot | null>;
   getProfileById: (profileId: number) => Promise<AuthUserSnapshot | null>;
   updateAvatar: (file: File) => Promise<AuthUserSnapshot | null>;
+  claimFreeTrial?: () => Promise<{ success: boolean; durationDays: number; newUntil: string }>;
   deleteAvatar: () => Promise<AuthUserSnapshot | null>;
   syncPresence: (options?: {
     path?: string;
@@ -1926,6 +1930,22 @@ function HeaderAuth() {
 export default function Home() {
   const { t } = useLocaleText();
   const [siteOnlineCount, setSiteOnlineCount] = useState<number | null>(null);
+  const [currentUser, setCurrentUser] = useState<AuthUserSnapshot | null>(() => {
+    if (typeof window === "undefined") return null;
+    return window.sakuraCurrentUserSnapshot ?? readCachedAuthSnapshot<AuthUserSnapshot>() ?? null;
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleUserUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<AuthUserSnapshot | null>;
+      setCurrentUser(customEvent.detail ?? window.sakuraCurrentUserSnapshot ?? null);
+    };
+    window.addEventListener(USER_UPDATE_EVENT, handleUserUpdate);
+    return () => {
+      window.removeEventListener(USER_UPDATE_EVENT, handleUserUpdate);
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -2111,11 +2131,32 @@ export default function Home() {
 
         <FeatureShowcase />
 
-        <TrialCta
-          onClick={() => {
-            void handleHeroTrialClick();
-          }}
-        />
+        <section id="pricing" className="px-6 py-12 md:px-10">
+          <div className="mx-auto max-w-6xl">
+            <div className="mb-8 text-center">
+              <span className="rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5]/10 px-4 py-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.25em] text-[#ffb7c5]">
+                {t("Subscription Plans", "Тарифные планы")}
+              </span>
+              <h2 className="mt-3 text-3xl font-black uppercase tracking-tight text-white sm:text-4xl">
+                {t("Choose Your Access", "Выберите свой тариф")}
+              </h2>
+              <p className="mx-auto mt-2 max-w-xl text-sm text-gray-400">
+                {t(
+                  "Get instant access to all features of Sakura cheat with fast loader setup.",
+                  "Мгновенный доступ ко всем возможностям чита Sakura с моментальной выдачей."
+                )}
+              </p>
+            </div>
+            <TariffsBento
+              currentUser={currentUser}
+              onClaimSuccess={() => {
+                if (currentUser?.profileId) {
+                  window.location.assign(profileHref(currentUser.profileId));
+                }
+              }}
+            />
+          </div>
+        </section>
 
         <section id="features" className="grid grid-cols-1 gap-1 px-10 pt-10 pb-1 md:grid-cols-2">
           <FeatureBox

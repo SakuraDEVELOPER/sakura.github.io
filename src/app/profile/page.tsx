@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSPro
 import { AvatarMedia, AVATAR_FILE_ACCEPT } from "../avatar-media";
 import { HeaderSocialLinks } from "../header-social-links";
 import { SakuraIcon } from "../sakura-icon";
+import { TariffsBento } from "../tariffs-bento";
 import { SiteOnlineBadge } from "../site-online-badge";
 import {
   deleteSupabaseCommentMedia,
@@ -30,7 +31,7 @@ import { type UiLocale, useLocaleText } from "@/lib/ui-locale";
 
 type ActivationRecord = {
   id: string;
-  type: "promo" | "admin_grant" | "freeze" | "unfreeze" | "referral_bonus";
+  type: "promo" | "admin_grant" | "freeze" | "unfreeze" | "referral_bonus" | "trial";
   code?: string;
   durationDays?: number;
   isLifetime?: boolean;
@@ -61,6 +62,8 @@ type UserProfile = {
   bannedAt?: string | null;
   hwid?: string | null;
   subscriptionUntil?: string | null;
+  hasClaimedTrial?: boolean;
+  trialClaimedAt?: string | null;
   isFrozen?: boolean;
   frozenAt?: string | null;
   frozenRemainingMs?: number | null;
@@ -177,6 +180,11 @@ type Bridge = {
     success: boolean;
     durationDays: number;
     isLifetime: boolean;
+    newUntil: string;
+  }>;
+  claimFreeTrial?: () => Promise<{
+    success: boolean;
+    durationDays: number;
     newUntil: string;
   }>;
   updateAvatar: (file: File | AvatarUploadPayload) => Promise<UserProfile | null>;
@@ -7407,6 +7415,21 @@ export default function ProfilePage() {
                         </p>
                       )}
 
+                      {/* Tariffs Bento Grid */}
+                      {isOwner && (
+                        <div className="mt-5 border-t border-[#23171b] pt-4">
+                          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#ffb7c5] mb-3">
+                            {t("Tariff Plans", "Тарифные планы")}
+                          </p>
+                          <TariffsBento
+                            currentUser={activeProfile}
+                            onClaimSuccess={() => {
+                              window.location.reload();
+                            }}
+                          />
+                        </div>
+                      )}
+
                       {/* Promo Code Activation Box (for own profile) */}
                       {isOwner && (
                         <div className="mt-5 border-t border-[#23171b] pt-4">
@@ -7517,6 +7540,8 @@ export default function ProfilePage() {
                                           ? t("Unfrozen", "Разморожено")
                                           : item.type === "referral_bonus"
                                           ? t("Referral Bonus", "Реферальный бонус")
+                                          : item.type === "trial"
+                                          ? t("7-Day Trial", "Тест 7 дней")
                                           : t("Subscription", "Подписка")}
                                       </span>
                                       {item.isLifetime ? (

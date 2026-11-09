@@ -1500,6 +1500,13 @@ const firebaseModuleScript = `
           loginHistory: Array.isArray(details.loginHistory) ? details.loginHistory : [],
           visitHistory: normalizeVisitHistory(details.visitHistory),
           activationHistory: Array.isArray(details.activationHistory) ? details.activationHistory : [],
+          hasClaimedTrial:
+            details.hasClaimedTrial === true ||
+            (Array.isArray(details.activationHistory) &&
+              details.activationHistory.some(
+                (item) => item.type === "trial" || item.code === "7-DAYS-TRIAL"
+              )),
+          trialClaimedAt: typeof details.trialClaimedAt === "string" ? details.trialClaimedAt : null,
           presence: normalizePresence(details.presence, window.location.pathname)
         }
       : null;
@@ -1544,6 +1551,13 @@ const firebaseModuleScript = `
       : [],
     visitHistory: normalizeVisitHistory(details.visitHistory),
     activationHistory: Array.isArray(details.activationHistory) ? details.activationHistory : [],
+    hasClaimedTrial:
+      details.hasClaimedTrial === true ||
+      (Array.isArray(details.activationHistory) &&
+        details.activationHistory.some(
+          (item) => item.type === "trial" || item.code === "7-DAYS-TRIAL"
+        )),
+    trialClaimedAt: typeof details.trialClaimedAt === "string" ? details.trialClaimedAt : null,
     presence: normalizePresence(details.presence, null),
   });
 
@@ -5225,6 +5239,82 @@ const firebaseModuleScript = `
       };
     };
 
+    const claimFreeTrial = async () => {
+      await waitForAuthStateSettlement();
+      const user = auth.currentUser;
+      if (!user || user.isAnonymous) {
+        throw createFirebaseError("auth/no-current-user", "Войдите в аккаунт, чтобы получить бесплатный тест.");
+      }
+      const targetDoc = await findUserByProfileId(window.sakuraCurrentUserSnapshot?.profileId);
+      if (!targetDoc) throw createFirebaseError("auth/user-not-found", "Профиль не найден.");
+      const userData = targetDoc.data() || {};
+      const userProfileId = userData.profileId || window.sakuraCurrentUserSnapshot?.profileId;
+      if (!userProfileId) throw createFirebaseError("auth/user-not-found", "Не удалось определить ID профиля.");
+
+      const existingHistory = Array.isArray(userData.activationHistory) ? userData.activationHistory : [];
+      const hasAlreadyClaimed = Boolean(
+        userData.hasClaimedTrial === true ||
+        userData.trialClaimedAt ||
+        existingHistory.some((item) => item.type === "trial" || item.code === "7-DAYS-TRIAL")
+      );
+
+      if (hasAlreadyClaimed) {
+        throw createFirebaseError("trial/already-claimed", "Бесплатный 7-дневный тест уже был активирован на этом аккаунте.");
+      }
+
+      const now = Date.now();
+      const currentRoles = normalizeRoles(userData.roles);
+      const currentUntilStr = userData.subscriptionUntil || userData.subscription_until;
+      const currentUntilTime = currentUntilStr ? new Date(currentUntilStr).getTime() : 0;
+      const baseTime = currentUntilTime > now ? currentUntilTime : now;
+      const addMs = 7 * 86400000;
+      const newUntil = new Date(baseTime + addMs).toISOString();
+
+      let newRoles = [...currentRoles];
+      if (!newRoles.some((r) => ["subscriber", "sub", "test period"].includes(r.toLowerCase()))) {
+        newRoles.push("subscriber");
+      }
+
+      const historyItem = {
+        id: "trial_" + Date.now(),
+        type: "trial",
+        code: "7-DAYS-TRIAL",
+        durationDays: 7,
+        isLifetime: false,
+        activatedAt: new Date().toISOString(),
+        subscriptionUntil: newUntil,
+        note: "Бесплатный тестовый период на 7 дней"
+      };
+
+      const updatedHistory = [historyItem, ...existingHistory].slice(0, 50);
+
+      const userUpdate = {
+        hasClaimedTrial: true,
+        trialClaimedAt: new Date().toISOString(),
+        subscriptionUntil: newUntil,
+        subscription_until: newUntil,
+        roles: newRoles,
+        isFrozen: false,
+        frozenAt: null,
+        frozenRemainingMs: 0,
+        activationHistory: updatedHistory,
+        updatedAt: new Date().toISOString()
+      };
+
+      await setDoc(userRefFor(targetDoc.id), userUpdate, { merge: true });
+
+      refreshStoredUserSnapshot(targetDoc.id, {
+        ...userData,
+        ...userUpdate
+      });
+
+      return {
+        success: true,
+        durationDays: 7,
+        newUntil
+      };
+    };
+
     const resendVerificationEmail = async () => {
       const user = auth.currentUser;
 
@@ -5527,6 +5617,7 @@ const firebaseModuleScript = `
       adminListPromoCodes,
       adminDeletePromoCode,
       redeemPromoCode,
+      claimFreeTrial,
       updateAvatar,
       deleteAvatar,
       adminUpdateProfileAvatar,
