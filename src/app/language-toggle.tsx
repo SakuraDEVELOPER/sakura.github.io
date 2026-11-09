@@ -35,7 +35,9 @@ export default function LanguageToggle() {
   }
 
   return (
-    <div className="fixed right-4 bottom-4 z-[120]">
+    <div className="fixed right-4 bottom-4 z-[120] flex items-center gap-2">
+      <div id="sakura-admin-bar-slot" className="flex items-center gap-2" />
+      <div id="sakura-atmospheric-slot" className="flex items-center" />
       <div className="inline-flex items-center gap-1 rounded-full border border-[#3a2a31] bg-[#120d10]/95 p-1 shadow-[0_0_24px_rgba(255,183,197,0.14)] backdrop-blur">
         <button
           type="button"

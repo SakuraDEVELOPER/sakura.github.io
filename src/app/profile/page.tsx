@@ -3,6 +3,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { createPortal } from "react-dom";
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { AvatarMedia, AVATAR_FILE_ACCEPT } from "../avatar-media";
 import { HeaderSocialLinks } from "../header-social-links";
@@ -1805,6 +1806,10 @@ export default function ProfilePage() {
   const [rolesError, setRolesError] = useState<string | null>(null);
   const [rolesSuccess, setRolesSuccess] = useState<string | null>(null);
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
+  const [isClientMounted, setIsClientMounted] = useState(false);
+  useEffect(() => {
+    setIsClientMounted(true);
+  }, []);
   const [adminPanelActiveTab, setAdminPanelActiveTab] = useState<"sub" | "roles" | "promos" | "security" | "edit">("sub");
   const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
   const [editProfileActiveTab, setEditProfileActiveTab] = useState<"general" | "avatar" | "music" | "security">("general");
@@ -8333,28 +8338,53 @@ export default function ProfilePage() {
               ) : null}
             </div>
           ) : null}
-          {!isAdminPanelOpen && canOpenAdminPanel ? (
-            <div className="fixed bottom-4 right-[208px] z-[121] flex items-center">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsAdminPanelOpen(true);
-                  loadAdminPromoCodes();
-                }}
-                aria-label="Open admin panel"
-                className={`group flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] shadow-[0_0_25px_rgba(255,183,197,0.18)] backdrop-blur-md transition-all hover:scale-105 ${
-                  isTargetBanned
-                    ? "border-[#ff5a54]/60 bg-[#1a0a0d] text-[#ffb3ad] hover:border-[#ff5a54] hover:shadow-[0_0_30px_rgba(255,90,84,0.3)]"
-                    : "border-[#ffb7c5]/40 bg-[#140b0f]/90 text-[#ffb7c5] hover:border-[#ffb7c5] hover:text-white hover:shadow-[0_0_30px_rgba(255,183,197,0.3)]"
-                }`}
-              >
-                <SakuraIcon className="h-3.5 w-3.5 transition group-hover:rotate-45" />
-                <span>{t("Admin Panel", "Админ-панель")}</span>
-                {isTargetBanned && (
-                  <span className="h-2 w-2 rounded-full bg-[#ff5a54] animate-pulse" />
-                )}
-              </button>
-            </div>
+          {isClientMounted && !isAdminPanelOpen && canOpenAdminPanel ? (
+            typeof document !== "undefined" && document.getElementById("sakura-admin-bar-slot") ? (
+              createPortal(
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAdminPanelOpen(true);
+                    loadAdminPromoCodes();
+                  }}
+                  aria-label="Open admin panel"
+                  className={`group flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] shadow-[0_0_25px_rgba(255,183,197,0.18)] backdrop-blur-md transition-all hover:scale-105 ${
+                    isTargetBanned
+                      ? "border-[#ff5a54]/60 bg-[#1a0a0d] text-[#ffb3ad] hover:border-[#ff5a54] hover:shadow-[0_0_30px_rgba(255,90,84,0.3)]"
+                      : "border-[#ffb7c5]/40 bg-[#140b0f]/90 text-[#ffb7c5] hover:border-[#ffb7c5] hover:text-white hover:shadow-[0_0_30px_rgba(255,183,197,0.3)]"
+                  }`}
+                >
+                  <SakuraIcon className="h-3.5 w-3.5 transition group-hover:rotate-45" />
+                  <span>{t("Admin Panel", "Админ-панель")}</span>
+                  {isTargetBanned && (
+                    <span className="h-2 w-2 rounded-full bg-[#ff5a54] animate-pulse" />
+                  )}
+                </button>,
+                document.getElementById("sakura-admin-bar-slot")!
+              )
+            ) : (
+              <div className="fixed bottom-4 right-[230px] z-[121] flex items-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAdminPanelOpen(true);
+                    loadAdminPromoCodes();
+                  }}
+                  aria-label="Open admin panel"
+                  className={`group flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] shadow-[0_0_25px_rgba(255,183,197,0.18)] backdrop-blur-md transition-all hover:scale-105 ${
+                    isTargetBanned
+                      ? "border-[#ff5a54]/60 bg-[#1a0a0d] text-[#ffb3ad] hover:border-[#ff5a54] hover:shadow-[0_0_30px_rgba(255,90,84,0.3)]"
+                      : "border-[#ffb7c5]/40 bg-[#140b0f]/90 text-[#ffb7c5] hover:border-[#ffb7c5] hover:text-white hover:shadow-[0_0_30px_rgba(255,183,197,0.3)]"
+                  }`}
+                >
+                  <SakuraIcon className="h-3.5 w-3.5 transition group-hover:rotate-45" />
+                  <span>{t("Admin Panel", "Админ-панель")}</span>
+                  {isTargetBanned && (
+                    <span className="h-2 w-2 rounded-full bg-[#ff5a54] animate-pulse" />
+                  )}
+                </button>
+              </div>
+            )
           ) : null}
 
           {canOpenAdminPanel && isAdminPanelOpen ? (

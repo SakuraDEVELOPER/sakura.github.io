@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useLocaleText } from "@/lib/ui-locale";
 
 export type Season = "winter" | "spring" | "summer" | "autumn";
@@ -37,6 +38,11 @@ export default function AtmosphericEffects() {
   const [seasonMode, setSeasonMode] = useState<"auto" | Season | "off">("auto");
   const [activeSeason, setActiveSeason] = useState<Season>("spring");
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   // Initialize saved preference
   useEffect(() => {
@@ -282,96 +288,99 @@ export default function AtmosphericEffects() {
         />
       )}
 
-      {/* Atmospheric Season Switcher Control in bottom-right bar */}
-      <div className="fixed bottom-4 right-[108px] z-[120]">
-        <div className="relative">
-          {isMenuOpen && (
-            <div
-              className="fixed inset-0 z-10"
-              onClick={() => setIsMenuOpen(false)}
-            />
-          )}
-          <button
-            type="button"
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-            title={t("Atmospheric Effects & Season", "Атмосферные эффекты и сезон")}
-            className="group relative z-20 flex items-center gap-1.5 rounded-full border border-[#2f1922] bg-[#120b0e]/95 px-3 py-1.5 text-[11px] font-mono text-gray-400 shadow-[0_0_20px_rgba(255,183,197,0.1)] backdrop-blur transition hover:border-[#ffb7c5]/50 hover:text-white"
-          >
-            <span className="text-xs">
-              {seasonMode === "off" ? "⊘" : seasonIcons[activeSeason]}
-            </span>
-            <span className="hidden sm:inline text-[10px] uppercase tracking-wider text-[#ffb7c5]">
-              {seasonMode === "auto"
-                ? t("Auto", "Авто")
-                : seasonMode === "off"
-                ? t("Off", "Выкл")
-                : activeSeason.toUpperCase()}
-            </span>
-          </button>
+      {/* Atmospheric Season Switcher Control */}
+      {isMounted && typeof document !== "undefined" && document.getElementById("sakura-atmospheric-slot") ? (
+        createPortal(
+          <div className="relative">
+            {isMenuOpen && (
+              <div
+                className="fixed inset-0 z-10"
+                onClick={() => setIsMenuOpen(false)}
+              />
+            )}
+            <button
+              type="button"
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              title={t("Atmospheric Effects & Season", "Атмосферные эффекты и сезон")}
+              className="group relative z-20 flex items-center gap-1.5 rounded-full border border-[#2f1922] bg-[#120b0e]/95 px-3 py-1.5 text-[11px] font-mono text-gray-400 shadow-[0_0_20px_rgba(255,183,197,0.1)] backdrop-blur transition hover:border-[#ffb7c5]/50 hover:text-white"
+            >
+              <span className="text-xs">
+                {seasonMode === "off" ? "⊘" : seasonIcons[activeSeason]}
+              </span>
+              <span className="hidden sm:inline text-[10px] uppercase tracking-wider text-[#ffb7c5]">
+                {seasonMode === "auto"
+                  ? t("Auto", "Авто")
+                  : seasonMode === "off"
+                  ? t("Off", "Выкл")
+                  : activeSeason.toUpperCase()}
+              </span>
+            </button>
 
-          {isMenuOpen && (
-            <div className="absolute bottom-full right-0 z-30 mb-2 w-56 rounded-2xl border border-[#2d1820] bg-[#120b0e]/95 p-2 shadow-[0_0_30px_rgba(255,183,197,0.18)] backdrop-blur-md">
-              <div className="px-2.5 py-1 text-[10px] font-mono uppercase tracking-[0.2em] text-[#ffb7c5]">
-                {t("Atmosphere Season", "Сезон атмосферы")}
-              </div>
-              <div className="mt-1 space-y-1">
-                <button
-                  type="button"
-                  onClick={() => selectSeason("auto")}
-                  className={`flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-xs transition ${
-                    seasonMode === "auto"
-                      ? "bg-[#ffb7c5] font-bold text-black"
-                      : "text-gray-300 hover:bg-[#1f1118] hover:text-white"
-                  }`}
-                >
-                  <span className="flex items-center gap-2">
-                    <span>🔄</span>
-                    <span>{t("Auto (By date)", "Авто (По календарю)")}</span>
-                  </span>
-                  {seasonMode === "auto" && <span>✓</span>}
-                </button>
-
-                {(["winter", "spring", "summer", "autumn"] as Season[]).map((s) => (
+            {isMenuOpen && (
+              <div className="absolute bottom-full right-0 z-30 mb-2 w-56 rounded-2xl border border-[#2d1820] bg-[#120b0e]/95 p-2 shadow-[0_0_30px_rgba(255,183,197,0.18)] backdrop-blur-md">
+                <div className="px-2.5 py-1 text-[10px] font-mono uppercase tracking-[0.2em] text-[#ffb7c5]">
+                  {t("Atmosphere Season", "Сезон атмосферы")}
+                </div>
+                <div className="mt-1 space-y-1">
                   <button
-                    key={s}
                     type="button"
-                    onClick={() => selectSeason(s)}
+                    onClick={() => selectSeason("auto")}
                     className={`flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-xs transition ${
-                      seasonMode === s
+                      seasonMode === "auto"
                         ? "bg-[#ffb7c5] font-bold text-black"
                         : "text-gray-300 hover:bg-[#1f1118] hover:text-white"
                     }`}
                   >
                     <span className="flex items-center gap-2">
-                      <span>{seasonIcons[s]}</span>
-                      <span>{t(seasonLabels[s].en, seasonLabels[s].ru)}</span>
+                      <span>🔄</span>
+                      <span>{t("Auto (By date)", "Авто (По календарю)")}</span>
                     </span>
-                    {seasonMode === s && <span>✓</span>}
+                    {seasonMode === "auto" && <span>✓</span>}
                   </button>
-                ))}
 
-                <div className="my-1 border-t border-[#25151c]" />
+                  {(["winter", "spring", "summer", "autumn"] as Season[]).map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => selectSeason(s)}
+                      className={`flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-xs transition ${
+                        seasonMode === s
+                          ? "bg-[#ffb7c5] font-bold text-black"
+                          : "text-gray-300 hover:bg-[#1f1118] hover:text-white"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span>{seasonIcons[s]}</span>
+                        <span>{t(seasonLabels[s].en, seasonLabels[s].ru)}</span>
+                      </span>
+                      {seasonMode === s && <span>✓</span>}
+                    </button>
+                  ))}
 
-                <button
-                  type="button"
-                  onClick={() => selectSeason("off")}
-                  className={`flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-xs transition ${
-                    seasonMode === "off"
-                      ? "bg-[#ff5a54] font-bold text-black"
-                      : "text-gray-400 hover:bg-[#1f1118] hover:text-white"
-                  }`}
-                >
-                  <span className="flex items-center gap-2">
-                    <span>⊘</span>
-                    <span>{t("Disable Effects", "Отключить эффекты")}</span>
-                  </span>
-                  {seasonMode === "off" && <span>✓</span>}
-                </button>
+                  <div className="my-1 border-t border-[#25151c]" />
+
+                  <button
+                    type="button"
+                    onClick={() => selectSeason("off")}
+                    className={`flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-xs transition ${
+                      seasonMode === "off"
+                        ? "bg-[#ff5a54] font-bold text-black"
+                        : "text-gray-400 hover:bg-[#1f1118] hover:text-white"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <span>⊘</span>
+                      <span>{t("Disable Effects", "Отключить эффекты")}</span>
+                    </span>
+                    {seasonMode === "off" && <span>✓</span>}
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
-        </div>
-      </div>
+            )}
+          </div>,
+          document.getElementById("sakura-atmospheric-slot")!
+        )
+      ) : null}
     </>
   );
 }
