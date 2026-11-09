@@ -25,10 +25,9 @@ export type SupportTicket = {
   messages: TicketMessage[];
 };
 
-// Default Discord Webhook URL can be stored or overridden
+// Default Discord Webhook URL can be stored in settings or handled via server edge function
 const DEFAULT_DISCORD_WEBHOOK_KEY = "sakura_discord_webhook_url";
-const DEFAULT_DISCORD_WEBHOOK_URL =
-  "https://discord.com/api/webhooks/1569122112424120360/DaaFVT6qhZkaaeBCYsejXIE8baiYo8ylOi5MdhfrG8UaVwvZ8d2MecUUN-1wzsBOag8e";
+const DEFAULT_DISCORD_WEBHOOK_URL = "";
 
 export default function SupportTicketsModal({
   isOpen,
