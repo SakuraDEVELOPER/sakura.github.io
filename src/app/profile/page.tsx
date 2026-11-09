@@ -1132,6 +1132,16 @@ const normalizeRoleName = (role: string) => {
     return "tester";
   }
 
+  if (
+    compactRole === "sakura" ||
+    compactRole === "sakuradev" ||
+    compactRole === "sakuracheat" ||
+    role.includes("🌸") ||
+    role.includes("\uD83C\uDF38")
+  ) {
+    return "sakura";
+  }
+
   if (compactRole === "subscriber") {
     return "subscriber";
   }
@@ -1220,6 +1230,10 @@ const roleDisplayLabel = (role: string) => {
     return "Support";
   }
 
+  if (normalizedRole === "sakura") {
+    return "Sakura";
+  }
+
   if (normalizedRole === "sponsor") {
     return "Sponsor";
   }
@@ -1255,8 +1269,29 @@ const roleDisplayLabel = (role: string) => {
     )
     .join("");
 };
-const roleBadgeLabel = (role: string) => roleDisplayLabel(role);
-const renderRoleBadgeText = (role: string) => roleBadgeLabel(role);
+const roleBadgeLabel = (role: string) => {
+  const label = roleDisplayLabel(role);
+  return label.replace(/[🌸\uD83C\uDF38]/gu, "").trim() || "Sakura";
+};
+const renderRoleBadgeText = (role: string): React.ReactNode => {
+  const normalized = normalizeRoleName(role);
+  const cleanLabel = roleBadgeLabel(role);
+  const isSakuraRole =
+    normalized === "sakura" ||
+    /[🌸\uD83C\uDF38]/u.test(role) ||
+    /sakura/i.test(role);
+
+  if (isSakuraRole) {
+    return (
+      <span className="inline-flex items-center gap-1.5">
+        <SakuraIcon className="h-3.5 w-3.5 shrink-0 inline-block align-middle" />
+        <span>{cleanLabel}</span>
+      </span>
+    );
+  }
+
+  return cleanLabel;
+};
 const roleBadgeTextStyle: CSSProperties = {
   fontFamily: "Arial, Helvetica, sans-serif",
   fontFeatureSettings: "\"liga\" 0, \"clig\" 0",
@@ -1315,6 +1350,15 @@ const roleBadgeStyle = (role: string): CSSProperties => {
       backgroundColor: "#0a1328",
       color: "#d8e3ff",
       boxShadow: "0 0 18px rgba(79,124,255,0.24)",
+    };
+  }
+
+  if (normalizedRole === "sakura") {
+    return {
+      borderColor: "#ffb7c5",
+      backgroundColor: "#1f1015",
+      color: "#ffc2cf",
+      boxShadow: "0 0 18px rgba(255,183,197,0.25)",
     };
   }
 
@@ -1497,6 +1541,10 @@ const roleCommentAuthorColor = (role: string | null | undefined) => {
     return "#f3f4f6";
   }
 
+  if (normalizedRole === "sakura") {
+    return "#ffb7c5";
+  }
+
   if (normalizedRole === "subscriber") {
     return "#fb923c";
   }
@@ -1528,6 +1576,7 @@ const COMMENT_MODERATOR_ROLE_NAMES = new Set([
   "moderator",
 ]);
 const REMOVED_ROLE_NAMES = new Set<string>();
+const SHOW_REFERRAL_PROGRAM = false;
 const EDITABLE_ROLE_OPTIONS = [
   "root",
   "co-owner",
@@ -1536,6 +1585,7 @@ const EDITABLE_ROLE_OPTIONS = [
   "moderator",
   "support",
   "sponsor",
+  "sakura",
   "tester",
   "lifetime",
   "subscriber",
@@ -1554,6 +1604,7 @@ const COMMENT_AUTHOR_ROLE_ORDER = new Map([
   ["moderator", 4],
   ["support", 5],
   ["sponsor", 6],
+  ["sakura", 6],
   ["tester", 7],
   ["lifetime", 8],
   ["subscriber", 9],
@@ -6890,8 +6941,8 @@ export default function ProfilePage() {
                   <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#ffb7c5]/40 bg-[#160d11] p-1 shadow-[0_0_18px_rgba(255,183,197,0.25)]">
                     <SakuraIcon className="h-full w-full" />
                   </span>
-                  <span className="text-base font-black uppercase tracking-tight text-white hidden sm:inline">
-                    Sa<span className="text-[#ffb7c5]">kura</span>
+                  <span className="text-base font-black uppercase tracking-tight text-[#ffb7c5] hidden sm:inline">
+                    Sakura
                   </span>
                 </Link>
                 <div className="h-4 w-px bg-white/10 hidden sm:block" />
@@ -7392,8 +7443,8 @@ export default function ProfilePage() {
                         </div>
                       )}
 
-                      {/* Referral Program Section */}
-                      {isOwner && (
+                      {/* Referral Program Section (hidden from site UI per user request, code preserved) */}
+                      {SHOW_REFERRAL_PROGRAM && isOwner && (
                         <div className="mt-5 border-t border-[#23171b] pt-4">
                           <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#ffb7c5]">
                             {t("Referral Program", "Реферальная программа")}

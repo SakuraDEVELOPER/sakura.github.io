@@ -2053,8 +2053,8 @@ export default function Home() {
                   <SakuraIcon className="h-full w-full" />
                 </span>
               )}
-              <h1 className="text-xl font-black tracking-tighter uppercase text-white">
-                Sa<span className="text-[#ffb7c5]">kura</span>
+              <h1 className="text-xl font-black tracking-tighter uppercase text-[#ffb7c5]">
+                Sakura
               </h1>
             </Link>
           </div>

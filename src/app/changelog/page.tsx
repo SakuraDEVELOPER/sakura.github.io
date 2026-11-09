@@ -304,8 +304,8 @@ export default function ChangelogPage() {
             <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#ffb7c5]/40 bg-[#160d11] p-1 shadow-[0_0_18px_rgba(255,183,197,0.25)]">
               <SakuraIcon className="h-full w-full" />
             </span>
-            <span className="text-lg font-black uppercase tracking-tight text-white">
-              Sa<span className="text-[#ffb7c5]">kura</span>
+            <span className="text-lg font-black uppercase tracking-tight text-[#ffb7c5]">
+              Sakura
             </span>
           </Link>
 
