@@ -28,18 +28,13 @@ const DEFAULT_CHANGELOG: ChangelogEntry[] = [
     version: "v2026.11.09",
     date: "2026-11-09",
     category: "site",
-    titleEn: "Activation History, Referrals & Support Tickets",
-    titleRu: "История активаций, Реферальная программа и Поддержка",
+    titleEn: "Activation History & Support Tickets",
+    titleRu: "История активаций и Служба поддержки",
     items: [
       {
         type: "new",
         textEn: "Subscription activation and freeze history directly in the user profile card.",
         textRu: "История активаций промокодов, заморозок и продлений прямо в профиле пользователя.",
-      },
-      {
-        type: "new",
-        textEn: "Referral program: personal invite links and +3 bonus days for referred friends.",
-        textRu: "Реферальная программа: персональные ссылки и +3 бонусных дня подписки за друзей.",
       },
       {
         type: "new",
