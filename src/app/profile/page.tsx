@@ -7392,6 +7392,42 @@ export default function ProfilePage() {
                         </div>
                       )}
 
+                      {/* Referral Program Section */}
+                      {isOwner && (
+                        <div className="mt-5 border-t border-[#23171b] pt-4">
+                          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#ffb7c5]">
+                            {t("Referral Program", "Реферальная программа")}
+                          </p>
+                          <p className="mt-1 text-xs text-gray-400 leading-relaxed">
+                            {t(
+                              "Share your personal link: get +3 days of subscription for every referred friend.",
+                              "Поделитесь ссылкой с другом: получите +3 дня к подписке за каждого приглашённого!"
+                            )}
+                          </p>
+                          <div className="mt-2.5 flex items-center gap-2">
+                            <input
+                              type="text"
+                              readOnly
+                              value={typeof window !== "undefined" ? `${window.location.origin}/sakura.github.io/?ref=${activeProfile.login || activeProfile.profileId}` : ""}
+                              className="flex-1 rounded-xl border border-[#3a2a31] bg-[#120b0e] px-4 py-2 text-xs font-mono text-gray-300 outline-none select-all"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (typeof window === "undefined") return;
+                                const link = `${window.location.origin}/sakura.github.io/?ref=${activeProfile.login || activeProfile.profileId}`;
+                                navigator.clipboard.writeText(link);
+                                setCopiedReferral(true);
+                                setTimeout(() => setCopiedReferral(false), 2500);
+                              }}
+                              className="shrink-0 rounded-xl border border-[#ffb7c5]/40 bg-[#ffb7c5] px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-black transition hover:bg-white"
+                            >
+                              {copiedReferral ? t("Copied!", "Скопировано!") : t("Copy Link", "Копировать")}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
                       {/* Activation & Subscription History */}
                       {isOwner && (
                         <div className="mt-5 border-t border-[#23171b] pt-4">
@@ -7473,49 +7509,7 @@ export default function ProfilePage() {
                 </div>
               </div>
 
-              {/* Referral Program Card (for own profile) */}
-              {isOwner && activeProfile && (
-                <div className="mt-6 rounded-[32px] border border-[#26171d] bg-[#0d090b] p-6 shadow-[0_0_50px_rgba(255,183,197,0.05)]">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#ffb7c5]">
-                        {t("Referral Program", "Реферальная программа")}
-                      </p>
-                      <p className="mt-1 text-sm font-bold text-white">
-                        {t("Invite friends and get bonus days", "Приглашай друзей и получай дни подписки")}
-                      </p>
-                    </div>
-                  </div>
-                  <p className="mt-2 text-xs text-gray-400 leading-relaxed">
-                    {t(
-                      "Share your personal link. When a friend registers and activates a subscription, you will receive +3 free days of subscription!",
-                      "Поделитесь ссылкой с другом. Когда он зарегистрируется и активирует подписку, вы получите +3 дня к своей подписке!"
-                    )}
-                  </p>
 
-                  <div className="mt-4 flex items-center gap-2">
-                    <input
-                      type="text"
-                      readOnly
-                      value={typeof window !== "undefined" ? `${window.location.origin}/sakura.github.io/?ref=${activeProfile.login || activeProfile.profileId}` : ""}
-                      className="flex-1 rounded-xl border border-[#311c24] bg-[#140d11] px-3.5 py-2 text-xs font-mono text-gray-300 outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (typeof window === "undefined") return;
-                        const link = `${window.location.origin}/sakura.github.io/?ref=${activeProfile.login || activeProfile.profileId}`;
-                        navigator.clipboard.writeText(link);
-                        setCopiedReferral(true);
-                        setTimeout(() => setCopiedReferral(false), 2500);
-                      }}
-                      className="shrink-0 rounded-xl border border-[#ffb7c5]/35 bg-[#ffb7c5] px-4 py-2 text-xs font-bold text-black transition hover:bg-white"
-                    >
-                      {copiedReferral ? t("Copied!", "Скопировано!") : t("Copy Link", "Копировать")}
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
 
             <div className="relative z-10 flex w-full flex-col gap-6 self-start">
