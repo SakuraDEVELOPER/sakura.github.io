@@ -48,8 +48,8 @@ const DEFAULT_CHANGELOG: ChangelogEntry[] = [
       },
       {
         type: "improved",
-        textEn: "Admin panel now shows list of users who activated each promo code.",
-        textRu: "В админ-панели теперь отображаются пользователи, активировавшие каждый промокод.",
+        textEn: "Detailed activation history and user list for each promo code.",
+        textRu: "Детальная история и список активаций по каждому промокоду.",
       },
     ],
   },
@@ -63,8 +63,8 @@ const DEFAULT_CHANGELOG: ChangelogEntry[] = [
     items: [
       {
         type: "new",
-        textEn: "Admin promo code generator supporting customizable duration, usage limits and notes.",
-        textRu: "Генератор промокодов в админ-панели с настройкой срока, лимита активаций и заметок.",
+        textEn: "Flexible promo code generator supporting customizable duration, usage limits and notes.",
+        textRu: "Генератор промокодов с гибкой настройкой срока действия, лимита активаций и заметок.",
       },
       {
         type: "new",
@@ -78,7 +78,7 @@ const DEFAULT_CHANGELOG: ChangelogEntry[] = [
       },
       {
         type: "fixed",
-        textEn: "Hardened Firestore security rules protecting admin roles and subscription data.",
+        textEn: "Hardened Firestore security rules protecting user roles and subscription data.",
         textRu: "Усиленные правила безопасности Firestore для защиты ролей и данных подписки.",
       },
     ],
