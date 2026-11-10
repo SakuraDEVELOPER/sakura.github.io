@@ -374,7 +374,7 @@ Deno.serve(async (req) => {
 
       const { data: currentProfile } = await supabase
         .from("profiles")
-        .select("roles, is_banned, login")
+        .select("roles, is_banned, login, subscription_until")
         .eq("profile_id", session.profile_id)
         .maybeSingle();
 
@@ -396,7 +396,18 @@ Deno.serve(async (req) => {
       }
 
       const now = Math.floor(Date.now() / 1000);
-      const subexp = now + 30 * 86400;
+      const isLifetime = currentRoles.includes("lifetime") ||
+        (currentProfile?.subscription_until && new Date(currentProfile.subscription_until).getFullYear() >= 2099);
+
+      let subexp = now + 30 * 86400;
+      if (isLifetime) {
+        subexp = now + 3650 * 86400;
+      } else if (currentProfile?.subscription_until) {
+        const untilSec = Math.floor(new Date(currentProfile.subscription_until).getTime() / 1000);
+        if (untilSec > now) {
+          subexp = untilSec;
+        }
+      }
       const sid = await sha256Hex(token);
 
       const claims = {
@@ -458,7 +469,7 @@ Deno.serve(async (req) => {
 
       const { data: currentProfile } = await supabase
         .from("profiles")
-        .select("roles, is_banned, login")
+        .select("roles, is_banned, login, subscription_until")
         .eq("profile_id", session.profile_id)
         .maybeSingle();
 
@@ -476,7 +487,18 @@ Deno.serve(async (req) => {
 
       const isSdk = path.includes("/v1/lease") || path.endsWith("/lease");
       const now = Math.floor(Date.now() / 1000);
-      const subexp = now + 30 * 86400; // 30 days active sub
+      const isLifetime = currentRoles.includes("lifetime") ||
+        (currentProfile?.subscription_until && new Date(currentProfile.subscription_until).getFullYear() >= 2099);
+
+      let subexp = now + 30 * 86400; // default 30 days
+      if (isLifetime) {
+        subexp = now + 3650 * 86400; // 10 years (3650 days) for Lifetime
+      } else if (currentProfile?.subscription_until) {
+        const untilSec = Math.floor(new Date(currentProfile.subscription_until).getTime() / 1000);
+        if (untilSec > now) {
+          subexp = untilSec;
+        }
+      }
       const sid = await sha256Hex(token);
 
       const leaseObj = {
