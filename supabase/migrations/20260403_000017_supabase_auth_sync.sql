@@ -97,10 +97,8 @@ DECLARE
 BEGIN
   v_clean_email := lower(trim(COALESCE(p_email, '')));
 
-  -- Look up by auth_user_id first
   SELECT * INTO v_profile FROM public.profiles WHERE auth_user_id = p_auth_user_id;
 
-  -- Look up by email if not found by auth_user_id
   IF NOT FOUND AND v_clean_email <> '' THEN
     SELECT * INTO v_profile FROM public.profiles WHERE lower(email) = v_clean_email;
     IF FOUND THEN
@@ -112,10 +110,8 @@ BEGIN
     END IF;
   END IF;
 
-  -- If still not found (e.g. brand new OAuth user like Google)
   IF v_profile.profile_id IS NULL THEN
     v_target_login := COALESCE(NULLIF(trim(p_suggested_login), ''), split_part(v_clean_email, '@', 1));
-    -- Make sure login is unique
     IF EXISTS (SELECT 1 FROM public.profiles WHERE lower(login) = lower(v_target_login)) THEN
       v_target_login := v_target_login || '_' || floor(random() * 9000 + 1000)::text;
     END IF;
@@ -163,7 +159,7 @@ BEGIN
 END;
 $$;
 
--- 3. Complete Google Account setup (choose login/password if needed)
+-- 3. Complete Google Account setup
 CREATE OR REPLACE FUNCTION public.complete_google_profile(
   p_auth_user_id uuid,
   p_login text,
@@ -237,63 +233,7 @@ BEGIN
 END;
 $$;
 
--- 5. Trigger on auth.users for automatic profile creation/sync on signup
-CREATE OR REPLACE FUNCTION public.handle_new_auth_user()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_login text;
-  v_display_name text;
-BEGIN
-  v_login := COALESCE(new.raw_user_meta_data->>'login', split_part(new.email, '@', 1));
-  v_display_name := COALESCE(new.raw_user_meta_data->>'display_name', v_login);
-
-  IF EXISTS (SELECT 1 FROM public.profiles WHERE auth_user_id = new.id OR lower(email) = lower(new.email)) THEN
-    UPDATE public.profiles
-    SET auth_user_id = new.id,
-        email = new.email,
-        updated_at = timezone('utc', now())
-    WHERE auth_user_id = new.id OR lower(email) = lower(new.email);
-  ELSE
-    INSERT INTO public.profiles (
-      auth_user_id,
-      email,
-      email_verified,
-      login,
-      display_name,
-      roles,
-      created_at,
-      updated_at
-    ) VALUES (
-      new.id,
-      new.email,
-      COALESCE(new.email_confirmed_at IS NOT NULL, false),
-      v_login,
-      v_display_name,
-      ARRAY['user']::text[],
-      timezone('utc', now()),
-      timezone('utc', now())
-    );
-  END IF;
-  RETURN new;
-END;
-$$;
-
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT OR UPDATE ON auth.users
-  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_auth_user();
-
--- 6. Grant execute on RPC functions to anon, authenticated, service_role
-GRANT EXECUTE ON FUNCTION public.register_profile(text, text, text, uuid) TO anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.get_or_sync_auth_profile(uuid, text, text, text) TO anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.complete_google_profile(uuid, text, text) TO anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.touch_presence(bigint, text, boolean) TO anon, authenticated, service_role;
-
--- 6.5. Update user profile info (display name, photo)
+-- 5. Update user profile info (display name, photo)
 CREATE OR REPLACE FUNCTION public.update_profile_info(
   p_profile_id bigint,
   p_display_name text DEFAULT NULL,
@@ -314,6 +254,12 @@ BEGIN
   RETURN jsonb_build_object('ok', true);
 END;
 $$;
+
+-- 6. Grant execute on RPC functions to anon, authenticated, service_role
+GRANT EXECUTE ON FUNCTION public.register_profile(text, text, text, uuid) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.get_or_sync_auth_profile(uuid, text, text, text) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.complete_google_profile(uuid, text, text) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.touch_presence(bigint, text, boolean) TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.update_profile_info(bigint, text, text) TO anon, authenticated, service_role;
 
 -- 7. Update public_profiles view exposing auth_user_id and email
@@ -352,4 +298,3 @@ SELECT
 FROM public.profiles as p;
 
 GRANT SELECT ON public.public_profiles TO anon, authenticated;
-
