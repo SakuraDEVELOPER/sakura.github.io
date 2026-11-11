@@ -345,6 +345,12 @@ const firebaseModuleScript = `
                 if (error.message.includes("User already registered")) {
                   throw createFirebaseError("auth/email-already-in-use", "Этот email уже зарегистрирован.");
                 }
+                if (error.message.toLowerCase().includes("rate limit") || error.message.toLowerCase().includes("rate_limit")) {
+                  throw createFirebaseError(
+                    "auth/rate-limit-exceeded",
+                    "Превышен лимит отправки писем. Отключите 'Confirm email' в настройках Supabase (Authentication -> Providers -> Email) для мгновенной регистрации без ограничений."
+                  );
+                }
                 throw createFirebaseError("auth/registration-failed", error.message);
               }
 
@@ -411,6 +417,12 @@ const firebaseModuleScript = `
               });
 
               if (error) {
+                if (error.message.toLowerCase().includes("rate limit") || error.message.toLowerCase().includes("rate_limit")) {
+                  throw createFirebaseError(
+                    "auth/rate-limit-exceeded",
+                    "Превышен лимит отправки писем сброса пароля. Подождите немного или настройте Custom SMTP в Supabase."
+                  );
+                }
                 throw createFirebaseError("auth/reset-failed", error.message);
               }
 
