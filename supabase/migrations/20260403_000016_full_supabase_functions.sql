@@ -572,7 +572,9 @@ GRANT EXECUTE ON FUNCTION public.add_profile_comment(bigint, bigint, text, text,
 GRANT EXECUTE ON FUNCTION public.delete_profile_comment(uuid, bigint) TO anon, authenticated, service_role;
 
 -- 10. Update public_profiles view with subscription, trial, freeze, and history columns
-CREATE OR REPLACE VIEW public.public_profiles AS
+DROP VIEW IF EXISTS public.public_profiles CASCADE;
+
+CREATE VIEW public.public_profiles AS
 SELECT
   null::uuid as auth_user_id,
   coalesce(p.firebase_uid, p.auth_user_id::text) as firebase_uid,
