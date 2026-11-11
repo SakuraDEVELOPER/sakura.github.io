@@ -190,6 +190,8 @@ const firebaseModuleScript = `
         providerIds: Array.isArray(row.provider_ids) && row.provider_ids.length > 0 ? row.provider_ids : ["password"],
         creationTime: row.created_at || null,
         lastSignInTime: row.last_sign_in_at || null,
+        displayNameUpdatedAt: row.display_name_updated_at || null,
+        loginUpdatedAt: row.login_updated_at || null,
         loginHistory: Array.isArray(row.login_history) ? row.login_history : [],
         visitHistory: Array.isArray(row.visit_history) ? row.visit_history : [],
         presence: {
@@ -481,10 +483,13 @@ const firebaseModuleScript = `
             updateDisplayName: async (displayName) => {
               const profileId = window.sakuraCurrentUserSnapshot?.profileId;
               if (!profileId) throw createFirebaseError("auth/no-current-user", "Not signed in.");
-              await callSupabaseRpc("update_profile_info", {
+              const res = await callSupabaseRpc("update_profile_info", {
                 p_profile_id: profileId,
                 p_display_name: displayName.trim()
               });
+              if (res && res.ok === false) {
+                throw createFirebaseError("auth/display-name-cooldown", res.error || "Failed to update display name.");
+              }
               const { data: { session } } = await supabase.auth.getSession();
               return await resolveUserSnapshot(session?.user);
             },

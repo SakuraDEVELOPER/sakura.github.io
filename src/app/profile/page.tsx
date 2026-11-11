@@ -74,6 +74,8 @@ type UserProfile = {
   providerIds: string[];
   creationTime: string | null;
   lastSignInTime: string | null;
+  displayNameUpdatedAt?: string | null;
+  loginUpdatedAt?: string | null;
   presence: { isOnline: boolean; currentPath: string | null; lastSeenAt: string | null } | null;
 };
 
@@ -439,6 +441,21 @@ const resolveProfileThemeSongSelection = (value: unknown): ProfileThemeSelection
 };
 const normalizeProfileThemeSongKey = (value: unknown): string | null =>
   resolveProfileThemeSongSelection(value)?.key ?? null;
+
+const PROFILE_CHANGE_COOLDOWN_DAYS = 30;
+const PROFILE_CHANGE_COOLDOWN_MS = PROFILE_CHANGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
+
+const getProfileFieldCooldown = (updatedAtStr: string | null | undefined) => {
+  if (!updatedAtStr) return { isLocked: false, daysLeft: 0, unlockDate: null };
+  const updatedAt = new Date(updatedAtStr).getTime();
+  if (!Number.isFinite(updatedAt)) return { isLocked: false, daysLeft: 0, unlockDate: null };
+  const diff = Date.now() - updatedAt;
+  if (diff >= PROFILE_CHANGE_COOLDOWN_MS || diff < 0) return { isLocked: false, daysLeft: 0, unlockDate: null };
+  const remainingMs = PROFILE_CHANGE_COOLDOWN_MS - diff;
+  const daysLeft = Math.max(1, Math.ceil(remainingMs / (24 * 60 * 60 * 1000)));
+  const unlockDate = new Date(updatedAt + PROFILE_CHANGE_COOLDOWN_MS);
+  return { isLocked: true, daysLeft, unlockDate };
+};
 const getAdminThemeSongInputValue = (value: string | null): string => {
   if (!value) {
     return "";
@@ -5987,6 +6004,19 @@ export default function ProfilePage() {
       return;
     }
 
+    if (isOwner) {
+      const cooldown = getProfileFieldCooldown(activeProfile?.displayNameUpdatedAt);
+      if (cooldown.isLocked && nextDisplayName !== (activeProfile?.displayName || "").trim()) {
+        setDisplayNameError(
+          t(
+            `Display name can be changed only once a month (30 days). Available in ${cooldown.daysLeft} d.`,
+            `Отображаемое имя можно изменять только 1 раз в месяц (30 дней). Доступно через ${cooldown.daysLeft} дн.`
+          )
+        );
+        return;
+      }
+    }
+
     setDisplayNameError(null);
     setDisplayNameSuccess(null);
     setIsDisplayNameSaving(true);
@@ -6020,6 +6050,19 @@ export default function ProfilePage() {
     if (!nextUsername) {
       setUsernameError("Enter a login.");
       return;
+    }
+
+    if (isOwner) {
+      const cooldown = getProfileFieldCooldown(activeProfile?.loginUpdatedAt);
+      if (cooldown.isLocked && nextUsername !== normalizeUsernameDraft(activeProfile?.login)) {
+        setUsernameError(
+          t(
+            `Login can be changed only once a month (30 days). Available in ${cooldown.daysLeft} d.`,
+            `Логин можно изменять только 1 раз в месяц (30 дней). Доступно через ${cooldown.daysLeft} дн.`
+          )
+        );
+        return;
+      }
     }
 
     if (isOwner && requiresUsernamePasswordConfirmation && !usernamePasswordInput) {
@@ -8010,110 +8053,188 @@ export default function ProfilePage() {
                     {/* Modal Body */}
                     <div className="max-h-[70vh] overflow-y-auto px-6 py-5 space-y-4">
                       {/* Tab 1: General */}
-                      {editProfileActiveTab === "general" && (
-                        <div className="space-y-4">
-                          <div className="rounded-2xl border border-[#23141a] bg-[#10090c] p-4">
-                            <label className="block">
-                              <span className="mb-1.5 block text-xs font-mono uppercase tracking-[0.16em] text-gray-400">
-                                {t("Displayed Name (Nickname)", "Отображаемое имя (Никнейм)")}
-                              </span>
-                              <input
-                                type="text"
-                                value={displayNameInput}
-                                maxLength={48}
-                                autoComplete="nickname"
-                                onChange={(e) => {
-                                  setDisplayNameInput(e.target.value);
-                                  setDisplayNameError(null);
-                                  setDisplayNameSuccess(null);
-                                }}
-                                className="w-full rounded-xl border border-[#2b1820] bg-[#080507] px-4 py-2.5 text-sm text-white outline-none focus:border-[#ffb7c5] transition"
-                                placeholder="Absolute"
-                              />
-                            </label>
-                            <p className="mt-1.5 text-[11px] text-gray-500">
-                              {t("Displayed at the top of your profile.", "Отображается вверху вашего профиля.")}
-                            </p>
-                            <div className="mt-3 flex items-center justify-between gap-3">
-                              <button
-                                type="button"
-                                onClick={handleDisplayNameSave}
-                                disabled={isDisplayNameSaving}
-                                className="rounded-full border border-[#ffb7c5]/40 bg-[#ffb7c5] px-4 py-1.5 text-xs font-bold uppercase tracking-[0.12em] text-black transition hover:bg-white disabled:opacity-50"
-                              >
-                                {isDisplayNameSaving ? t("Saving...", "Сохранение...") : t("Save Name", "Сохранить имя")}
-                              </button>
-                              {displayNameSuccess && (
-                                <span className="text-xs text-[#8ce5b2] font-medium">✓ {displayNameSuccess}</span>
-                              )}
-                              {displayNameError && (
-                                <span className="text-xs text-[#ff9aa9] font-medium">⚠ {displayNameError}</span>
-                              )}
-                            </div>
-                          </div>
+                      {editProfileActiveTab === "general" && (() => {
+                        const displayNameCooldown = isOwner
+                          ? getProfileFieldCooldown(activeProfile?.displayNameUpdatedAt)
+                          : { isLocked: false, daysLeft: 0, unlockDate: null };
+                        const loginCooldown = isOwner
+                          ? getProfileFieldCooldown(activeProfile?.loginUpdatedAt)
+                          : { isLocked: false, daysLeft: 0, unlockDate: null };
 
-                          <div className="rounded-2xl border border-[#23141a] bg-[#10090c] p-4">
-                            <label className="block">
-                              <span className="mb-1.5 block text-xs font-mono uppercase tracking-[0.16em] text-gray-400">
-                                {t("Sign-in Login", "Логин для входа")}
-                              </span>
-                              <input
-                                ref={ownerUsernameInputRef}
-                                type="text"
-                                value={usernameInput}
-                                minLength={3}
-                                maxLength={24}
-                                autoComplete="username"
-                                onChange={(e) => {
-                                  setUsernameInput(e.target.value);
-                                  setUsernameError(null);
-                                  setUsernameSuccess(null);
-                                }}
-                                className="w-full rounded-xl border border-[#2b1820] bg-[#080507] px-4 py-2.5 text-sm text-white outline-none focus:border-[#ffb7c5] transition"
-                                placeholder="your_login"
-                              />
-                            </label>
-                            <p className="mt-1.5 text-[11px] text-gray-500">
-                              {t("Letters, numbers, `.`, `_`, and `-` without spaces.", "Буквы, цифры, `.`, `_` и `-` без пробелов.")}
-                            </p>
-                            {requiresUsernamePasswordConfirmation && (
-                              <div className="mt-3">
-                                <span className="mb-1.5 block text-xs font-mono uppercase tracking-[0.16em] text-gray-400">
-                                  {t("Current Password (to confirm)", "Текущий пароль (для подтверждения)")}
-                                </span>
+                        return (
+                          <div className="space-y-4">
+                            <div className="rounded-2xl border border-[#23141a] bg-[#10090c] p-4">
+                              <label className="block">
+                                <div className="mb-1.5 flex items-center justify-between">
+                                  <span className="block text-xs font-mono uppercase tracking-[0.16em] text-gray-400">
+                                    {t("Displayed Name (Nickname)", "Отображаемое имя (Никнейм)")}
+                                  </span>
+                                  {displayNameCooldown.isLocked && (
+                                    <span className="text-[11px] font-mono text-[#f97316]">
+                                      ⏳ {t(`in ${displayNameCooldown.daysLeft} d.`, `через ${displayNameCooldown.daysLeft} дн.`)}
+                                    </span>
+                                  )}
+                                </div>
                                 <input
-                                  type="password"
-                                  value={usernamePasswordInput}
-                                  autoComplete="current-password"
+                                  type="text"
+                                  value={displayNameInput}
+                                  maxLength={48}
+                                  disabled={isDisplayNameSaving || displayNameCooldown.isLocked}
+                                  autoComplete="nickname"
                                   onChange={(e) => {
-                                    setUsernamePasswordInput(e.target.value);
+                                    setDisplayNameInput(e.target.value);
+                                    setDisplayNameError(null);
+                                    setDisplayNameSuccess(null);
+                                  }}
+                                  className={`w-full rounded-xl border bg-[#080507] px-4 py-2.5 text-sm text-white outline-none transition ${
+                                    displayNameCooldown.isLocked
+                                      ? "border-[#25181e] text-gray-400 cursor-not-allowed opacity-75"
+                                      : "border-[#2b1820] focus:border-[#ffb7c5]"
+                                  }`}
+                                  placeholder="Absolute"
+                                />
+                              </label>
+                              <p className="mt-1.5 text-[11px]">
+                                {displayNameCooldown.isLocked ? (
+                                  <span className="text-[#f97316]">
+                                    {t(
+                                      `Nickname can be changed only once a month (30 days). Available in ${displayNameCooldown.daysLeft} d.`,
+                                      `Никнейм можно изменять только 1 раз в месяц (30 дней). Доступно через ${displayNameCooldown.daysLeft} дн.`
+                                    )}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-500">
+                                    {t(
+                                      "Displayed at the top of your profile. Can be changed once a month (30 days).",
+                                      "Отображается вверху вашего профиля. Изменять можно 1 раз в месяц (30 дней)."
+                                    )}
+                                  </span>
+                                )}
+                              </p>
+                              <div className="mt-3 flex items-center justify-between gap-3">
+                                <button
+                                  type="button"
+                                  onClick={handleDisplayNameSave}
+                                  disabled={
+                                    isDisplayNameSaving ||
+                                    displayNameCooldown.isLocked ||
+                                    displayNameInput.trim() === (activeProfile?.displayName || "").trim()
+                                  }
+                                  className="rounded-full border border-[#ffb7c5]/40 bg-[#ffb7c5] px-4 py-1.5 text-xs font-bold uppercase tracking-[0.12em] text-black transition hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed"
+                                >
+                                  {isDisplayNameSaving
+                                    ? t("Saving...", "Сохранение...")
+                                    : displayNameCooldown.isLocked
+                                    ? t("Locked (30 days)", "Недоступно (30 дн.)")
+                                    : t("Save Name", "Сохранить имя")}
+                                </button>
+                                {displayNameSuccess && (
+                                  <span className="text-xs text-[#8ce5b2] font-medium">✓ {displayNameSuccess}</span>
+                                )}
+                                {displayNameError && (
+                                  <span className="text-xs text-[#ff9aa9] font-medium">⚠ {displayNameError}</span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="rounded-2xl border border-[#23141a] bg-[#10090c] p-4">
+                              <label className="block">
+                                <div className="mb-1.5 flex items-center justify-between">
+                                  <span className="block text-xs font-mono uppercase tracking-[0.16em] text-gray-400">
+                                    {t("Sign-in Login", "Логин для входа")}
+                                  </span>
+                                  {loginCooldown.isLocked && (
+                                    <span className="text-[11px] font-mono text-[#f97316]">
+                                      ⏳ {t(`in ${loginCooldown.daysLeft} d.`, `через ${loginCooldown.daysLeft} дн.`)}
+                                    </span>
+                                  )}
+                                </div>
+                                <input
+                                  ref={ownerUsernameInputRef}
+                                  type="text"
+                                  value={usernameInput}
+                                  minLength={3}
+                                  maxLength={24}
+                                  disabled={isUsernameSaving || loginCooldown.isLocked}
+                                  autoComplete="username"
+                                  onChange={(e) => {
+                                    setUsernameInput(e.target.value);
                                     setUsernameError(null);
                                     setUsernameSuccess(null);
                                   }}
-                                  className="w-full rounded-xl border border-[#2b1820] bg-[#080507] px-4 py-2.5 text-sm text-white outline-none focus:border-[#ffb7c5] transition"
-                                  placeholder={t("Enter current password", "Введите текущий пароль")}
+                                  className={`w-full rounded-xl border bg-[#080507] px-4 py-2.5 text-sm text-white outline-none transition ${
+                                    loginCooldown.isLocked
+                                      ? "border-[#25181e] text-gray-400 cursor-not-allowed opacity-75"
+                                      : "border-[#2b1820] focus:border-[#ffb7c5]"
+                                  }`}
+                                  placeholder="your_login"
                                 />
+                              </label>
+                              <p className="mt-1.5 text-[11px]">
+                                {loginCooldown.isLocked ? (
+                                  <span className="text-[#f97316]">
+                                    {t(
+                                      `Login can be changed only once a month (30 days). Available in ${loginCooldown.daysLeft} d.`,
+                                      `Логин можно изменять только 1 раз в месяц (30 дней). Доступно через ${loginCooldown.daysLeft} дн.`
+                                    )}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-500">
+                                    {t(
+                                      "Letters, numbers, `.`, `_`, and `-`. Can be changed once a month (30 days).",
+                                      "Буквы, цифры, `.`, `_` и `-`. Изменять можно 1 раз в месяц (30 дней)."
+                                    )}
+                                  </span>
+                                )}
+                              </p>
+                              {requiresUsernamePasswordConfirmation && (
+                                <div className="mt-3">
+                                  <span className="mb-1.5 block text-xs font-mono uppercase tracking-[0.16em] text-gray-400">
+                                    {t("Current Password (to confirm)", "Текущий пароль (для подтверждения)")}
+                                  </span>
+                                  <input
+                                    type="password"
+                                    value={usernamePasswordInput}
+                                    autoComplete="current-password"
+                                    disabled={loginCooldown.isLocked}
+                                    onChange={(e) => {
+                                      setUsernamePasswordInput(e.target.value);
+                                      setUsernameError(null);
+                                      setUsernameSuccess(null);
+                                    }}
+                                    className="w-full rounded-xl border border-[#2b1820] bg-[#080507] px-4 py-2.5 text-sm text-white outline-none focus:border-[#ffb7c5] transition disabled:opacity-40"
+                                    placeholder={t("Enter current password", "Введите текущий пароль")}
+                                  />
+                                </div>
+                              )}
+                              <div className="mt-3 flex items-center justify-between gap-3">
+                                <button
+                                  type="button"
+                                  onClick={handleUsernameSave}
+                                  disabled={
+                                    isUsernameSaving ||
+                                    loginCooldown.isLocked ||
+                                    normalizeUsernameDraft(usernameInput) === normalizeUsernameDraft(activeProfile?.login)
+                                  }
+                                  className="rounded-full border border-[#ffb7c5]/40 bg-[#ffb7c5] px-4 py-1.5 text-xs font-bold uppercase tracking-[0.12em] text-black transition hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed"
+                                >
+                                  {isUsernameSaving
+                                    ? t("Saving...", "Сохранение...")
+                                    : loginCooldown.isLocked
+                                    ? t("Locked (30 days)", "Недоступно (30 дн.)")
+                                    : t("Save Login", "Сохранить логин")}
+                                </button>
+                                {usernameSuccess && (
+                                  <span className="text-xs text-[#8ce5b2] font-medium">✓ {usernameSuccess}</span>
+                                )}
+                                {usernameError && (
+                                  <span className="text-xs text-[#ff9aa9] font-medium">⚠ {usernameError}</span>
+                                )}
                               </div>
-                            )}
-                            <div className="mt-3 flex items-center justify-between gap-3">
-                              <button
-                                type="button"
-                                onClick={handleUsernameSave}
-                                disabled={isUsernameSaving}
-                                className="rounded-full border border-[#ffb7c5]/40 bg-[#ffb7c5] px-4 py-1.5 text-xs font-bold uppercase tracking-[0.12em] text-black transition hover:bg-white disabled:opacity-50"
-                              >
-                                {isUsernameSaving ? t("Saving...", "Сохранение...") : t("Save Login", "Сохранить логин")}
-                              </button>
-                              {usernameSuccess && (
-                                <span className="text-xs text-[#8ce5b2] font-medium">✓ {usernameSuccess}</span>
-                              )}
-                              {usernameError && (
-                                <span className="text-xs text-[#ff9aa9] font-medium">⚠ {usernameError}</span>
-                              )}
                             </div>
                           </div>
-                        </div>
-                      )}
+                        );
+                      })()}
 
                       {/* Tab 2: Avatar */}
                       {editProfileActiveTab === "avatar" && (
