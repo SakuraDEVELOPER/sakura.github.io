@@ -639,8 +639,7 @@ function isEmailVerificationLocked(user: AuthUserSnapshot | null | undefined) {
     user &&
       !user.isAnonymous &&
       user.email &&
-      user.emailVerified === false &&
-      user.verificationRequired !== false
+      user.emailVerified === false
   );
 }
 
@@ -833,6 +832,7 @@ function HeaderAuth() {
   const [isPasswordResetSubmitting, setIsPasswordResetSubmitting] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState<string | null>(null);
   const [verificationError, setVerificationError] = useState<string | null>(null);
   const [verificationSuccess, setVerificationSuccess] = useState<string | null>(null);
   const [isVerificationSending, setIsVerificationSending] = useState(false);
@@ -1130,10 +1130,10 @@ function HeaderAuth() {
   }, [visibleUser?.uid, visibleUser?.emailVerified, visibleUser?.verificationRequired]);
 
   useEffect(() => {
-    if (!isVerificationLockedUser) {
+    if (!isVerificationLockedUser && !registeredEmail) {
       setIsVerificationModalOpen(false);
     }
-  }, [isVerificationLockedUser]);
+  }, [isVerificationLockedUser, registeredEmail]);
 
   useEffect(() => {
     if (!visibleUser || !requiresGoogleAccountCompletion(visibleUser)) {
@@ -1191,6 +1191,7 @@ function HeaderAuth() {
 
   const closeVerificationModal = () => {
     setIsVerificationModalOpen(false);
+    setRegisteredEmail(null);
   };
 
   const switchMode = (nextMode: AuthMode) => {
@@ -1439,17 +1440,28 @@ function HeaderAuth() {
         });
         setFlashMessage(t("Google account completed. Login and password are now linked.", "Google-аккаунт завершён. Логин и пароль привязаны."));
       } else if (mode === "register") {
+        const userEmail = identifier.trim();
         snapshot = await window.sakuraFirebaseAuth.register({
           login: loginName.trim().replace(/\s+/g, ""),
           displayName: profileName.trim(),
-          email: identifier.trim(),
+          email: userEmail,
           password,
         });
-        setFlashMessage(
-          isEmailVerificationLocked(snapshot)
-            ? t("Account created. Verify your email to open the profile and use the account.", "Аккаунт создан. Подтвердите почту, чтобы открыть профиль и пользоваться аккаунтом.")
-            : t("Account created. Signed in automatically.", "Аккаунт создан. Вход выполнен автоматически.")
-        );
+
+        if (isEmailVerificationLocked(snapshot)) {
+          setRegisteredEmail(userEmail);
+          closeModal();
+          setIsVerificationModalOpen(true);
+          setFlashMessage(
+            t(
+              "Account created! We sent an activation link to your email.",
+              "Аккаунт создан! Мы отправили ссылку для активации на вашу почту."
+            )
+          );
+          return;
+        }
+
+        setFlashMessage(t("Account created. Signed in automatically.", "Аккаунт создан. Вход выполнен автоматически."));
       } else {
         snapshot = await window.sakuraFirebaseAuth.login(identifier.trim(), password);
         setFlashMessage(
@@ -2060,7 +2072,7 @@ function HeaderAuth() {
         </div>
       ) : null}
 
-      {isVerificationModalOpen && isVerificationLockedUser ? (
+      {isVerificationModalOpen && (isVerificationLockedUser || registeredEmail) ? (
         <div className="fixed inset-0 z-[55] flex items-center justify-center p-4">
           <button
             type="button"
@@ -2079,18 +2091,31 @@ function HeaderAuth() {
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">
-                    {t("Email Not Verified", "Почта не подтверждена")}
+                    {t("Email Confirmation", "Подтверждение почты")}
                   </p>
                   <h2 className="text-2xl font-black uppercase tracking-tighter text-white">
-                    {t("Verify Your Access", "Подтвердите доступ")}
+                    {registeredEmail
+                      ? t("Check Your Inbox", "Проверьте почту")
+                      : t("Verify Your Access", "Подтвердите доступ")}
                   </h2>
                   <p className="mt-2 text-sm leading-relaxed text-[#f3d2c5]">
-                    {t("Verify your email to unlock your profile and use the site.", "Подтвердите почту, чтобы разблокировать профиль и пользоваться сайтом.")}
+                    {registeredEmail ? (
+                      <>
+                        {t("We sent an activation link to ", "Мы отправили ссылку для активации на ")}
+                        <strong className="text-white font-mono">{registeredEmail}</strong>.{" "}
+                        {t(
+                          "Follow the link in the email to activate your account and log in.",
+                          "Перейдите по ссылке в письме, чтобы подтвердить почту и войти на сайт."
+                        )}
+                      </>
+                    ) : (
+                      t("Verify your email to unlock your profile and use the site.", "Подтвердите почту, чтобы разблокировать профиль и пользоваться сайтом.")
+                    )}
                   </p>
                   <p className="mt-2 text-xs leading-relaxed text-[#d7b9ae]">
                     {t(
                       "If you do not see the email, check your Spam/Junk folder.",
-                      "Если письмо не пришло во входящие, проверьте папку Спам."
+                      "Если письмо не пришло во входящие, обязательно проверьте папку Спам."
                     )}
                   </p>
                 </div>
