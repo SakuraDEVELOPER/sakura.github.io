@@ -1625,8 +1625,6 @@ const firebaseModuleScript = `
     "avatar_path",
     "avatar_type",
     "avatar_size",
-    "hwid",
-    "subscription_until",
     "roles",
     "is_banned",
     "banned_at",

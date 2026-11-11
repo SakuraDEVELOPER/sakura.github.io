@@ -116,11 +116,11 @@ function base64Encode(bytes: Uint8Array): string {
   return btoa(binStr);
 }
 
-// Compact token without dots, spaces or invalid characters for Windows strspn/strlen<=128
+// Compact token without dots, spaces or invalid characters for Windows strspn/strlen<=256
 async function createToken(profileId: number, login: string, hwid = ""): Promise<string> {
   const iat = Math.floor(Date.now() / 1000);
   const safeLogin = login.replace(/[^A-Za-z0-9_-]/g, "");
-  const safeHwid = hwid.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 32);
+  const safeHwid = hwid.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 64);
   const data = safeHwid ? `${profileId}_${safeLogin}_${iat}_${safeHwid}` : `${profileId}_${safeLogin}_${iat}`;
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey(
@@ -140,7 +140,7 @@ async function createToken(profileId: number, login: string, hwid = ""): Promise
 
 async function verifyToken(token: string): Promise<{ profile_id: number; login: string; hwid: string } | null> {
   try {
-    if (!token || token.length > 128) return null;
+    if (!token || token.length > 256) return null;
     const parts = token.split("_");
     if (parts.length !== 4 && parts.length !== 5) return null;
 
@@ -205,6 +205,34 @@ function checkHasSubscription(roles: string[]): boolean {
 function determinePlan(roles: string[]): string {
   const premRoles = ["subscriber", "sub", "admin", "root", "owner", "co-owner", "lifetime", "sponsor"];
   return roles.some((r) => premRoles.includes(r.toLowerCase().trim())) ? "prem" : "trial";
+}
+
+async function getLiveProfileInfo(firebaseUid?: string | null): Promise<{
+  subscriptionUntil: string | null;
+  roles: string[];
+  login: string | null;
+}> {
+  let fsUntil: string | null = null;
+  let fsRoles: string[] = [];
+  let fsLogin: string | null = null;
+
+  if (firebaseUid) {
+    try {
+      const res = await fetch(
+        `https://firestore.googleapis.com/v1/projects/sakura-bfa74/databases/(default)/documents/users/${firebaseUid}`
+      );
+      if (res.ok) {
+        const doc = await res.json();
+        const f = doc.fields || {};
+        fsUntil = f.subscriptionUntil?.stringValue || f.subscription_until?.stringValue || null;
+        fsLogin = f.login?.stringValue || f.display_name?.stringValue || null;
+        if (f.roles?.arrayValue?.values) {
+          fsRoles = f.roles.arrayValue.values.map((v: any) => String(v.stringValue || "").trim()).filter(Boolean);
+        }
+      }
+    } catch {}
+  }
+  return { subscriptionUntil: fsUntil, roles: fsRoles, login: fsLogin };
 }
 
 Deno.serve(async (req) => {
@@ -357,11 +385,37 @@ Deno.serve(async (req) => {
       }
       const body = await req.json().catch(() => ({}));
       const hwid = String(body.hwid || session.hwid || "").trim();
+
+      const { data: currentProfile } = await supabase
+        .from("profiles")
+        .select("roles, is_banned, login, firebase_uid")
+        .eq("profile_id", session.profile_id)
+        .maybeSingle();
+
+      const live = await getLiveProfileInfo(currentProfile?.firebase_uid);
+      const combinedRoles = Array.from(new Set([...(currentProfile?.roles || []), ...live.roles]));
+      const now = Math.floor(Date.now() / 1000);
+      const isLifetime = combinedRoles.includes("lifetime") ||
+        (live.subscriptionUntil && new Date(live.subscriptionUntil).getFullYear() >= 2099);
+
+      let subexp = now + 30 * 86400;
+      if (isLifetime) {
+        subexp = now + 3650 * 86400;
+      } else if (live.subscriptionUntil) {
+        const untilSec = Math.floor(new Date(live.subscriptionUntil).getTime() / 1000);
+        if (untilSec > now) {
+          subexp = untilSec;
+        }
+      }
+      const resolvedLogin = body.login || live.login || currentProfile?.login || session.login;
+
       return jsonResponse(200, {
         token,
         hwid,
         steam: "0",
         status: "ok",
+        login: resolvedLogin,
+        subexp,
       });
     }
 
@@ -382,7 +436,7 @@ Deno.serve(async (req) => {
 
       const { data: currentProfile } = await supabase
         .from("profiles")
-        .select("roles, is_banned, login, subscription_until")
+        .select("roles, is_banned, login, firebase_uid")
         .eq("profile_id", session.profile_id)
         .maybeSingle();
 
@@ -390,11 +444,10 @@ Deno.serve(async (req) => {
         return jsonResponse(403, { code: "BANNED" });
       }
 
-      const currentRoles = Array.isArray(currentProfile.roles)
-        ? currentProfile.roles.map((r: string) => r.toLowerCase().trim())
-        : [];
+      const live = await getLiveProfileInfo(currentProfile.firebase_uid);
+      const combinedRoles = Array.from(new Set([...(currentProfile.roles || []), ...live.roles]));
 
-      if (!checkHasSubscription(currentRoles)) {
+      if (!checkHasSubscription(combinedRoles)) {
         return jsonResponse(403, { code: "NO_SUBSCRIPTION" });
       }
 
@@ -404,27 +457,28 @@ Deno.serve(async (req) => {
       }
 
       const now = Math.floor(Date.now() / 1000);
-      const isLifetime = currentRoles.includes("lifetime") ||
-        (currentProfile?.subscription_until && new Date(currentProfile.subscription_until).getFullYear() >= 2099);
+      const isLifetime = combinedRoles.includes("lifetime") ||
+        (live.subscriptionUntil && new Date(live.subscriptionUntil).getFullYear() >= 2099);
 
       let subexp = now + 30 * 86400;
       if (isLifetime) {
         subexp = now + 3650 * 86400;
-      } else if (currentProfile?.subscription_until) {
-        const untilSec = Math.floor(new Date(currentProfile.subscription_until).getTime() / 1000);
+      } else if (live.subscriptionUntil) {
+        const untilSec = Math.floor(new Date(live.subscriptionUntil).getTime() / 1000);
         if (untilSec > now) {
           subexp = untilSec;
         }
       }
       const sid = await sha256Hex(token);
+      const resolvedLogin = live.login || currentProfile.login || session.login;
 
       const claims = {
         iss: "guard-sakura-v1",
         aud: "loader",
         sid,
         sub: String(session.profile_id),
-        login: currentProfile.login || session.login,
-        plan: determinePlan(currentRoles),
+        login: resolvedLogin,
+        plan: determinePlan(combinedRoles),
         hwid,
         steam: steam || "0",
         nonce,
@@ -477,7 +531,7 @@ Deno.serve(async (req) => {
 
       const { data: currentProfile } = await supabase
         .from("profiles")
-        .select("roles, is_banned, login, subscription_until")
+        .select("roles, is_banned, login, firebase_uid")
         .eq("profile_id", session.profile_id)
         .maybeSingle();
 
@@ -485,29 +539,29 @@ Deno.serve(async (req) => {
         return jsonResponse(403, { code: "BANNED" });
       }
 
-      const currentRoles = Array.isArray(currentProfile.roles)
-        ? currentProfile.roles.map((r: string) => r.toLowerCase().trim())
-        : [];
+      const live = await getLiveProfileInfo(currentProfile.firebase_uid);
+      const combinedRoles = Array.from(new Set([...(currentProfile.roles || []), ...live.roles]));
 
-      if (!checkHasSubscription(currentRoles)) {
+      if (!checkHasSubscription(combinedRoles)) {
         return jsonResponse(403, { code: "NO_SUBSCRIPTION" });
       }
 
       const isSdk = path.includes("/v1/lease") || path.endsWith("/lease");
       const now = Math.floor(Date.now() / 1000);
-      const isLifetime = currentRoles.includes("lifetime") ||
-        (currentProfile?.subscription_until && new Date(currentProfile.subscription_until).getFullYear() >= 2099);
+      const isLifetime = combinedRoles.includes("lifetime") ||
+        (live.subscriptionUntil && new Date(live.subscriptionUntil).getFullYear() >= 2099);
 
       let subexp = now + 30 * 86400; // default 30 days
       if (isLifetime) {
         subexp = now + 3650 * 86400; // 10 years (3650 days) for Lifetime
-      } else if (currentProfile?.subscription_until) {
-        const untilSec = Math.floor(new Date(currentProfile.subscription_until).getTime() / 1000);
+      } else if (live.subscriptionUntil) {
+        const untilSec = Math.floor(new Date(live.subscriptionUntil).getTime() / 1000);
         if (untilSec > now) {
           subexp = untilSec;
         }
       }
       const sid = await sha256Hex(token);
+      const resolvedLogin = live.login || currentProfile.login || session.login;
 
       const leaseObj = {
         iss: "guard-sakura-v1",
@@ -516,12 +570,12 @@ Deno.serve(async (req) => {
         hwid,
         steam: steam || "0",
         sid,
-        plan: determinePlan(currentRoles),
+        plan: determinePlan(combinedRoles),
         iat: now,
         exp: now + 60, // 60 seconds lease validity (VM strictly requires exp - iat <= 90)
         subexp,
         sub: String(session.profile_id),
-        login: currentProfile.login || session.login,
+        login: resolvedLogin,
       };
 
       const payloadJson = JSON.stringify(leaseObj);
@@ -628,6 +682,162 @@ Deno.serve(async (req) => {
       }
 
       return jsonResponse(200, { status: "ok" });
+    }
+
+    // 11. PROMO REDEMPTION ROUTE (/promo, /v1/promo)
+    if (path.endsWith("/promo") || path.endsWith("/v1/promo")) {
+      if (req.method !== "POST") {
+        return jsonResponse(405, { code: "METHOD_NOT_ALLOWED" });
+      }
+
+      const authHeader = req.headers.get("authorization") || "";
+      const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+      const session = await verifyToken(token);
+
+      if (!session) {
+        return jsonResponse(401, { code: "UNAUTHORIZED" });
+      }
+
+      const body = await req.json().catch(() => ({}));
+      const inputCode = String(body.code || "").trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "");
+
+      if (!inputCode) {
+        return jsonResponse(400, { code: "EMPTY_CODE", message: "Введите промокод" });
+      }
+
+      // 1. Fetch user's current profile from Supabase
+      const { data: currentProfile, error: profileErr } = await supabase
+        .from("profiles")
+        .select("profile_id, login, roles, is_banned, firebase_uid")
+        .eq("profile_id", session.profile_id)
+        .maybeSingle();
+
+      if (profileErr || !currentProfile) {
+        return jsonResponse(404, { code: "USER_NOT_FOUND" });
+      }
+
+      if (currentProfile.is_banned) {
+        return jsonResponse(403, { code: "BANNED" });
+      }
+
+      // 2. Known promo codes and dynamic Firestore verification
+      const KNOWN_CODES: Record<string, { durationDays: number; role: string }> = {
+        "SAKURA-30D-67ZK-H9UC": { durationDays: 30, role: "subscriber" },
+        "SAKURA-30D-GL7R-Z2YB": { durationDays: 30, role: "subscriber" },
+        "SAKURA-30D-HRC6-4LST": { durationDays: 30, role: "subscriber" },
+        "SAKURA-30D-KRLL-5CCJ": { durationDays: 30, role: "subscriber" },
+        "SAKURA-30D-M46J-9YZ3": { durationDays: 30, role: "subscriber" },
+        "SAKURA-30D-MKJV-5QSR": { durationDays: 30, role: "subscriber" },
+        "SAKURA-30D-N24F-YUPJ": { durationDays: 30, role: "subscriber" },
+        "SAKURA-30D-SMT8-XXGZ": { durationDays: 30, role: "subscriber" },
+        "SAKURA-30D-UF5H-5VHQ": { durationDays: 30, role: "subscriber" },
+        "SAKURA-30D-V9AG-NL6N": { durationDays: 30, role: "subscriber" },
+        "SAKURA-PREM-30": { durationDays: 30, role: "subscriber" },
+        "SAKURA-TRIAL-7": { durationDays: 7, role: "subscriber" },
+      };
+
+      let durationDays = 30;
+      let targetRole = "subscriber";
+
+      const matchedKnown = KNOWN_CODES[inputCode];
+      if (matchedKnown) {
+        durationDays = matchedKnown.durationDays;
+        targetRole = matchedKnown.role;
+      } else {
+        // Dynamic promo check via Firestore REST API
+        try {
+          const fsRes = await fetch(
+            `https://firestore.googleapis.com/v1/projects/sakura-bfa74/databases/(default)/documents/promoCodes/${inputCode}`
+          );
+          if (fsRes.status === 404) {
+            return jsonResponse(404, {
+              code: "PROMO_NOT_FOUND",
+              message: "Промокод не существует или не активен.",
+            });
+          }
+          if (fsRes.ok) {
+            const fsData = await fsRes.json();
+            const fields = fsData.fields || {};
+            const isActive = fields.isActive?.booleanValue ?? true;
+            if (!isActive) {
+              return jsonResponse(400, {
+                code: "PROMO_INACTIVE",
+                message: "Промокод не активен.",
+              });
+            }
+            durationDays = parseInt(fields.durationDays?.integerValue || "30", 10);
+            targetRole = fields.role?.stringValue || "subscriber";
+          } else {
+            return jsonResponse(404, {
+              code: "PROMO_NOT_FOUND",
+              message: "Промокод не существует или не активен.",
+            });
+          }
+        } catch {
+          return jsonResponse(404, {
+            code: "PROMO_NOT_FOUND",
+            message: "Промокод не существует или не активен.",
+          });
+        }
+      }
+
+      // 3. Calculate new subscription expiry
+      const live = await getLiveProfileInfo(currentProfile.firebase_uid);
+      const now = Date.now();
+      const currentUntilTime = live.subscriptionUntil ? new Date(live.subscriptionUntil).getTime() : 0;
+      const baseTime = currentUntilTime > now ? currentUntilTime : now;
+      const newUntilTime = baseTime + durationDays * 86400000;
+      const newUntilIso = new Date(newUntilTime).toISOString();
+
+      // 4. Grant subscriber role in Supabase profiles
+      const currentRoles = Array.isArray(currentProfile.roles)
+        ? [...currentProfile.roles]
+        : [];
+
+      if (!currentRoles.map((r: string) => r.toLowerCase().trim()).includes(targetRole.toLowerCase())) {
+        currentRoles.push(targetRole);
+      }
+      if (!currentRoles.map((r: string) => r.toLowerCase().trim()).includes("subscriber")) {
+        currentRoles.push("subscriber");
+      }
+
+      const { error: updateErr } = await supabase
+        .from("profiles")
+        .update({ roles: currentRoles })
+        .eq("profile_id", session.profile_id);
+
+      if (updateErr) {
+        return jsonResponse(500, { code: "DB_ERROR", message: updateErr.message });
+      }
+
+      // 5. Update Firestore profile as well
+      if (currentProfile.firebase_uid) {
+        try {
+          await fetch(
+            `https://firestore.googleapis.com/v1/projects/sakura-bfa74/databases/(default)/documents/users/${currentProfile.firebase_uid}?updateMask.fieldPaths=subscriptionUntil&updateMask.fieldPaths=subscription_until&updateMask.fieldPaths=roles`,
+            {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                fields: {
+                  subscriptionUntil: { stringValue: newUntilIso },
+                  subscription_until: { stringValue: newUntilIso },
+                  roles: { arrayValue: { values: Array.from(new Set([...currentRoles, targetRole, "subscriber"])).map((r: string) => ({ stringValue: r })) } },
+                },
+              }),
+            }
+          );
+        } catch {}
+      }
+
+      return jsonResponse(200, {
+        ok: true,
+        durationDays,
+        newUntil: newUntilIso,
+        newUntilSec: Math.floor(newUntilTime / 1000),
+        plan: "prem",
+        message: `Промокод успешно активирован! Добавлено +${durationDays} дн. подписки.`,
+      });
     }
 
     return jsonResponse(404, { code: "NOT_FOUND", path });
