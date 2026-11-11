@@ -1191,7 +1191,14 @@ function HeaderAuth() {
       const snapshot = await window.sakuraFirebaseAuth.resendVerificationEmail();
       setCurrentUser(snapshot);
       if (snapshot?.emailVerified) {
-        setVerificationSuccess(t("Email is already verified.", "Email уже подтвержден."));
+        setIsVerificationModalOpen(false);
+        setFlashMessage(
+          t(
+            "Email is already verified. Access unlocked.",
+            "Email уже подтвержден. Доступ к профилю разблокирован."
+          )
+        );
+        void navigateToProfile(snapshot);
       } else {
         setVerificationSuccess(
           t(
@@ -1235,18 +1242,14 @@ function HeaderAuth() {
         return;
       }
 
+      setIsVerificationModalOpen(false);
       setFlashMessage(
         t(
           "Email verified. Profile access is now unlocked.",
           "Email подтвержден. Доступ к профилю разблокирован."
         )
       );
-      setVerificationSuccess(
-        t(
-          "Email verified. You can now open your profile.",
-          "Email подтвержден. Теперь вы можете открыть свой профиль."
-        )
-      );
+      void navigateToProfile(snapshot);
     } catch (error) {
       setVerificationError(getFirebaseErrorMessage(error));
     } finally {

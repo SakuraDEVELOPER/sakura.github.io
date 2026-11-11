@@ -6353,11 +6353,15 @@ export default function ProfilePage() {
   const handleDeleteAccount = async () => {
     const bridge = getWindowState().sakuraFirebaseAuth;
 
-    if (!bridge || !isAdminSelfTarget) {
+    if (!bridge || (!isOwner && !isAdminSelfTarget)) {
       return;
     }
 
-    if (!window.confirm("Delete this account permanently? This action cannot be undone.")) {
+    const confirmPrompt = t(
+      "Are you sure you want to permanently delete your account? All data and subscriptions will be lost forever.",
+      "Вы уверены, что хотите безвозвратно удалить свой аккаунт? Все данные и подписки будут стёрты навсегда."
+    );
+    if (!window.confirm(confirmPrompt)) {
       return;
     }
 
@@ -6367,12 +6371,16 @@ export default function ProfilePage() {
     try {
       await bridge.deleteCurrentAccount();
       setIsAdminPanelOpen(false);
+      setIsEditProfileModalOpen(false);
       router.replace("/");
     } catch (error) {
       setDeleteAccountError(
         getProfileActionErrorMessage(
           error,
-          "Could not delete account. Sign in again and retry."
+          t(
+            "Could not delete account. Sign in again and retry.",
+            "Не удалось удалить аккаунт. Попробуйте войти снова."
+          )
         )
       );
     } finally {
@@ -8337,6 +8345,31 @@ export default function ProfilePage() {
                               {verificationError && <p className="mt-2 text-xs text-[#ff9aa9]">⚠ {verificationError}</p>}
                             </div>
                           )}
+
+                          <div className="rounded-2xl border border-red-950/50 bg-red-950/15 p-4">
+                            <p className="text-xs font-mono uppercase tracking-[0.16em] text-red-400 mb-1.5">
+                              {t("Danger Zone", "Опасная зона")}
+                            </p>
+                            <p className="text-xs text-gray-400 mb-3">
+                              {t(
+                                "Permanently delete your profile and all associated data. This action cannot be undone.",
+                                "Безвозвратно удалить свой профиль и все связанные данные. Это действие нельзя отменить."
+                              )}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={handleDeleteAccount}
+                              disabled={isAccountDeleting}
+                              className="rounded-full border border-red-500/40 bg-red-500/10 px-4 py-1.5 text-xs font-bold uppercase tracking-[0.12em] text-red-300 hover:bg-red-500 hover:text-white transition disabled:opacity-50"
+                            >
+                              {isAccountDeleting
+                                ? t("Deleting...", "Удаление...")
+                                : t("Delete Account", "Удалить профиль")}
+                            </button>
+                            {deleteAccountError && (
+                              <p className="mt-2 text-xs text-[#ff9aa9]">⚠ {deleteAccountError}</p>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>

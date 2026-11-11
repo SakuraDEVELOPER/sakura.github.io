@@ -236,6 +236,9 @@ const firebaseModuleScript = `
       if (profileRow) {
         const snap = mapSupabaseProfileRowToSnapshot(profileRow);
         snap.emailVerified = Boolean(user.email_confirmed_at || profileRow.email_verified);
+        if (snap.emailVerified) {
+          snap.verificationRequired = false;
+        }
         return publishUserSnapshot(snap);
       }
 
@@ -244,6 +247,7 @@ const firebaseModuleScript = `
         isAnonymous: false,
         email: user.email ?? null,
         emailVerified: Boolean(user.email_confirmed_at),
+        verificationRequired: !user.email_confirmed_at,
         login: user.user_metadata?.login || (email ? email.split("@")[0] : "user"),
         displayName: user.user_metadata?.display_name || user.user_metadata?.login || "User",
         profileId: null,
@@ -457,6 +461,19 @@ const firebaseModuleScript = `
             },
 
             deleteCurrentAccount: async () => {
+              const snap = window.sakuraCurrentUserSnapshot;
+              if (snap?.profileId) {
+                try {
+                  await callSupabaseRpc("delete_user_account", { p_profile_id: snap.profileId });
+                } catch (e) {
+                  console.warn("delete_user_account RPC error:", e);
+                }
+              }
+              stopPresenceHeartbeat();
+              try {
+                window.localStorage.removeItem("sakura-auth-snapshot-v1");
+                window.localStorage.removeItem("sakura_pending_verification_email");
+              } catch (e) {}
               await supabase.auth.signOut();
               publishUserSnapshot(null);
             },
@@ -828,6 +845,7 @@ const firebaseModuleScript = `
                   const updated = {
                     ...(window.sakuraCurrentUserSnapshot || {}),
                     emailVerified: true,
+                    verificationRequired: false,
                     verificationEmailSent: false
                   };
                   publishUserSnapshot(updated);
@@ -867,12 +885,48 @@ const firebaseModuleScript = `
                 (typeof window !== "undefined" ? window.localStorage.getItem("sakura_pending_verification_email") : null);
 
               if (pendingEmail) {
+                try {
+                  const syncRes = await callSupabaseRpc("sync_user_verification", { p_email: pendingEmail });
+                  if (syncRes?.ok && syncRes.verified && syncRes.profile) {
+                    const snap = mapSupabaseProfileRowToSnapshot(syncRes.profile);
+                    snap.emailVerified = true;
+                    snap.verificationRequired = false;
+                    return publishUserSnapshot(snap);
+                  }
+                } catch (e) {}
+
                 const rows = await fetchSupabaseRows("public_profiles", { email: "ilike." + pendingEmail, limit: 1 });
                 if (rows && rows[0] && rows[0].email_verified === true) {
                   const snap = mapSupabaseProfileRowToSnapshot(rows[0]);
                   snap.emailVerified = true;
+                  snap.verificationRequired = false;
                   return publishUserSnapshot(snap);
                 }
+
+                try {
+                  const { error } = await supabase.auth.resend({
+                    type: "signup",
+                    email: pendingEmail,
+                    options: { emailRedirectTo: getAppRedirectUrl() }
+                  });
+                  if (error) {
+                    const msg = (error.message || "").toLowerCase();
+                    if (msg.includes("already confirmed") || msg.includes("already verified")) {
+                      if (rows && rows[0]) {
+                        const snap = mapSupabaseProfileRowToSnapshot(rows[0]);
+                        snap.emailVerified = true;
+                        snap.verificationRequired = false;
+                        return publishUserSnapshot(snap);
+                      }
+                      const snap = {
+                        ...(window.sakuraCurrentUserSnapshot || {}),
+                        emailVerified: true,
+                        verificationRequired: false
+                      };
+                      return publishUserSnapshot(snap);
+                    }
+                  }
+                } catch (e) {}
               }
 
               return window.sakuraCurrentUserSnapshot || null;
