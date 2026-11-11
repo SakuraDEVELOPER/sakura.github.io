@@ -60,7 +60,7 @@ type FirebaseClientConfig = {
   measurementId: string;
 };
 
-type AuthMode = "login" | "register";
+type AuthMode = "login" | "register" | "forgot";
 
 type VisitHistoryEntry = {
   timestamp: string;
@@ -1263,6 +1263,15 @@ function HeaderAuth() {
       return;
     }
 
+    if (mode === "forgot") {
+      if (!identifier.trim()) {
+        setSubmitError(t("Enter your email or login.", "Введите почту или логин."));
+        return;
+      }
+      await handleForgotPassword();
+      return;
+    }
+
     if (!identifier.trim()) {
       setSubmitError(mode === "register" ? "Enter your email." : "Enter your email or login.");
       return;
@@ -1376,6 +1385,7 @@ function HeaderAuth() {
           `Письмо для сброса пароля отправлено на ${resetResult.email}. Проверьте папку Спам, если его нет во входящих.`
         )
       );
+      setMode("login");
     } catch (error) {
       setSubmitError(getFirebaseErrorMessage(error));
     } finally {
@@ -1586,9 +1596,11 @@ function HeaderAuth() {
                   <h2 className="text-2xl font-black uppercase tracking-tighter text-white">
                     {isGoogleSetupFlowActive
                       ? t("Complete Google Account", "Завершить Google-аккаунт")
-                      : mode === "register"
-                        ? t("Registration", "Регистрация")
-                        : t("Login", "Вход")}
+                      : mode === "forgot"
+                        ? t("Password Recovery", "Восстановление пароля")
+                        : mode === "register"
+                          ? t("Registration", "Регистрация")
+                          : t("Login", "Вход")}
                   </h2>
                   <p className="mt-2 text-sm text-gray-400">
                     {isGoogleSetupFlowActive
@@ -1596,6 +1608,11 @@ function HeaderAuth() {
                           "Choose a login and password to finish Google registration. Until then, the profile stays locked.",
                           "Выберите логин и пароль, чтобы завершить регистрацию через Google. До этого профиль остаётся заблокирован."
                         )
+                      : mode === "forgot"
+                        ? t(
+                            "Enter your email or login to receive a password reset link.",
+                            "Введите почту или логин от аккаунта для получения ссылки на сброс пароля."
+                          )
                       : mode === "register"
                         ? t(
                             "Create a username for your profile and a separate login for sign-in.",
@@ -1633,28 +1650,39 @@ function HeaderAuth() {
 
             <div className="p-6">
               {!isGoogleSetupFlowActive ? (
-                <div className="grid grid-cols-2 gap-2 rounded-full border border-[#1e1e1e] bg-[#080808] p-1">
+                mode === "forgot" ? (
                   <button
                     type="button"
                     onClick={() => switchMode("login")}
-                    className={`rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition ${
-                      mode === "login" ? "bg-[#ffb7c5] text-black" : "text-gray-400 hover:text-white"
-                    }`}
+                    className="inline-flex items-center gap-2 text-xs font-semibold text-[#ffb7c5] transition hover:text-white"
                   >
-                    {t("Login", "Вход")}
+                    <span>←</span>
+                    <span>{t("Back to Login", "Назад ко входу")}</span>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => switchMode("register")}
-                    className={`rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition ${
-                      mode === "register"
-                        ? "bg-[#ffb7c5] text-black"
-                        : "text-gray-400 hover:text-white"
-                    }`}
-                  >
-                    {t("Registration", "Регистрация")}
-                  </button>
-                </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2 rounded-full border border-[#1e1e1e] bg-[#080808] p-1">
+                    <button
+                      type="button"
+                      onClick={() => switchMode("login")}
+                      className={`rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition ${
+                        mode === "login" ? "bg-[#ffb7c5] text-black" : "text-gray-400 hover:text-white"
+                      }`}
+                    >
+                      {t("Login", "Вход")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => switchMode("register")}
+                      className={`rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition ${
+                        mode === "register"
+                          ? "bg-[#ffb7c5] text-black"
+                          : "text-gray-400 hover:text-white"
+                      }`}
+                    >
+                      {t("Registration", "Регистрация")}
+                    </button>
+                  </div>
+                )
               ) : null}
 
               {!authReady && !authLoadError ? (
@@ -1669,7 +1697,7 @@ function HeaderAuth() {
                 </div>
               ) : null}
 
-              {!isGoogleSetupFlowActive ? (
+              {!isGoogleSetupFlowActive && mode !== "forgot" ? (
                 <>
                   <button
                     type="button"
@@ -1694,11 +1722,11 @@ function HeaderAuth() {
                     <div className="h-px flex-1 bg-[#1f1f1f]"></div>
                   </div>
                 </>
-              ) : (
+              ) : isGoogleSetupFlowActive ? (
                 <div className="mt-5 rounded-2xl border border-[#2b1b1e] bg-[#120d0f] px-4 py-3 text-sm text-[#f2c0cb]">
                   {visibleUser?.email ? t(`Google email: ${visibleUser.email}`, `Google-почта: ${visibleUser.email}`) : t("Google account connected.", "Google-аккаунт подключён.")}
                 </div>
-              )}
+              ) : null}
 
               <form className="mt-5 space-y-4" onSubmit={handleSubmit}>
                 {mode === "register" || isGoogleSetupFlowActive ? (
@@ -1775,30 +1803,34 @@ function HeaderAuth() {
                   </label>
                 )}
 
-                <label className="block">
-                  <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">
-                    {t("Password", "Пароль")}
-                  </span>
-                  <input
-                    type="password"
-                    value={password}
-                    autoComplete={mode === "register" ? "new-password" : "current-password"}
-                    onChange={(event) => setPassword(event.target.value)}
-                    className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55"
-                    placeholder={t("Minimum 6 characters", "Минимум 6 символов")}
-                  />
-                </label>
+                {mode !== "forgot" ? (
+                  <label className="block">
+                    <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">
+                      {t("Password", "Пароль")}
+                    </span>
+                    <input
+                      type="password"
+                      value={password}
+                      autoComplete={mode === "register" ? "new-password" : "current-password"}
+                      onChange={(event) => setPassword(event.target.value)}
+                      className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55"
+                      placeholder={t("Minimum 6 characters", "Минимум 6 символов")}
+                    />
+                  </label>
+                ) : null}
+
                 {mode === "login" && !isGoogleSetupFlowActive ? (
                   <div className="-mt-1 flex justify-end">
                     <button
                       type="button"
-                      onClick={handleForgotPassword}
+                      onClick={() => {
+                        setSubmitError(null);
+                        setMode("forgot");
+                      }}
                       disabled={isPasswordResetSubmitting || isSubmitting || !authReady}
                       className="text-xs text-[#ffb7c5] transition hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {isPasswordResetSubmitting
-                        ? t("Sending reset email...", "Отправка письма...")
-                        : t("Forgot password?", "Забыли пароль?")}
+                      {t("Forgot password?", "Забыли пароль?")}
                     </button>
                   </div>
                 ) : null}
@@ -1827,21 +1859,37 @@ function HeaderAuth() {
 
                 <button
                   type="submit"
-                  disabled={isSubmitting || !authReady}
+                  disabled={isSubmitting || isPasswordResetSubmitting || !authReady}
                   className="inline-flex w-full items-center justify-center rounded-full bg-[#ffb7c5] px-5 py-3 text-sm font-black uppercase tracking-[0.18em] text-black shadow-[0_0_30px_rgba(255,183,197,0.12)] transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:bg-[#ffb7c5]/40 disabled:text-black/60"
                 >
-                  {isSubmitting
+                  {isSubmitting || isPasswordResetSubmitting
                     ? isGoogleSetupFlowActive
                       ? t("Finishing Google account...", "Завершение Google-аккаунта...")
+                      : mode === "forgot"
+                      ? t("Sending reset link...", "Отправка ссылки...")
                       : mode === "register"
                       ? t("Creating account...", "Создание аккаунта...")
                       : t("Logging in...", "Вход...")
                     : isGoogleSetupFlowActive
                       ? t("Finish Google Account", "Завершить Google-аккаунт")
+                      : mode === "forgot"
+                      ? t("Send Reset Link", "Отправить ссылку для сброса")
                       : mode === "register"
                       ? t("Create Account", "Создать аккаунт")
                       : t("Login", "Вход")}
                 </button>
+
+                {mode === "forgot" ? (
+                  <div className="pt-2 text-center">
+                    <button
+                      type="button"
+                      onClick={() => switchMode("login")}
+                      className="text-xs text-gray-400 transition hover:text-[#ffb7c5]"
+                    >
+                      {t("Remember your password? Sign in", "Вспомнили пароль? Войти")}
+                    </button>
+                  </div>
+                ) : null}
               </form>
             </div>
           </m.div>
