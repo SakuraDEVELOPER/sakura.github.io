@@ -1890,6 +1890,12 @@ export default function ProfilePage() {
   const [adminPanelActiveTab, setAdminPanelActiveTab] = useState<"sub" | "roles" | "promos" | "security" | "edit">("sub");
   const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
   const [editProfileActiveTab, setEditProfileActiveTab] = useState<"general" | "avatar" | "security">("general");
+  const [isRecoveryModalOpen, setIsRecoveryModalOpen] = useState(false);
+  const [recoveryPassword, setRecoveryPassword] = useState("");
+  const [recoveryConfirmPassword, setRecoveryConfirmPassword] = useState("");
+  const [recoverySaving, setRecoverySaving] = useState(false);
+  const [recoveryError, setRecoveryError] = useState<string | null>(null);
+  const [recoverySuccess, setRecoverySuccess] = useState<string | null>(null);
   const [isBanSaving, setIsBanSaving] = useState(false);
   const [banError, setBanError] = useState<string | null>(null);
   const [banSuccess, setBanSuccess] = useState<string | null>(null);
@@ -2251,12 +2257,50 @@ export default function ProfilePage() {
     window.addEventListener(AUTH_ERROR_EVENT, onError);
     window.addEventListener(AUTH_STATE_SETTLED_EVENT, onAuthStateSettled);
     window.addEventListener(USER_UPDATE_EVENT, onUserUpdate);
+
+    const handleOpenReset = () => {
+      setIsRecoveryModalOpen(true);
+      setRecoveryError(null);
+      setRecoverySuccess(null);
+      setRecoveryPassword("");
+      setRecoveryConfirmPassword("");
+    };
+
+    window.addEventListener("sakura-open-password-reset", handleOpenReset);
+
+    const checkPendingRecovery = () => {
+      if (typeof window === "undefined") return;
+      let hasPendingReset = false;
+      try {
+        hasPendingReset = window.sessionStorage.getItem("sakura_pending_password_reset") === "1";
+      } catch {}
+
+      if (
+        window.location.hash.includes("type=recovery") ||
+        window.location.search.includes("type=recovery") ||
+        window.location.hash.includes("type=recovery_token") ||
+        Boolean((window as any).sakuraIsPasswordRecovery) ||
+        hasPendingReset
+      ) {
+        handleOpenReset();
+      }
+    };
+
+    checkPendingRecovery();
+    const tRecovery1 = window.setTimeout(checkPendingRecovery, 150);
+    const tRecovery2 = window.setTimeout(checkPendingRecovery, 500);
+    const tRecovery3 = window.setTimeout(checkPendingRecovery, 1200);
+
     return () => {
       window.clearTimeout(timeoutId);
+      window.clearTimeout(tRecovery1);
+      window.clearTimeout(tRecovery2);
+      window.clearTimeout(tRecovery3);
       window.removeEventListener(AUTH_READY_EVENT, sync);
       window.removeEventListener(AUTH_ERROR_EVENT, onError);
       window.removeEventListener(AUTH_STATE_SETTLED_EVENT, onAuthStateSettled);
       window.removeEventListener(USER_UPDATE_EVENT, onUserUpdate);
+      window.removeEventListener("sakura-open-password-reset", handleOpenReset);
       unsubscribe();
     };
   }, []);
@@ -6179,6 +6223,55 @@ export default function ProfilePage() {
       setIsPasswordResetSending(false);
     }
   };
+
+  const handleSaveRecoveryPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const bridge = getWindowState().sakuraFirebaseAuth;
+    if (!bridge) {
+      setRecoveryError(t("Auth service is not ready. Wait a few seconds and try again.", "Сервис авторизации не готов. Подождите пару секунд и попробуйте снова."));
+      return;
+    }
+    if (!recoveryPassword || recoveryPassword.length < 6) {
+      setRecoveryError(t("Password must contain at least 6 characters.", "Пароль должен содержать минимум 6 символов."));
+      return;
+    }
+    if (recoveryPassword !== recoveryConfirmPassword) {
+      setRecoveryError(t("Passwords do not match.", "Пароли не совпадают."));
+      return;
+    }
+
+    setRecoverySaving(true);
+    setRecoveryError(null);
+    try {
+      const snap = await bridge.updatePassword("", recoveryPassword);
+      try {
+        window.sessionStorage.removeItem("sakura_pending_password_reset");
+        (window as any).sakuraIsPasswordRecovery = false;
+      } catch {}
+      setRecoverySuccess(t("Password updated successfully!", "Пароль успешно обновлён!"));
+      if (typeof window !== "undefined" && window.history.replaceState) {
+        window.history.replaceState(null, "", window.location.pathname);
+      }
+      if (snap) {
+        applyUpdatedProfileSnapshot(snap);
+      }
+      setTimeout(() => {
+        setIsRecoveryModalOpen(false);
+      }, 1400);
+    } catch (err: any) {
+      setRecoveryError(getProfileActionErrorMessage(err, "Could not update password."));
+    } finally {
+      setRecoverySaving(false);
+    }
+  };
+
+  const closeRecoveryModal = () => {
+    try {
+      window.sessionStorage.removeItem("sakura_pending_password_reset");
+      (window as any).sakuraIsPasswordRecovery = false;
+    } catch {}
+    setIsRecoveryModalOpen(false);
+  };
   const handleAdminPasswordResetRequest = async () => {
     const bridge = getWindowState().sakuraFirebaseAuth;
     const resetIdentifier = activeProfile?.email?.trim() || activeProfile?.login?.trim() || "";
@@ -9410,6 +9503,97 @@ export default function ProfilePage() {
           ) : null}
         </>
       ) : null}
+
+      {isClientMounted && isRecoveryModalOpen && typeof document !== "undefined"
+        ? createPortal(
+            <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+              <div
+                className="absolute inset-0 bg-black/80 backdrop-blur-md"
+                onClick={closeRecoveryModal}
+              />
+              <div className="relative w-full max-w-md overflow-hidden rounded-[30px] border border-[#ffb7c5]/35 bg-[#0d0d0d] shadow-[0_0_80px_rgba(255,183,197,0.18)]">
+                <div className="border-b border-[#2b1b1e] bg-[radial-gradient(circle_at_top,rgba(255,183,197,0.14),transparent_60%)] p-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">
+                        Sakura Security
+                      </p>
+                      <h2 className="text-xl font-black uppercase tracking-tight text-white">
+                        {t("Set New Password", "Новый пароль")}
+                      </h2>
+                      <p className="mt-1 text-xs text-gray-400">
+                        {t(
+                          "Enter your new password below.",
+                          "Придумайте и введите новый пароль для входа в ваш аккаунт."
+                        )}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={closeRecoveryModal}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#2b1b1e] bg-[#140b0f] text-gray-400 transition hover:border-[#ffb7c5]/50 hover:text-white"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+
+                <form onSubmit={handleSaveRecoveryPassword} className="p-6 space-y-4">
+                  {recoveryError && (
+                    <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-xs text-red-200">
+                      {recoveryError}
+                    </div>
+                  )}
+                  {recoverySuccess && (
+                    <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-2.5 text-xs text-emerald-200">
+                      {recoverySuccess}
+                    </div>
+                  )}
+
+                  <label className="block">
+                    <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-400">
+                      {t("New Password", "Новый пароль")}
+                    </span>
+                    <input
+                      type="password"
+                      value={recoveryPassword}
+                      onChange={(e) => setRecoveryPassword(e.target.value)}
+                      placeholder={t("Minimum 6 characters", "Минимум 6 символов")}
+                      className="w-full rounded-2xl border border-[#26181d] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55"
+                      autoFocus
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-400">
+                      {t("Confirm Password", "Подтвердите пароль")}
+                    </span>
+                    <input
+                      type="password"
+                      value={recoveryConfirmPassword}
+                      onChange={(e) => setRecoveryConfirmPassword(e.target.value)}
+                      placeholder={t("Repeat new password", "Повторите новый пароль")}
+                      className="w-full rounded-2xl border border-[#26181d] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55"
+                    />
+                  </label>
+
+                  <div className="pt-2">
+                    <button
+                      type="submit"
+                      disabled={recoverySaving}
+                      className="inline-flex w-full items-center justify-center rounded-full bg-[#ffb7c5] px-5 py-3 text-xs font-black uppercase tracking-[0.18em] text-black shadow-[0_0_30px_rgba(255,183,197,0.18)] transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {recoverySaving
+                        ? t("Saving password...", "Сохранение пароля...")
+                        : t("Save New Password", "Сохранить новый пароль")}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
     </main>
   );
 }

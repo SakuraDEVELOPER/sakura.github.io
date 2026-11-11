@@ -934,15 +934,34 @@ function HeaderAuth() {
 
     window.addEventListener("sakura-open-password-reset", handleOpenReset);
 
-    if (
-      typeof window !== "undefined" &&
-      (window.location.hash.includes("type=recovery") || window.location.search.includes("type=recovery"))
-    ) {
-      handleOpenReset();
-    }
+    const checkPendingRecovery = () => {
+      if (typeof window === "undefined") return;
+      let hasPendingReset = false;
+      try {
+        hasPendingReset = window.sessionStorage.getItem("sakura_pending_password_reset") === "1";
+      } catch {}
+
+      if (
+        window.location.hash.includes("type=recovery") ||
+        window.location.search.includes("type=recovery") ||
+        window.location.hash.includes("type=recovery_token") ||
+        Boolean((window as any).sakuraIsPasswordRecovery) ||
+        hasPendingReset
+      ) {
+        handleOpenReset();
+      }
+    };
+
+    checkPendingRecovery();
+    const t1 = window.setTimeout(checkPendingRecovery, 150);
+    const t2 = window.setTimeout(checkPendingRecovery, 500);
+    const t3 = window.setTimeout(checkPendingRecovery, 1200);
 
     return () => {
       window.clearTimeout(timeoutId);
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      window.clearTimeout(t3);
       window.removeEventListener(AUTH_READY_EVENT, handleReady);
       window.removeEventListener(AUTH_ERROR_EVENT, handleError);
       window.removeEventListener(USER_UPDATE_EVENT, handleUserUpdate);
@@ -1142,6 +1161,11 @@ function HeaderAuth() {
       return;
     }
 
+    try {
+      window.sessionStorage.removeItem("sakura_pending_password_reset");
+      (window as any).sakuraIsPasswordRecovery = false;
+    } catch {}
+
     setIsModalOpen(false);
     setSubmitError(null);
     setProfileName("");
@@ -1163,6 +1187,13 @@ function HeaderAuth() {
   const switchMode = (nextMode: AuthMode) => {
     if (isGoogleSetupFlowActive) {
       return;
+    }
+
+    if (mode === "reset" && nextMode !== "reset") {
+      try {
+        window.sessionStorage.removeItem("sakura_pending_password_reset");
+        (window as any).sakuraIsPasswordRecovery = false;
+      } catch {}
     }
 
     setMode(nextMode);
@@ -1317,6 +1348,10 @@ function HeaderAuth() {
 
       try {
         const snap = await window.sakuraFirebaseAuth.updatePassword("", password);
+        try {
+          window.sessionStorage.removeItem("sakura_pending_password_reset");
+          (window as any).sakuraIsPasswordRecovery = false;
+        } catch {}
         setFlashMessage(t("Password updated successfully.", "Пароль успешно обновлён!"));
         if (typeof window !== "undefined" && window.history.replaceState) {
           window.history.replaceState(null, "", window.location.pathname);
@@ -1643,7 +1678,7 @@ function HeaderAuth() {
       ) : null}
 
       {isModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[140] flex items-center justify-center p-4">
           <button
             type="button"
             aria-label="Close auth modal"

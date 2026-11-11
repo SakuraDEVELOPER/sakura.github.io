@@ -12,6 +12,15 @@ const firebaseModuleScript = `
     let supabase = null;
     let authStateSettled = false;
 
+    try {
+      const h = window.location.hash || "";
+      const s = window.location.search || "";
+      if (h.includes("type=recovery") || s.includes("type=recovery") || h.includes("type=recovery_token")) {
+        window.sessionStorage.setItem("sakura_pending_password_reset", "1");
+        window.sakuraIsPasswordRecovery = true;
+      }
+    } catch (e) {}
+
     const createFirebaseError = (code, message) => {
       const err = new Error(message);
       err.code = code;
@@ -291,6 +300,20 @@ const firebaseModuleScript = `
             }
           });
           window.supabaseClient = supabase;
+
+          supabase.auth.onAuthStateChange((event, session) => {
+            if (event === "PASSWORD_RECOVERY") {
+              try { window.sessionStorage.setItem("sakura_pending_password_reset", "1"); } catch (e) {}
+              window.sakuraIsPasswordRecovery = true;
+              window.dispatchEvent(new CustomEvent("sakura-open-password-reset", { detail: session }));
+              window.setTimeout(() => {
+                window.dispatchEvent(new CustomEvent("sakura-open-password-reset", { detail: session }));
+              }, 120);
+              window.setTimeout(() => {
+                window.dispatchEvent(new CustomEvent("sakura-open-password-reset", { detail: session }));
+              }, 450);
+            }
+          });
 
           const getAppRedirectUrl = () => {
             if (typeof window === "undefined") return "";
@@ -1069,11 +1092,21 @@ const firebaseModuleScript = `
           );
           window.dispatchEvent(new CustomEvent("sakura-auth-ready"));
 
-          if (typeof window !== "undefined" && (window.location.hash.includes("type=recovery") || window.location.search.includes("type=recovery"))) {
-            window.setTimeout(() => {
+          const triggerRecoveryIfNeeded = () => {
+            let pendingReset = false;
+            try {
+              pendingReset = window.sessionStorage.getItem("sakura_pending_password_reset") === "1";
+            } catch (e) {}
+            if (window.sakuraIsPasswordRecovery || pendingReset) {
               window.dispatchEvent(new CustomEvent("sakura-open-password-reset"));
-            }, 300);
-          }
+            }
+          };
+
+          triggerRecoveryIfNeeded();
+          window.setTimeout(triggerRecoveryIfNeeded, 120);
+          window.setTimeout(triggerRecoveryIfNeeded, 450);
+          window.setTimeout(triggerRecoveryIfNeeded, 900);
+          window.setTimeout(triggerRecoveryIfNeeded, 1500);
         } catch (error) {
           console.error("Failed to start Supabase Auth runtime:", error);
           const message = error instanceof Error ? error.message : "Failed to initialize Auth.";

@@ -166,15 +166,44 @@ const resetStaleRuntime = (runtime: FirebaseBootWindow) => {
   runtime.sakuraAuthStateSettled = false;
 };
 
+// Synchronously detect recovery in URL before Supabase can clear it!
+if (typeof window !== "undefined") {
+  try {
+    const rawHash = window.location.hash || "";
+    const rawSearch = window.location.search || "";
+    if (
+      rawHash.includes("type=recovery") ||
+      rawSearch.includes("type=recovery") ||
+      rawHash.includes("type=recovery_token")
+    ) {
+      window.sessionStorage.setItem("sakura_pending_password_reset", "1");
+      (window as any).sakuraIsPasswordRecovery = true;
+    }
+  } catch {}
+}
+
 const shouldBootImmediately = () => {
   if (typeof window === "undefined") {
     return false;
   }
 
+  const hash = window.location.hash || "";
+  const search = window.location.search || "";
+  let hasPendingReset = false;
+  try {
+    hasPendingReset = window.sessionStorage.getItem("sakura_pending_password_reset") === "1";
+  } catch {}
+
   return (
     /(?:^|\/)profile(?:\/|$)/.test(window.location.pathname) ||
     hasPersistedSupabaseSession() ||
-    hasPersistedFirebaseSession()
+    hasPersistedFirebaseSession() ||
+    hash.includes("type=recovery") ||
+    search.includes("type=recovery") ||
+    hash.includes("access_token=") ||
+    search.includes("code=") ||
+    hasPendingReset ||
+    Boolean((window as any).sakuraIsPasswordRecovery)
   );
 };
 
