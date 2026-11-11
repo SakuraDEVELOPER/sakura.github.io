@@ -1628,6 +1628,14 @@ const firebaseModuleScript = `
     "roles",
     "is_banned",
     "banned_at",
+    "subscription_until",
+    "has_claimed_trial",
+    "trial_claimed_at",
+    "is_frozen",
+    "frozen_at",
+    "last_frozen_at",
+    "frozen_remaining_ms",
+    "activation_history",
     "provider_ids",
     "login_history",
     "visit_history",
@@ -1709,6 +1717,37 @@ const firebaseModuleScript = `
       return Array.isArray(payload) ? payload : null;
     } catch (error) {
       return null;
+    }
+  };
+
+  const callSupabaseRpc = async (funcName: string, params: Record<string, unknown> = {}) => {
+    try {
+      const response = await fetch(SUPABASE_REST_URL + "/rpc/" + funcName, {
+        method: "POST",
+        headers: {
+          apikey: SUPABASE_PUBLIC_ANON_KEY,
+          Authorization: "Bearer " + SUPABASE_PUBLIC_ANON_KEY,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(params),
+      });
+
+      if (!response.ok) {
+        let errText = "";
+        try {
+          const errObj = await response.json();
+          errText = errObj?.message || errObj?.error || JSON.stringify(errObj);
+        } catch {
+          errText = await response.text().catch(() => "");
+        }
+        return { ok: false, error: errText || ("Supabase RPC " + funcName + " failed (" + response.status + ")") };
+      }
+
+      const resJson = await response.json();
+      return typeof resJson === "object" && resJson !== null ? resJson : { ok: true, data: resJson };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "RPC Network Error" };
     }
   };
   const sanitizeSupabaseProfileSyncText = (value, maxLength = 2048) =>
@@ -1967,6 +2006,15 @@ const firebaseModuleScript = `
         hwid: typeof row?.hwid === "string" ? row.hwid : null,
         subscriptionUntil:
           typeof row?.subscription_until === "string" ? row.subscription_until : null,
+        subscription_until:
+          typeof row?.subscription_until === "string" ? row.subscription_until : null,
+        hasClaimedTrial: row?.has_claimed_trial === true,
+        trialClaimedAt: typeof row?.trial_claimed_at === "string" ? row.trial_claimed_at : null,
+        isFrozen: row?.is_frozen === true,
+        frozenAt: typeof row?.frozen_at === "string" ? row.frozen_at : null,
+        lastFrozenAt: typeof row?.last_frozen_at === "string" ? row.last_frozen_at : null,
+        frozenRemainingMs: typeof row?.frozen_remaining_ms === "number" ? row.frozen_remaining_ms : null,
+        activationHistory: Array.isArray(row?.activation_history) ? row.activation_history : [],
         roles: Array.isArray(row?.roles) ? row.roles : [],
         isBanned: row?.is_banned === true,
         bannedAt:
@@ -2911,6 +2959,24 @@ const firebaseModuleScript = `
     };
 
     const resolveUserSnapshot = async (user, options = {}) => {
+      // 1. Fast path: load profile directly from Supabase
+      if (user && !user.isAnonymous) {
+        try {
+          const supabaseRows = await fetchSupabaseRows("public_profiles", {
+            firebase_uid: "eq." + user.uid,
+            limit: 1,
+          });
+          if (Array.isArray(supabaseRows) && supabaseRows[0]) {
+            const mapped = mapSupabaseProfileRowToSnapshot(supabaseRows[0]);
+            if (mapped && typeof mapped.profileId === "number" && mapped.profileId > 0) {
+              return publishUserSnapshot(toUserSnapshot(user, mapped));
+            }
+          }
+        } catch (sbErr) {
+          console.warn("Supabase fast profile lookup failed, falling back to Firestore:", sbErr);
+        }
+      }
+
       try {
         const details = await ensureProfileRecord(user, options);
 
@@ -3715,99 +3781,12 @@ const firebaseModuleScript = `
         return comments;
       };
 
-      const fetchSupabaseCommentsWithTimeout = () =>
-        withTimeout(
-          fetchSupabaseCommentsByProfileId(profileId),
-          PROFILE_LOOKUP_TIMEOUT_MS,
-          () =>
-            createFirebaseError(
-              "comments/supabase-timeout",
-              "Supabase comments request timed out."
-            )
-        );
-      const supabaseFastComments = await fetchSupabaseCommentsWithTimeout().catch(() => null);
-
-      if (supabaseFastComments && supabaseFastComments.length) {
-        return cacheComments(supabaseFastComments);
-      }
-
-      const readComments = async () => {
-        const snapshot = await getDocs(
-          query(profileCommentsCollection, where("profileId", "==", profileId))
-        );
-
-        const comments = sortProfileComments(
-          snapshot.docs
-            .map((commentDoc) => toStoredProfileComment(commentDoc.id, commentDoc.data()))
-            .filter(
-              (comment) =>
-                comment.profileId === profileId &&
-                (
-                  (typeof comment.message === "string" && comment.message) ||
-                  (typeof comment.mediaURL === "string" && comment.mediaURL) ||
-                  (typeof comment.mediaPath === "string" && comment.mediaPath)
-                )
-            )
-        );
-
-        return comments;
-      };
-
-      try {
-        const firestoreComments = await readComments();
-        const supabaseComments = await fetchSupabaseCommentsWithTimeout().catch(() => null);
-
-        return cacheComments(
-          mergeProfileCommentsWithFallback(firestoreComments, supabaseComments)
-        );
-      } catch (error) {
-        if (!isPermissionDeniedError(error)) {
-          throw error;
-        }
-      }
-
-      const supabaseComments = supabaseFastComments ?? await fetchSupabaseCommentsWithTimeout().catch(() => null);
-
-      if (Array.isArray(supabaseComments) && supabaseComments.length > 0) {
+      const supabaseComments = await fetchSupabaseCommentsByProfileId(profileId).catch(() => null);
+      if (Array.isArray(supabaseComments)) {
         return cacheComments(supabaseComments);
       }
 
-      await waitForAuthStateSettlement();
-
-      if (auth.currentUser && !auth.currentUser.isAnonymous) {
-        try {
-          return cacheComments(await readComments());
-        } catch (error) {
-          if (!isPermissionDeniedError(error)) {
-            throw error;
-          }
-        }
-      }
-
-      const viewer = await ensureProfileViewer();
-
-      if (viewer.isAnonymous) {
-        publishUserSnapshot(toAnonymousViewerSnapshot(viewer));
-      }
-
-      try {
-        return cacheComments(await readComments());
-      } catch (error) {
-        if (isPermissionDeniedError(error)) {
-          const fallbackSupabaseComments = await fetchSupabaseCommentsWithTimeout().catch(() => null);
-
-          if (Array.isArray(fallbackSupabaseComments) && fallbackSupabaseComments.length > 0) {
-            return cacheComments(fallbackSupabaseComments);
-          }
-
-          throw createFirebaseError(
-            "comments/read-denied",
-            "Profile comments are blocked by Firestore rules. Allow read access to profileComments."
-          );
-        }
-
-        throw error;
-      }
+      return [];
     };
 
     const isCommentMediaPathReferenced = async (mediaPath) => {
@@ -3889,98 +3868,38 @@ const firebaseModuleScript = `
         createdAt,
       });
       const authorPhotoURL = resolveCommentAuthorPhotoURLForPayload(authorSnapshot);
-      const displayCommentPayload = {
-        ...persistedCommentPayload,
-        authorPhotoURL,
-        authorAccentRole: pickCommentAccentRole(authorSnapshot?.roles ?? [], "user"),
-      };
-      const photoCommentPayload = {
-        ...persistedCommentPayload,
-        authorPhotoURL,
-      };
-      const timestampCommentPayload = {
-        ...stripNullishFields({
-          profileId,
-          authorUid: user.uid,
-          authorProfileId:
-            typeof authorSnapshot?.profileId === "number" ? authorSnapshot.profileId : null,
-          authorName,
-          message: normalizedMessage,
-          mediaURL: commentMedia?.mediaURL ?? null,
-          mediaType: commentMedia?.mediaType ?? null,
-          mediaPath: commentMedia?.mediaPath ?? null,
-          mediaSize: commentMedia?.mediaSize ?? null,
-        }),
-        createdAt: serverTimestamp(),
-      };
+      const authorAccentRole = pickCommentAccentRole(authorSnapshot?.roles ?? [], "user");
 
-      try {
-        await setDoc(commentRef, displayCommentPayload);
-      } catch (error) {
-        if (isFirestoreDocumentTooLargeError(error)) {
-          throw createFirebaseError(
-            "comments/media-too-large",
-            "This comment is too large for Firestore. Use a smaller image or GIF."
-          );
-        }
-
-        if (isPermissionDeniedError(error)) {
-          try {
-            await setDoc(commentRef, photoCommentPayload);
-          } catch (fallbackError) {
-            if (isFirestoreDocumentTooLargeError(fallbackError)) {
-              throw createFirebaseError(
-                "comments/media-too-large",
-                "This comment is too large for Firestore. Use a smaller image or GIF."
-              );
-            }
-
-            if (isPermissionDeniedError(fallbackError)) {
-              try {
-                await setDoc(commentRef, persistedCommentPayload);
-              } catch (legacyError) {
-                if (isFirestoreDocumentTooLargeError(legacyError)) {
-                  throw createFirebaseError(
-                    "comments/media-too-large",
-                    "This comment is too large for Firestore. Use a smaller image or GIF."
-                  );
-                }
-
-                if (isPermissionDeniedError(legacyError)) {
-                  try {
-                    await setDoc(commentRef, timestampCommentPayload);
-                  } catch (timestampError) {
-                    if (isFirestoreDocumentTooLargeError(timestampError)) {
-                      throw createFirebaseError(
-                        "comments/media-too-large",
-                        "This comment is too large for Firestore. Use a smaller image or GIF."
-                      );
-                    }
-
-                    if (isPermissionDeniedError(timestampError)) {
-                      throw createFirebaseError(
-                        "comments/write-denied",
-                        "Comments could not be saved. Check Firestore rules for profileComments."
-                      );
-                    }
-
-                    throw timestampError;
-                  }
-                }
-
-                throw legacyError;
-              }
-            }
-
-            throw fallbackError;
-          }
-        } else {
-          throw error;
-        }
-      }
+      const rpcResult = await callSupabaseRpc("add_profile_comment", {
+        p_profile_id: profileId,
+        p_author_profile_id: typeof authorSnapshot?.profileId === "number" ? authorSnapshot.profileId : null,
+        p_author_name: authorName,
+        p_author_photo_url: authorPhotoURL,
+        p_author_accent_role: authorAccentRole,
+        p_message: normalizedMessage,
+        p_media_url: commentMedia?.mediaURL ?? null,
+        p_media_type: commentMedia?.mediaType ?? null,
+        p_media_path: commentMedia?.mediaPath ?? null,
+        p_media_size: commentMedia?.mediaSize ?? null,
+      });
 
       profileCommentsByIdRuntimeCache.delete(String(profileId));
-      return toStoredProfileComment(commentRef.id, displayCommentPayload);
+
+      const finalId = rpcResult?.id || ("cmt_" + Date.now());
+      return toStoredProfileComment(finalId, {
+        profileId,
+        authorUid: user.uid,
+        authorProfileId: typeof authorSnapshot?.profileId === "number" ? authorSnapshot.profileId : null,
+        authorName,
+        authorPhotoURL,
+        authorAccentRole,
+        message: normalizedMessage,
+        mediaURL: commentMedia?.mediaURL ?? null,
+        mediaType: commentMedia?.mediaType ?? null,
+        mediaPath: commentMedia?.mediaPath ?? null,
+        mediaSize: commentMedia?.mediaSize ?? null,
+        createdAt: rpcResult?.createdAt || new Date().toISOString(),
+      });
     };
 
     const deleteProfileComment = async (commentId) => {
@@ -4004,52 +3923,19 @@ const firebaseModuleScript = `
         "Verify your email before managing comments."
       );
 
-      const commentRef = doc(profileCommentsCollection, normalizedCommentId);
-      const commentSnapshot = await getDoc(commentRef);
+      const actorProfileId = window.sakuraCurrentUserSnapshot?.profileId || 1;
 
-      if (!commentSnapshot.exists()) {
-        return null;
+      const rpcResult = await callSupabaseRpc("delete_profile_comment", {
+        p_comment_id: normalizedCommentId,
+        p_actor_profile_id: actorProfileId,
+      });
+
+      if (!rpcResult.ok) {
+        throw createFirebaseError("comments/delete-denied", rpcResult.error || "Не удалось удалить комментарий.");
       }
 
-      const comment = toStoredProfileComment(commentSnapshot.id, commentSnapshot.data());
-      let actorSnapshot = window.sakuraCurrentUserSnapshot;
-
-      if (!actorSnapshot || actorSnapshot.isAnonymous || actorSnapshot.uid !== user.uid) {
-        actorSnapshot = await resolveUserSnapshot(user);
-      }
-
-      const isAuthor = comment.authorUid === user.uid;
-      const ownsTargetProfile =
-        typeof actorSnapshot?.profileId === "number" &&
-        typeof comment.profileId === "number" &&
-        actorSnapshot.profileId === comment.profileId;
-      const hasCommentModerationAccess = await canDeleteCommentAsModerator(actorSnapshot, comment);
-
-      if (!isAuthor && !ownsTargetProfile && !hasCommentModerationAccess) {
-        throw createFirebaseError(
-          "comments/delete-forbidden",
-          "You can only delete your own comments, comments on your profile, or moderate comments with staff roles. Co-owner cannot remove root comments outside their profile."
-        );
-      }
-
-      try {
-        await deleteDoc(commentRef);
-      } catch (error) {
-        if (isPermissionDeniedError(error)) {
-          throw createFirebaseError(
-            "comments/delete-denied",
-            "Comments could not be deleted. Check Firestore rules for profileComments."
-          );
-        }
-
-        throw error;
-      }
-
-      if (typeof comment.profileId === "number" && comment.profileId > 0) {
-        profileCommentsByIdRuntimeCache.delete(String(comment.profileId));
-      }
-
-      return comment.id;
+      profileCommentsByIdRuntimeCache.clear();
+      return normalizedCommentId;
     };
 
     const updateProfileComment = async (commentId, message, mediaFile = null, removeMedia = false) => {
@@ -4389,6 +4275,13 @@ const firebaseModuleScript = `
         }
       }
 
+      void callSupabaseRpc("admin_manage_profile", {
+        p_actor_id: actorSnapshot?.profileId || 1,
+        p_target_id: profileId,
+        p_field: "display_name",
+        p_value: { displayName: sanitizedDisplayName }
+      });
+
       return refreshStoredUserSnapshot(targetDoc.id, {
         ...targetDoc.data(),
         displayName: sanitizedDisplayName,
@@ -4438,6 +4331,13 @@ const firebaseModuleScript = `
           "Login could not be saved. Check Firestore rules for privileged users."
         );
       }
+
+      void callSupabaseRpc("admin_manage_profile", {
+        p_actor_id: actorSnapshot?.profileId || 1,
+        p_target_id: profileId,
+        p_field: "login",
+        p_value: { login: usernameDetails.login }
+      });
 
       return refreshStoredUserSnapshot(targetDoc.id, {
         ...targetDetails,
@@ -4553,6 +4453,13 @@ const firebaseModuleScript = `
         );
       }
 
+      void callSupabaseRpc("admin_manage_profile", {
+        p_actor_id: actorSnapshot?.profileId || 1,
+        p_target_id: profileId,
+        p_field: "subscription_until",
+        p_value: { subscriptionUntil: normalizedSubscriptionUntil }
+      });
+
       return refreshStoredUserSnapshot(targetDoc.id, {
         ...targetDoc.data(),
         subscriptionUntil: normalizedSubscriptionUntil,
@@ -4593,6 +4500,13 @@ const firebaseModuleScript = `
           "HWID could not be reset. Check Firestore rules for privileged users."
         );
       }
+
+      void callSupabaseRpc("admin_manage_profile", {
+        p_actor_id: actorSnapshot?.profileId || 1,
+        p_target_id: profileId,
+        p_field: "hwid",
+        p_value: {}
+      });
 
       return refreshStoredUserSnapshot(targetDoc.id, {
         ...targetDoc.data(),
@@ -4766,6 +4680,13 @@ const firebaseModuleScript = `
         );
       }
 
+      void callSupabaseRpc("admin_manage_profile", {
+        p_actor_id: actorSnapshot?.profileId || 1,
+        p_target_id: profileId,
+        p_field: "is_banned",
+        p_value: { isBanned }
+      });
+
       const snapshot = await refreshStoredUserSnapshot(targetDoc.id, {
         ...targetDoc.data(),
         isBanned,
@@ -4882,6 +4803,13 @@ const firebaseModuleScript = `
         );
       }
 
+      void callSupabaseRpc("admin_manage_profile", {
+        p_actor_id: actorSnapshot?.profileId || 1,
+        p_target_id: profileId,
+        p_field: "roles",
+        p_value: roles
+      });
+
       return refreshStoredUserSnapshot(targetDoc.id, {
         ...targetDoc.data(),
         roles,
@@ -4894,63 +4822,20 @@ const firebaseModuleScript = `
       if (!user || user.isAnonymous) {
         throw createFirebaseError("auth/no-current-user", "Войдите в аккаунт, чтобы управлять подпиской.");
       }
-      const targetDoc = await findUserByProfileId(window.sakuraCurrentUserSnapshot?.profileId);
-      if (!targetDoc) throw createFirebaseError("auth/user-not-found", "Профиль не найден.");
-      const data = targetDoc.data() || {};
-      if (data.isFrozen) throw createFirebaseError("subscription/already-frozen", "Подписка уже заморожена.");
-      const roles = normalizeRoles(data.roles);
-      if (roles.some((r) => ["lifetime", "root", "owner", "co-owner"].includes(r.toLowerCase()))) {
-        throw createFirebaseError("subscription/lifetime-freeze", "Бессрочную подписку (Lifetime) не требуется замораживать.");
+      const userProfileId = window.sakuraCurrentUserSnapshot?.profileId;
+      if (!userProfileId) throw createFirebaseError("auth/user-not-found", "Профиль не найден.");
+
+      const res = await callSupabaseRpc("toggle_subscription_freeze", { p_profile_id: userProfileId });
+      if (!res.ok) {
+        throw createFirebaseError("subscription/error", res.error || "Не удалось заморозить подписку.");
       }
-      const latestActivation = Array.isArray(data.activationHistory) ? data.activationHistory[0] : null;
-      const isTrialActive = Boolean(
-        roles.some((r) => ["test period", "trial"].includes(r.toLowerCase())) ||
-        (data.hasClaimedTrial && latestActivation?.type === "trial")
-      );
-      if (isTrialActive) {
-        throw createFirebaseError("subscription/trial-freeze", "Тестовую подписку (7 Дней) нельзя заморозить.");
+
+      const refreshed = await fetchSupabaseProfileById(userProfileId);
+      if (refreshed) {
+        publishUserSnapshot(refreshed);
+        return refreshed;
       }
-      const now = Date.now();
-      const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
-      const lastFrozenAtStr = data.lastFrozenAt || (Array.isArray(data.activationHistory) ? data.activationHistory.find((item) => item.type === "freeze")?.activatedAt : null);
-      if (lastFrozenAtStr) {
-        const lastFrozenTime = new Date(lastFrozenAtStr).getTime();
-        const diffMs = now - lastFrozenTime;
-        if (diffMs < ONE_MONTH_MS) {
-          const daysLeft = Math.ceil((ONE_MONTH_MS - diffMs) / (24 * 60 * 60 * 1000));
-          throw createFirebaseError(
-            "subscription/freeze-cooldown",
-            "Заморозка доступна только 1 раз в 30 дней. Следующая заморозка будет доступна через " + daysLeft + " дн."
-          );
-        }
-      }
-      const untilStr = data.subscriptionUntil || data.subscription_until;
-      const untilTime = untilStr ? new Date(untilStr).getTime() : 0;
-      const remainingMs = Math.max(0, untilTime - now);
-      if (remainingMs < 3600000) {
-        throw createFirebaseError("subscription/no-remaining", "Недостаточно оставшегося времени для заморозки (минимум 1 час).");
-      }
-      const freezeHistoryItem = {
-        id: "freeze_" + Date.now(),
-        type: "freeze",
-        activatedAt: new Date().toISOString(),
-        remainingDays: (remainingMs / 86400000).toFixed(1)
-      };
-      const existingFreezeHistory = Array.isArray(data.activationHistory) ? data.activationHistory : [];
-      const updatedFreezeHistory = [freezeHistoryItem, ...existingFreezeHistory].slice(0, 50);
-      const updatePayload = {
-        isFrozen: true,
-        frozenAt: new Date().toISOString(),
-        lastFrozenAt: new Date().toISOString(),
-        frozenRemainingMs: remainingMs,
-        activationHistory: updatedFreezeHistory,
-        updatedAt: new Date().toISOString()
-      };
-      await setDoc(userRefFor(targetDoc.id), updatePayload, { merge: true });
-      return refreshStoredUserSnapshot(targetDoc.id, {
-        ...data,
-        ...updatePayload
-      });
+      return window.sakuraCurrentUserSnapshot;
     };
 
     const unfreezeSubscription = async () => {
@@ -4959,149 +4844,75 @@ const firebaseModuleScript = `
       if (!user || user.isAnonymous) {
         throw createFirebaseError("auth/no-current-user", "Войдите в аккаунт, чтобы управлять подпиской.");
       }
-      const targetDoc = await findUserByProfileId(window.sakuraCurrentUserSnapshot?.profileId);
-      if (!targetDoc) throw createFirebaseError("auth/user-not-found", "Профиль не найден.");
-      const data = targetDoc.data() || {};
-      if (!data.isFrozen) throw createFirebaseError("subscription/not-frozen", "Подписка не заморожена.");
-      const remainingMs = Number(data.frozenRemainingMs) || 0;
-      if (remainingMs <= 0) throw createFirebaseError("subscription/no-remaining", "Нет сохранённого времени для разморозки.");
-      const newUntil = new Date(Date.now() + remainingMs).toISOString();
-      const roles = normalizeRoles(data.roles);
-      if (!roles.some(r => ["subscriber", "sub"].includes(r.toLowerCase()))) {
-        roles.push("subscriber");
+      const userProfileId = window.sakuraCurrentUserSnapshot?.profileId;
+      if (!userProfileId) throw createFirebaseError("auth/user-not-found", "Профиль не найден.");
+
+      const res = await callSupabaseRpc("toggle_subscription_freeze", { p_profile_id: userProfileId });
+      if (!res.ok) {
+        throw createFirebaseError("subscription/error", res.error || "Не удалось разморозить подписку.");
       }
-      const unfreezeHistoryItem = {
-        id: "unfreeze_" + Date.now(),
-        type: "unfreeze",
-        activatedAt: new Date().toISOString(),
-        subscriptionUntil: newUntil
-      };
-      const existingUnfreezeHistory = Array.isArray(data.activationHistory) ? data.activationHistory : [];
-      const updatedUnfreezeHistory = [unfreezeHistoryItem, ...existingUnfreezeHistory].slice(0, 50);
-      const updatePayload = {
-        isFrozen: false,
-        frozenAt: null,
-        frozenRemainingMs: 0,
-        subscriptionUntil: newUntil,
-        subscription_until: newUntil,
-        roles,
-        activationHistory: updatedUnfreezeHistory,
-        updatedAt: new Date().toISOString()
-      };
-      await setDoc(userRefFor(targetDoc.id), updatePayload, { merge: true });
-      return refreshStoredUserSnapshot(targetDoc.id, {
-        ...data,
-        ...updatePayload
-      });
+
+      const refreshed = await fetchSupabaseProfileById(userProfileId);
+      if (refreshed) {
+        publishUserSnapshot(refreshed);
+        return refreshed;
+      }
+      return window.sakuraCurrentUserSnapshot;
     };
 
     const adminToggleUserFreeze = async (profileId) => {
-      const { actorSnapshot } = await ensureRootActorSnapshot();
-      if (!Number.isInteger(profileId) || profileId <= 0) {
-        throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
-      }
-      const targetDoc = await findUserByProfileId(profileId);
-      if (!targetDoc) throw createFirebaseError("profile/not-found", "Профиль не найден.");
-      ensureActorCanManageTargetProfile(actorSnapshot?.roles ?? [], targetDoc.data()?.roles ?? []);
-      const data = targetDoc.data() || {};
-      const now = Date.now();
-      let updatePayload;
-      if (data.isFrozen) {
-        const remainingMs = Number(data.frozenRemainingMs) || (30 * 86400000);
-        const newUntil = new Date(now + remainingMs).toISOString();
-        const roles = normalizeRoles(data.roles);
-        if (!roles.some(r => ["subscriber", "sub"].includes(r.toLowerCase()))) roles.push("subscriber");
-        updatePayload = {
-          isFrozen: false,
-          frozenAt: null,
-          frozenRemainingMs: 0,
-          subscriptionUntil: newUntil,
-          subscription_until: newUntil,
-          roles,
-          updatedAt: new Date().toISOString()
-        };
-      } else {
-        const untilStr = data.subscriptionUntil || data.subscription_until;
-        const untilTime = untilStr ? new Date(untilStr).getTime() : (now + 30 * 86400000);
-        const remainingMs = Math.max(86400000, untilTime - now);
-        updatePayload = {
-          isFrozen: true,
-          frozenAt: new Date().toISOString(),
-          frozenRemainingMs: remainingMs,
-          updatedAt: new Date().toISOString()
-        };
-      }
-      await setDoc(userRefFor(targetDoc.id), updatePayload, { merge: true });
-      return refreshStoredUserSnapshot(targetDoc.id, {
-        ...data,
-        ...updatePayload
+      const actorId = window.sakuraCurrentUserSnapshot?.profileId || 1;
+      const res = await callSupabaseRpc("admin_manage_profile", {
+        p_actor_id: actorId,
+        p_target_id: profileId,
+        p_field: "toggle_freeze",
+        p_value: {},
       });
+      if (!res.ok) {
+        throw createFirebaseError("admin/error", res.error || "Не удалось изменить заморозку.");
+      }
+      return fetchSupabaseProfileById(profileId);
     };
 
     const adminCreatePromoCode = async ({ code, durationDays, maxUses, role, note }) => {
-      const { actorSnapshot } = await ensureRootActorSnapshot();
-      const actorRoles = actorSnapshot?.roles || [];
-      const isActorAllowed = actorSnapshot?.profileId === 1 || actorRoles.some(r => ["root", "co-owner", "owner"].includes(normalizeRoleName(r)));
-      if (!isActorAllowed) {
-        throw createFirebaseError("auth/permission-denied", "Только Root, Owner и Co-owner могут создавать промокоды.");
+      const actorId = window.sakuraCurrentUserSnapshot?.profileId || 1;
+      const res = await callSupabaseRpc("admin_manage_promo", {
+        p_action: "create",
+        p_actor_id: actorId,
+        p_code: code,
+        p_duration: Number(durationDays) || 30,
+        p_role: role || "subscriber",
+        p_max_uses: Number(maxUses) || 1,
+        p_note: note || "",
+      });
+      if (!res.ok) {
+        throw createFirebaseError("promo/error", res.error || "Не удалось создать промокод.");
       }
-      const rawCode = String(code || "").trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "");
-      if (!rawCode || rawCode.length < 3) {
-        throw createFirebaseError("promo/invalid-code", "Код должен содержать минимум 3 символа (латиница, цифры, дефис).");
-      }
-      const days = Number(durationDays);
-      if (!Number.isFinite(days) || days <= 0) {
-        throw createFirebaseError("promo/invalid-duration", "Укажите корректный срок действия (количество дней).");
-      }
-      const uses = Math.max(0, Math.trunc(Number(maxUses) || 1));
-      const targetRole = String(role || "subscriber").trim().toLowerCase();
-      const promoRef = doc(collection(db, "promoCodes"), rawCode);
-      const existing = await getDoc(promoRef);
-      if (existing.exists()) {
-        throw createFirebaseError("promo/already-exists", "Промокод «" + rawCode + "» уже существует.");
-      }
-      const promoData = {
-        code: rawCode,
-        durationDays: days,
-        maxUses: uses,
-        usedCount: 0,
-        usedBy: [],
-        role: targetRole,
-        note: String(note || "").trim().slice(0, 256),
-        createdBy: actorSnapshot?.profileId || null,
-        createdAt: new Date().toISOString(),
-        isActive: true
-      };
-      await setDoc(promoRef, promoData);
-      return { id: promoRef.id, ...promoData };
+      return { code: res.code, durationDays, role, maxUses, note };
     };
 
     const adminListPromoCodes = async () => {
-      const { actorSnapshot } = await ensureRootActorSnapshot();
-      const actorRoles = actorSnapshot?.roles || [];
-      const isActorAllowed = actorSnapshot?.profileId === 1 || actorRoles.some(r => ["root", "co-owner", "owner"].includes(normalizeRoleName(r)));
-      if (!isActorAllowed) {
-        throw createFirebaseError("auth/permission-denied", "Только Root, Owner и Co-owner могут просматривать промокоды.");
-      }
-      const promoColl = collection(db, "promoCodes");
-      const snap = await getDocs(promoColl);
-      const list = [];
-      snap.forEach((d) => {
-        list.push({ id: d.id, ...d.data() });
+      const actorId = window.sakuraCurrentUserSnapshot?.profileId || 1;
+      const res = await callSupabaseRpc("admin_manage_promo", {
+        p_action: "list",
+        p_actor_id: actorId,
       });
-      list.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
-      return list;
+      if (!res.ok) {
+        throw createFirebaseError("auth/permission-denied", res.error || "Не удалось загрузить список промокодов.");
+      }
+      return res.promos || [];
     };
 
     const adminDeletePromoCode = async (codeId) => {
-      const { actorSnapshot } = await ensureRootActorSnapshot();
-      const actorRoles = actorSnapshot?.roles || [];
-      const isActorAllowed = actorSnapshot?.profileId === 1 || actorRoles.some(r => ["root", "co-owner", "owner"].includes(normalizeRoleName(r)));
-      if (!isActorAllowed) {
-        throw createFirebaseError("auth/permission-denied", "Только Root, Owner и Co-owner могут удалять промокоды.");
+      const actorId = window.sakuraCurrentUserSnapshot?.profileId || 1;
+      const res = await callSupabaseRpc("admin_manage_promo", {
+        p_action: "delete",
+        p_actor_id: actorId,
+        p_code: codeId,
+      });
+      if (!res.ok) {
+        throw createFirebaseError("promo/error", res.error || "Не удалось удалить промокод.");
       }
-      const promoRef = doc(collection(db, "promoCodes"), String(codeId).trim().toUpperCase());
-      await deleteDoc(promoRef);
       return true;
     };
 
@@ -5111,150 +4922,31 @@ const firebaseModuleScript = `
       if (!user || user.isAnonymous) {
         throw createFirebaseError("auth/no-current-user", "Войдите в аккаунт, чтобы активировать промокод.");
       }
-      const targetDoc = await findUserByProfileId(window.sakuraCurrentUserSnapshot?.profileId);
-      if (!targetDoc) throw createFirebaseError("auth/user-not-found", "Профиль не найден.");
-      const userData = targetDoc.data() || {};
-      const userProfileId = userData.profileId || window.sakuraCurrentUserSnapshot?.profileId;
+      const userProfileId = window.sakuraCurrentUserSnapshot?.profileId;
       if (!userProfileId) throw createFirebaseError("auth/user-not-found", "Не удалось определить ID профиля.");
 
       const upperCode = String(inputCode || "").trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "");
       if (!upperCode) throw createFirebaseError("promo/empty", "Введите промокод.");
 
-      const promoRef = doc(collection(db, "promoCodes"), upperCode);
-      const promoSnap = await getDoc(promoRef);
-      if (!promoSnap.exists() || !promoSnap.data()?.isActive) {
-        throw createFirebaseError("promo/not-found", "Промокод не существует или не активен.");
-      }
-      const promo = promoSnap.data();
-      const usedBy = Array.isArray(promo.usedBy) ? promo.usedBy : [];
-      if (usedBy.includes(userProfileId)) {
-        throw createFirebaseError("promo/already-used", "Вы уже активировали этот промокод на своём аккаунте.");
-      }
-      if (promo.maxUses > 0 && (promo.usedCount || 0) >= promo.maxUses) {
-        throw createFirebaseError("promo/depleted", "Лимит активаций этого промокода исчерпан.");
-      }
-
-      const now = Date.now();
-      const currentRoles = normalizeRoles(userData.roles);
-      let newUntil;
-      let newRoles = [...currentRoles];
-      const isLifetimePromo = promo.durationDays >= 99999 || promo.role === "lifetime";
-
-      if (isLifetimePromo) {
-        newUntil = LIFETIME_SUBSCRIPTION_UNTIL_INPUT_VALUE;
-        if (!newRoles.some(r => ["lifetime"].includes(r.toLowerCase()))) {
-          newRoles.push("lifetime");
-        }
-      } else {
-        const currentUntilStr = userData.subscriptionUntil || userData.subscription_until;
-        const currentUntilTime = currentUntilStr ? new Date(currentUntilStr).getTime() : 0;
-        const baseTime = currentUntilTime > now ? currentUntilTime : now;
-        const addMs = promo.durationDays * 86400000;
-        newUntil = new Date(baseTime + addMs).toISOString();
-        if (!newRoles.some(r => ["subscriber", "sub"].includes(r.toLowerCase()))) {
-          newRoles.push("subscriber");
-        }
-      }
-
-      const historyItem = {
-        id: "act_" + Date.now(),
-        type: "promo",
-        code: upperCode,
-        durationDays: promo.durationDays,
-        isLifetime: Boolean(isLifetimePromo),
-        activatedAt: new Date().toISOString(),
-        subscriptionUntil: newUntil,
-        note: promo.note || ""
-      };
-
-      const existingHistory = Array.isArray(userData.activationHistory) ? userData.activationHistory : [];
-      const updatedHistory = [historyItem, ...existingHistory].slice(0, 50);
-
-      const promoActivations = Array.isArray(promo.activations) ? promo.activations : [];
-      promoActivations.push({
-        profileId: userProfileId,
-        login: userData.login || null,
-        displayName: userData.displayName || null,
-        activatedAt: new Date().toISOString()
+      const res = await callSupabaseRpc("redeem_promo_code", {
+        p_code: upperCode,
+        p_profile_id: userProfileId,
       });
 
-      await setDoc(promoRef, {
-        usedCount: (promo.usedCount || 0) + 1,
-        usedBy: [...usedBy, userProfileId],
-        activations: promoActivations
-      }, { merge: true });
-
-      // Check if user was referred by someone and hasn't rewarded the referrer yet
-      let referralRewarded = userData.referralRewarded === true;
-      if (userData.referredBy && !referralRewarded) {
-        try {
-          const rawRef = String(userData.referredBy).trim();
-          const parsedRefId = Number(rawRef.replace(/^@/, ""));
-          let referrerDoc = null;
-          if (Number.isInteger(parsedRefId) && parsedRefId > 0) {
-            referrerDoc = await findUserByProfileId(parsedRefId);
-          }
-          if (!referrerDoc) {
-            referrerDoc = await findUserByLogin(rawRef.replace(/^@/, "").toLowerCase());
-          }
-          if (referrerDoc && referrerDoc.id !== targetDoc.id) {
-            const refData = referrerDoc.data() || {};
-            const refCurrentUntil = refData.subscriptionUntil || refData.subscription_until;
-            const refBaseTime = refCurrentUntil && new Date(refCurrentUntil).getTime() > Date.now()
-              ? new Date(refCurrentUntil).getTime()
-              : Date.now();
-            const refNewUntil = new Date(refBaseTime + 3 * 86400000).toISOString();
-            const refRoles = normalizeRoles(refData.roles);
-            if (!refRoles.some(r => ["subscriber", "sub", "lifetime", "root", "owner", "co-owner"].includes(r.toLowerCase()))) {
-              refRoles.push("subscriber");
-            }
-            const refHistory = Array.isArray(refData.activationHistory) ? refData.activationHistory : [];
-            const refBonusItem = {
-              id: "ref_" + Date.now(),
-              type: "referral_bonus",
-              durationDays: 3,
-              activatedAt: new Date().toISOString(),
-              subscriptionUntil: refNewUntil,
-              note: "Реферальный бонус за друга @" + (userData.login || userProfileId)
-            };
-            await setDoc(userRefFor(referrerDoc.id), {
-              subscriptionUntil: refNewUntil,
-              subscription_until: refNewUntil,
-              roles: refRoles,
-              referralCount: (Number(refData.referralCount) || 0) + 1,
-              activationHistory: [refBonusItem, ...refHistory].slice(0, 50),
-              updatedAt: new Date().toISOString()
-            }, { merge: true });
-            referralRewarded = true;
-          }
-        } catch (refErr) {
-          console.warn("Referral bonus reward error:", refErr);
-        }
+      if (!res.ok) {
+        throw createFirebaseError("promo/error", res.error || "Не удалось активировать промокод.");
       }
 
-      const userUpdate = {
-        subscriptionUntil: newUntil,
-        subscription_until: newUntil,
-        roles: newRoles,
-        isFrozen: false,
-        frozenAt: null,
-        frozenRemainingMs: 0,
-        activationHistory: updatedHistory,
-        referralRewarded,
-        updatedAt: new Date().toISOString()
-      };
-      await setDoc(userRefFor(targetDoc.id), userUpdate, { merge: true });
-
-      refreshStoredUserSnapshot(targetDoc.id, {
-        ...userData,
-        ...userUpdate
-      });
+      const refreshed = await fetchSupabaseProfileById(userProfileId);
+      if (refreshed) {
+        publishUserSnapshot(refreshed);
+      }
 
       return {
         success: true,
-        durationDays: promo.durationDays,
-        isLifetime: isLifetimePromo,
-        newUntil
+        durationDays: res.durationDays,
+        isLifetime: res.isLifetime,
+        newUntil: res.subscriptionUntil,
       };
     };
 
@@ -5264,73 +4956,26 @@ const firebaseModuleScript = `
       if (!user || user.isAnonymous) {
         throw createFirebaseError("auth/no-current-user", "Войдите в аккаунт, чтобы получить бесплатный тест.");
       }
-      const targetDoc = await findUserByProfileId(window.sakuraCurrentUserSnapshot?.profileId);
-      if (!targetDoc) throw createFirebaseError("auth/user-not-found", "Профиль не найден.");
-      const userData = targetDoc.data() || {};
-      const userProfileId = userData.profileId || window.sakuraCurrentUserSnapshot?.profileId;
+      const userProfileId = window.sakuraCurrentUserSnapshot?.profileId;
       if (!userProfileId) throw createFirebaseError("auth/user-not-found", "Не удалось определить ID профиля.");
 
-      const existingHistory = Array.isArray(userData.activationHistory) ? userData.activationHistory : [];
-      const hasAlreadyClaimed = Boolean(
-        userData.hasClaimedTrial === true ||
-        userData.trialClaimedAt ||
-        existingHistory.some((item) => item.type === "trial" || item.code === "7-DAYS-TRIAL")
-      );
-
-      if (hasAlreadyClaimed) {
-        throw createFirebaseError("trial/already-claimed", "Бесплатный 7-дневный тест уже был активирован на этом аккаунте.");
-      }
-
-      const now = Date.now();
-      const currentRoles = normalizeRoles(userData.roles);
-      const currentUntilStr = userData.subscriptionUntil || userData.subscription_until;
-      const currentUntilTime = currentUntilStr ? new Date(currentUntilStr).getTime() : 0;
-      const baseTime = currentUntilTime > now ? currentUntilTime : now;
-      const addMs = 7 * 86400000;
-      const newUntil = new Date(baseTime + addMs).toISOString();
-
-      let newRoles = [...currentRoles];
-      if (!newRoles.some((r) => ["subscriber", "sub", "test period"].includes(r.toLowerCase()))) {
-        newRoles.push("subscriber");
-      }
-
-      const historyItem = {
-        id: "trial_" + Date.now(),
-        type: "trial",
-        code: "7-DAYS-TRIAL",
-        durationDays: 7,
-        isLifetime: false,
-        activatedAt: new Date().toISOString(),
-        subscriptionUntil: newUntil,
-        note: "Бесплатный тестовый период на 7 дней"
-      };
-
-      const updatedHistory = [historyItem, ...existingHistory].slice(0, 50);
-
-      const userUpdate = {
-        hasClaimedTrial: true,
-        trialClaimedAt: new Date().toISOString(),
-        subscriptionUntil: newUntil,
-        subscription_until: newUntil,
-        roles: newRoles,
-        isFrozen: false,
-        frozenAt: null,
-        frozenRemainingMs: 0,
-        activationHistory: updatedHistory,
-        updatedAt: new Date().toISOString()
-      };
-
-      await setDoc(userRefFor(targetDoc.id), userUpdate, { merge: true });
-
-      refreshStoredUserSnapshot(targetDoc.id, {
-        ...userData,
-        ...userUpdate
+      const res = await callSupabaseRpc("claim_free_trial", {
+        p_profile_id: userProfileId,
       });
+
+      if (!res.ok) {
+        throw createFirebaseError("trial/error", res.error || "Не удалось активировать бесплатный тест.");
+      }
+
+      const refreshed = await fetchSupabaseProfileById(userProfileId);
+      if (refreshed) {
+        publishUserSnapshot(refreshed);
+      }
 
       return {
         success: true,
         durationDays: 7,
-        newUntil
+        newUntil: res.subscriptionUntil,
       };
     };
 
