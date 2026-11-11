@@ -17,6 +17,7 @@ import { writeCachedProfileComments } from "@/lib/profile-comments-cache";
 import { readCachedSiteOnlineCount, writeCachedSiteOnlineCount } from "@/lib/site-online-cache";
 import { getSupabasePublicObjectUrl, getSupabaseRenderedImageUrl } from "@/lib/supabase";
 import { useLocaleText } from "@/lib/ui-locale";
+import { validateEmail } from "@/lib/email-validator";
 
 const repoBasePath = "/sakura.github.io";
 const homeLogoStoragePath = process.env.NEXT_PUBLIC_HOME_LOGO_PATH?.trim() || "";
@@ -584,6 +585,10 @@ function getFirebaseErrorMessage(error: unknown) {
     return "Verify your email before opening the profile and using the account.";
   }
 
+  if (code === "auth/disposable-email") {
+    return "Registration with temporary or disposable emails is prohibited. Please enter your real email.";
+  }
+
   if (code === "auth/missing-email-for-password-reset") {
     return "This account has no linked email for password recovery.";
   }
@@ -591,8 +596,10 @@ function getFirebaseErrorMessage(error: unknown) {
   switch (code) {
     case "auth/email-already-in-use":
       return "This email is already registered.";
+    case "auth/disposable-email":
+      return "Registration with temporary or disposable emails is prohibited. Please enter your real email.";
     case "auth/invalid-email":
-      return "Enter a valid email.";
+      return "Enter a valid email address.";
     case "auth/weak-password":
     case "auth/invalid-login":
     case "auth/login-already-in-use":
@@ -830,6 +837,7 @@ function HeaderAuth() {
   const [verificationSuccess, setVerificationSuccess] = useState<string | null>(null);
   const [isVerificationSending, setIsVerificationSending] = useState(false);
   const [isVerificationRefreshing, setIsVerificationRefreshing] = useState(false);
+  const [emailSuggestion, setEmailSuggestion] = useState<{ en: string; ru: string; suggestedEmail: string } | null>(null);
   const visibleUser = currentUser && !currentUser.isAnonymous ? currentUser : null;
   const isVerificationLockedUser = isEmailVerificationLocked(visibleUser);
   const isGoogleSetupFlowActive = requiresGoogleAccountCompletion(visibleUser);
@@ -1168,6 +1176,7 @@ function HeaderAuth() {
 
     setIsModalOpen(false);
     setSubmitError(null);
+    setEmailSuggestion(null);
     setProfileName("");
     setLoginName("");
     setPassword("");
@@ -1198,6 +1207,7 @@ function HeaderAuth() {
 
     setMode(nextMode);
     setSubmitError(null);
+    setEmailSuggestion(null);
     setProfileName("");
     setLoginName("");
     setPassword("");
@@ -1388,6 +1398,12 @@ function HeaderAuth() {
     }
 
     if (mode === "register") {
+      const emailCheck = validateEmail(identifier);
+      if (!emailCheck.isValid && emailCheck.error) {
+        setSubmitError(t(emailCheck.error.en, emailCheck.error.ru));
+        return;
+      }
+
       const normalizedLogin = loginName.trim().replace(/\s+/g, "");
 
       if (!normalizedLogin) {
@@ -1477,6 +1493,14 @@ function HeaderAuth() {
         )
       );
       return;
+    }
+
+    if (identifier.includes("@")) {
+      const emailCheck = validateEmail(identifier);
+      if (!emailCheck.isValid && emailCheck.error) {
+        setSubmitError(t(emailCheck.error.en, emailCheck.error.ru));
+        return;
+      }
     }
 
     setSubmitError(null);
@@ -1906,12 +1930,36 @@ function HeaderAuth() {
                       type={mode === "register" ? "email" : "text"}
                       value={identifier}
                       autoComplete={mode === "register" ? "email" : "username"}
-                      onChange={(event) => setIdentifier(event.target.value)}
+                      onChange={(event) => {
+                        const val = event.target.value;
+                        setIdentifier(val);
+                        if (mode === "register" && val.includes("@")) {
+                          const check = validateEmail(val);
+                          setEmailSuggestion(check.suggestion ?? null);
+                        } else {
+                          setEmailSuggestion(null);
+                        }
+                      }}
                       className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55"
                       placeholder={
                         mode === "register" ? "you@example.com" : "you@example.com or your_login"
                       }
                     />
+                    {mode === "register" && emailSuggestion ? (
+                      <div className="mt-2 flex items-center justify-between rounded-xl border border-[#ffb7c5]/35 bg-[#211317] px-3.5 py-2 text-xs text-[#ffb7c5]">
+                        <span className="leading-tight">{t(emailSuggestion.en, emailSuggestion.ru)}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIdentifier(emailSuggestion.suggestedEmail);
+                            setEmailSuggestion(null);
+                          }}
+                          className="ml-2 shrink-0 rounded-lg bg-[#ffb7c5] px-2.5 py-1 text-[11px] font-bold uppercase text-black hover:bg-white transition"
+                        >
+                          {t("Fix", "Исправить")}
+                        </button>
+                      </div>
+                    ) : null}
                   </label>
                 ) : null}
 

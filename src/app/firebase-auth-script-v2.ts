@@ -358,6 +358,39 @@ const firebaseModuleScript = `
               const cleanEmail = (email || "").trim().toLowerCase();
               const cleanDisplay = (displayName || "").trim() || cleanLogin;
 
+              const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_~-]+@[a-zA-Z0-9-]+(?:\\.[a-zA-Z0-9-]+)*\\.[a-zA-Z]{2,24}$/;
+              if (!cleanEmail || !emailRegex.test(cleanEmail) || cleanEmail.length < 5 || cleanEmail.length > 254) {
+                throw createFirebaseError("auth/invalid-email", "Введите корректный действующий email (например, name@example.com).");
+              }
+
+              const domainPart = cleanEmail.split("@")[1] || "";
+              const disposableKeywords = [
+                "mailinator", "tempmail", "temp-mail", "10minutemail", "guerrillamail",
+                "sharklasers", "yopmail", "dispostable", "trashmail", "dropmail",
+                "getairmail", "mohmal", "fakemailgenerator", "throwawaymail", "emailfake",
+                "burnermail", "nada.ltd", "getnada", "tmailor", "mytemp", "crazymail",
+                "maildrop.cc", "emailondeck", "inboxbear", "inboxkitten", "tempr.email"
+              ];
+              if (disposableKeywords.some(keyword => domainPart.includes(keyword))) {
+                throw createFirebaseError(
+                  "auth/disposable-email",
+                  "Регистрация на одноразовые и временные почтовые ящики запрещена. Пожалуйста, укажите постоянную настоящую почту."
+                );
+              }
+
+              const typos = {
+                "gmai.com": "gmail.com", "gamil.com": "gmail.com", "gmial.com": "gmail.com",
+                "yandx.ru": "yandex.ru", "yadnex.ru": "yandex.ru",
+                "mial.ru": "mail.ru", "mal.ru": "mail.ru",
+                "outlok.com": "outlook.com", "hotmial.com": "hotmail.com"
+              };
+              if (typos[domainPart]) {
+                throw createFirebaseError(
+                  "auth/invalid-email",
+                  "Кажется, в домене почты опечатка (" + domainPart + " -> " + typos[domainPart] + "). Проверьте адрес."
+                );
+              }
+
               if (cleanLogin.length < 3) {
                 throw createFirebaseError("auth/invalid-login", "Логин должен содержать от 3 символов.");
               }
@@ -458,6 +491,11 @@ const firebaseModuleScript = `
                   throw createFirebaseError("auth/login-not-found", "Пользователь с таким логином не найден.");
                 }
                 email = rows[0].email;
+              } else {
+                const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_~-]+@[a-zA-Z0-9-]+(?:\\.[a-zA-Z0-9-]+)*\\.[a-zA-Z]{2,24}$/;
+                if (!emailRegex.test(email)) {
+                  throw createFirebaseError("auth/invalid-email", "Введите корректный действующий email.");
+                }
               }
 
               const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
