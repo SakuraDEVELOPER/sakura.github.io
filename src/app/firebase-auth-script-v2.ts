@@ -341,6 +341,7 @@ const firebaseModuleScript = `
                 email: cleanEmail,
                 password,
                 options: {
+                  emailRedirectTo: getAppRedirectUrl(),
                   data: {
                     login: cleanLogin,
                     display_name: cleanDisplay

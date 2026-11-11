@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Подтверждение регистрации</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #0b0c14; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; color: #e2e8f0;">
+  <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #0b0c14; padding: 40px 15px;">
+    <tr>
+      <td align="center">
+        <!-- Main Card -->
+        <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 540px; background-color: #121422; border: 1px solid #23273e; border-radius: 20px; overflow: hidden; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);">
+          
+          <!-- Top Accent Glow Line -->
+          <tr>
+            <td style="height: 4px; background: linear-gradient(90deg, #ff3377 0%, #a855f7 50%, #06b6d4 100%); font-size: 0; line-height: 0;">&nbsp;</td>
+          </tr>
+
+          <!-- Header Logo -->
+          <tr>
+            <td align="center" style="padding: 40px 40px 20px 40px;">
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center" style="background: rgba(255, 51, 119, 0.12); border: 1px solid rgba(255, 51, 119, 0.3); border-radius: 14px; padding: 10px 18px;">
+                    <span style="font-size: 24px; vertical-align: middle;">🌸</span>
+                    <span style="font-size: 20px; font-weight: 800; letter-spacing: 3px; color: #ffffff; vertical-align: middle; margin-left: 8px;">SAKURA</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Title -->
+          <tr>
+            <td align="center" style="padding: 10px 40px 0 40px;">
+              <h1 style="margin: 0; font-size: 24px; font-weight: 700; color: #ffffff; letter-spacing: -0.5px;">Добро пожаловать!</h1>
+            </td>
+          </tr>
+
+          <!-- Message Body -->
+          <tr>
+            <td style="padding: 16px 40px 0 40px; text-align: center;">
+              <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #94a3b8;">
+                Спасибо за регистрацию в проекте <strong style="color: #f1f5f9;">Sakura</strong>.<br>
+                Чтобы подтвердить адрес электронной почты и активировать аккаунт, нажмите на кнопку ниже:
+              </p>
+            </td>
+          </tr>
+
+          <!-- CTA Button -->
+          <tr>
+            <td align="center" style="padding: 32px 40px;">
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center" style="border-radius: 12px; background: linear-gradient(135deg, #ff3377 0%, #9333ea 100%); box-shadow: 0 8px 24px rgba(255, 51, 119, 0.35);">
+                    <a href="{{ .ConfirmationURL }}" target="_blank" style="display: inline-block; padding: 15px 36px; font-size: 15px; font-weight: 700; color: #ffffff; text-decoration: none; border-radius: 12px; letter-spacing: 0.3px;">
+                      Подтвердить аккаунт
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Fallback Link -->
+          <tr>
+            <td style="padding: 0 40px 30px 40px; text-align: center;">
+              <p style="margin: 0 0 8px 0; font-size: 12px; color: #64748b;">
+                Если кнопка не работает, перейдите по прямой ссылке:
+              </p>
+              <p style="margin: 0; font-size: 11px; word-break: break-all; line-height: 1.4;">
+                <a href="{{ .ConfirmationURL }}" style="color: #ff4d8d; text-decoration: underline;">{{ .ConfirmationURL }}</a>
+              </p>
+            </td>
+          </tr>
+
+          <!-- Divider -->
+          <tr>
+            <td style="padding: 0 40px;">
+              <div style="height: 1px; background-color: #1e2238; line-height: 1px; font-size: 1px;">&nbsp;</div>
+            </td>
+          </tr>
+
+          <!-- Security note -->
+          <tr>
+            <td style="padding: 24px 40px 32px 40px; text-align: center;">
+              <p style="margin: 0; font-size: 12px; line-height: 1.5; color: #475569;">
+                Если вы не создавали аккаунт в Sakura, просто проигнорируйте это письмо.<br>
+                Ссылка действительна в течение 24 часов.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+        
+        <!-- Footer -->
+        <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 540px; margin-top: 20px;">
+          <tr>
+            <td align="center" style="font-size: 12px; color: #475569; line-height: 1.5;">
+              © 2026 Sakura Project. Все права защищены.
+            </td>
+          </tr>
+        </table>
+
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
