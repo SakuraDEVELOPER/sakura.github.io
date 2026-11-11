@@ -60,7 +60,7 @@ type FirebaseClientConfig = {
   measurementId: string;
 };
 
-type AuthMode = "login" | "register" | "forgot";
+type AuthMode = "login" | "register" | "forgot" | "reset";
 
 type VisitHistoryEntry = {
   timestamp: string;
@@ -923,6 +923,24 @@ function HeaderAuth() {
     window.addEventListener(OPEN_AUTH_MODAL_EVENT, handleOpenAuthModal);
     window.addEventListener(EMAIL_VERIFICATION_LOCK_EVENT, handleVerificationLock);
 
+    const handleOpenReset = () => {
+      requestFirebaseAuthBoot();
+      setMode("reset");
+      setIsModalOpen(true);
+      setSubmitError(null);
+      setPassword("");
+      setConfirmPassword("");
+    };
+
+    window.addEventListener("sakura-open-password-reset", handleOpenReset);
+
+    if (
+      typeof window !== "undefined" &&
+      (window.location.hash.includes("type=recovery") || window.location.search.includes("type=recovery"))
+    ) {
+      handleOpenReset();
+    }
+
     return () => {
       window.clearTimeout(timeoutId);
       window.removeEventListener(AUTH_READY_EVENT, handleReady);
@@ -930,6 +948,7 @@ function HeaderAuth() {
       window.removeEventListener(USER_UPDATE_EVENT, handleUserUpdate);
       window.removeEventListener(OPEN_AUTH_MODAL_EVENT, handleOpenAuthModal);
       window.removeEventListener(EMAIL_VERIFICATION_LOCK_EVENT, handleVerificationLock);
+      window.removeEventListener("sakura-open-password-reset", handleOpenReset);
       unsubscribe();
     };
   }, []);
@@ -1260,6 +1279,37 @@ function HeaderAuth() {
       setSubmitError(
         authLoadError ?? "Firebase Auth is not ready yet. Wait a few seconds and try again."
       );
+      return;
+    }
+
+    if (mode === "reset") {
+      if (!password || password.length < 6) {
+        setSubmitError(t("Password must contain at least 6 characters.", "Пароль должен содержать минимум 6 символов."));
+        return;
+      }
+      if (password !== confirmPassword) {
+        setSubmitError(t("Passwords do not match.", "Пароли не совпадают."));
+        return;
+      }
+
+      setIsSubmitting(true);
+      setSubmitError(null);
+
+      try {
+        const snap = await window.sakuraFirebaseAuth.updatePassword("", password);
+        setFlashMessage(t("Password updated successfully.", "Пароль успешно обновлён!"));
+        if (typeof window !== "undefined" && window.history.replaceState) {
+          window.history.replaceState(null, "", window.location.pathname);
+        }
+        closeModal();
+        if (snap) {
+          await navigateToProfile(snap);
+        }
+      } catch (err) {
+        setSubmitError(getFirebaseErrorMessage(err));
+      } finally {
+        setIsSubmitting(false);
+      }
       return;
     }
 
@@ -1596,11 +1646,13 @@ function HeaderAuth() {
                   <h2 className="text-2xl font-black uppercase tracking-tighter text-white">
                     {isGoogleSetupFlowActive
                       ? t("Complete Google Account", "Завершить Google-аккаунт")
-                      : mode === "forgot"
-                        ? t("Password Recovery", "Восстановление пароля")
-                        : mode === "register"
-                          ? t("Registration", "Регистрация")
-                          : t("Login", "Вход")}
+                      : mode === "reset"
+                        ? t("Set New Password", "Новый пароль")
+                        : mode === "forgot"
+                          ? t("Password Recovery", "Восстановление пароля")
+                          : mode === "register"
+                            ? t("Registration", "Регистрация")
+                            : t("Login", "Вход")}
                   </h2>
                   <p className="mt-2 text-sm text-gray-400">
                     {isGoogleSetupFlowActive
@@ -1608,6 +1660,11 @@ function HeaderAuth() {
                           "Choose a login and password to finish Google registration. Until then, the profile stays locked.",
                           "Выберите логин и пароль, чтобы завершить регистрацию через Google. До этого профиль остаётся заблокирован."
                         )
+                      : mode === "reset"
+                        ? t(
+                            "Enter your new password below.",
+                            "Придумайте и введите новый пароль для входа в ваш аккаунт."
+                          )
                       : mode === "forgot"
                         ? t(
                             "Enter your email or login to receive a password reset link.",
@@ -1650,7 +1707,7 @@ function HeaderAuth() {
 
             <div className="p-6">
               {!isGoogleSetupFlowActive ? (
-                mode === "forgot" ? (
+                mode === "forgot" || mode === "reset" ? (
                   <button
                     type="button"
                     onClick={() => switchMode("login")}
@@ -1697,7 +1754,7 @@ function HeaderAuth() {
                 </div>
               ) : null}
 
-              {!isGoogleSetupFlowActive && mode !== "forgot" ? (
+              {!isGoogleSetupFlowActive && mode !== "forgot" && mode !== "reset" ? (
                 <>
                   <button
                     type="button"
@@ -1785,7 +1842,7 @@ function HeaderAuth() {
                       className="w-full cursor-not-allowed rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-gray-400 outline-none"
                     />
                   </label>
-                ) : (
+                ) : mode !== "reset" ? (
                   <label className="block">
                     <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">
                       {mode === "register" ? t("Email", "Почта") : t("Email or Login", "Почта или логин")}
@@ -1801,17 +1858,17 @@ function HeaderAuth() {
                       }
                     />
                   </label>
-                )}
+                ) : null}
 
                 {mode !== "forgot" ? (
                   <label className="block">
                     <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">
-                      {t("Password", "Пароль")}
+                      {mode === "reset" ? t("New Password", "Новый пароль") : t("Password", "Пароль")}
                     </span>
                     <input
                       type="password"
                       value={password}
-                      autoComplete={mode === "register" ? "new-password" : "current-password"}
+                      autoComplete={mode === "register" || mode === "reset" ? "new-password" : "current-password"}
                       onChange={(event) => setPassword(event.target.value)}
                       className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55"
                       placeholder={t("Minimum 6 characters", "Минимум 6 символов")}
@@ -1835,7 +1892,7 @@ function HeaderAuth() {
                   </div>
                 ) : null}
 
-                {mode === "register" || isGoogleSetupFlowActive ? (
+                {mode === "register" || isGoogleSetupFlowActive || mode === "reset" ? (
                   <label className="block">
                     <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">
                       {t("Confirm Password", "Подтвердите пароль")}
@@ -1865,6 +1922,8 @@ function HeaderAuth() {
                   {isSubmitting || isPasswordResetSubmitting
                     ? isGoogleSetupFlowActive
                       ? t("Finishing Google account...", "Завершение Google-аккаунта...")
+                      : mode === "reset"
+                      ? t("Saving password...", "Сохранение пароля...")
                       : mode === "forgot"
                       ? t("Sending reset link...", "Отправка ссылки...")
                       : mode === "register"
@@ -1872,6 +1931,8 @@ function HeaderAuth() {
                       : t("Logging in...", "Вход...")
                     : isGoogleSetupFlowActive
                       ? t("Finish Google Account", "Завершить Google-аккаунт")
+                      : mode === "reset"
+                      ? t("Save New Password", "Сохранить новый пароль")
                       : mode === "forgot"
                       ? t("Send Reset Link", "Отправить ссылку для сброса")
                       : mode === "register"

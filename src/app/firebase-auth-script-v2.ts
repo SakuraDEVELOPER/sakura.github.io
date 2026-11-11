@@ -280,6 +280,13 @@ const firebaseModuleScript = `
           });
           window.supabaseClient = supabase;
 
+          const getAppRedirectUrl = () => {
+            if (typeof window === "undefined") return "";
+            const origin = window.location.origin;
+            const path = window.location.pathname.startsWith("/sakura.github.io") ? "/sakura.github.io/" : "/";
+            return origin + path;
+          };
+
           const bridge = {
             __runtimeVersion: AUTH_RUNTIME_VERSION,
 
@@ -370,7 +377,7 @@ const firebaseModuleScript = `
               const { data, error } = await supabase.auth.signInWithOAuth({
                 provider: "google",
                 options: {
-                  redirectTo: window.location.origin
+                  redirectTo: getAppRedirectUrl()
                 }
               });
               if (error) {
@@ -413,7 +420,7 @@ const firebaseModuleScript = `
               }
 
               const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-                redirectTo: window.location.origin
+                redirectTo: getAppRedirectUrl()
               });
 
               if (error) {
@@ -878,6 +885,9 @@ const firebaseModuleScript = `
 
             onAuthStateChanged: (callback) => {
               const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+                if (event === "PASSWORD_RECOVERY") {
+                  window.dispatchEvent(new CustomEvent("sakura-open-password-reset", { detail: session }));
+                }
                 if (session?.user) {
                   const snap = await resolveUserSnapshot(session.user);
                   callback(snap);
@@ -916,6 +926,12 @@ const firebaseModuleScript = `
             })
           );
           window.dispatchEvent(new CustomEvent("sakura-auth-ready"));
+
+          if (typeof window !== "undefined" && (window.location.hash.includes("type=recovery") || window.location.search.includes("type=recovery"))) {
+            window.setTimeout(() => {
+              window.dispatchEvent(new CustomEvent("sakura-open-password-reset"));
+            }, 300);
+          }
         } catch (error) {
           console.error("Failed to start Supabase Auth runtime:", error);
           const message = error instanceof Error ? error.message : "Failed to initialize Auth.";
