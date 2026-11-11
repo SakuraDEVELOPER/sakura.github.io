@@ -1,5423 +1,825 @@
 const firebaseModuleScript = `
   (() => {
     const AUTH_RUNTIME_VERSION = "2026-04-05-runtime-v3";
-    let loadPromise;
-    const startFirebaseAuth = () => {
-      if (loadPromise) {
-        return loadPromise;
-      }
+    const AUTH_STATE_SETTLED_EVENT = "sakura-auth-state-settled";
+    const USER_UPDATE_EVENT = "sakura-user-update";
+    const CURRENT_PROFILE_ID_STORAGE_KEY = "sakura-current-profile-id";
 
-      loadPromise = (async () => {
-        try {
-      const [
-        {
-          getApps,
-          initializeApp
-        },
-        {
-          createUserWithEmailAndPassword,
-          deleteUser,
-          EmailAuthProvider,
-          GoogleAuthProvider,
-          getAuth,
-          getRedirectResult,
-          linkWithCredential,
-          onAuthStateChanged,
-          reauthenticateWithCredential,
-          reload,
-          sendEmailVerification,
-          sendPasswordResetEmail,
-          signInAnonymously,
-          signInWithPopup,
-          signInWithRedirect,
-          signInWithEmailAndPassword,
-          signOut,
-          updatePassword,
-          updateProfile
-        },
-        {
-          collection,
-          deleteDoc,
-          doc,
-          getDoc,
-          getDocs,
-          getFirestore,
-          limit,
-          query,
-          runTransaction,
-          serverTimestamp,
-          setDoc,
-          where
+    const SUPABASE_PUBLIC_URL = ${JSON.stringify(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://cwiljdpxgawxglgciily.supabase.co")};
+    const SUPABASE_PUBLIC_ANON_KEY = ${JSON.stringify(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "")};
+    const SUPABASE_REST_URL = SUPABASE_PUBLIC_URL.replace(/\\/+$/, "") + "/rest/v1";
+
+    let supabase = null;
+    let authStateSettled = false;
+
+    const createFirebaseError = (code, message) => {
+      const err = new Error(message);
+      err.code = code;
+      return err;
+    };
+
+    const buildSupabaseRestUrl = (table, query = {}) => {
+      const url = new URL(SUPABASE_REST_URL + "/" + table);
+      Object.entries(query).forEach(([key, value]) => {
+        if (value !== null && value !== undefined && value !== "") {
+          url.searchParams.set(key, String(value));
         }
-      ] = await Promise.all([
-        import("https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js"),
-        import("https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js"),
-        import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js")
-      ]);
+      });
+      return url.toString();
+    };
 
-      const firebaseConfig = {
-    apiKey: "AIzaSyAnZQt5NWXGOWuz3STh_vy-dSENVBM9_ZY",
-    authDomain: "sakura-bfa74.firebaseapp.com",
-    projectId: "sakura-bfa74",
-    storageBucket: "sakura-bfa74.firebasestorage.app",
-    messagingSenderId: "145336250722",
-    appId: "1:145336250722:web:d31610ae8258c398e47c3b",
-    measurementId: "G-1V07L6BRL0"
-      };
-
-  const LOGIN_MAX_LENGTH = 24;
-  const LOGIN_MIN_LENGTH = 3;
-  const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
-  const MAX_PASSTHROUGH_AVATAR_BYTES = 700 * 1024;
-  const AVATAR_STORAGE_UPLOAD_TIMEOUT_MS = 2500;
-  const STORAGE_AVATAR_UPLOADS_ENABLED = false;
-  const AVATAR_INLINE_SIZE = 160;
-  const AVATAR_EXPORT_QUALITY = 0.72;
-  const PASSTHROUGH_AVATAR_CONTENT_TYPES = new Set(["image/gif", "image/webp", "video/mp4", "video/webm"]);
-  const STORAGE_AVATAR_CONTENT_TYPES = new Set(["image/gif", "image/webp", "video/mp4", "video/webm"]);
-  const PREMIUM_AVATAR_CONTENT_TYPES = new Set(["image/gif", "video/mp4", "video/webm"]);
-  const PROFILE_COMMENT_MAX_LENGTH = 280;
-  const PROFILE_COMMENT_MEDIA_CONTENT_TYPES = new Set([
-    "image/jpeg",
-    "image/png",
-    "image/webp",
-    "image/gif",
-    "video/mp4",
-    "video/webm",
-  ]);
-  const PROFILE_COMMENT_MEDIA_MAX_BYTES = 5 * 1024 * 1024;
-  const PROFILE_COMMENT_GIF_MAX_BYTES = 700 * 1024;
-  const PROFILE_COMMENT_MEDIA_MAX_DIMENSION = 820;
-  const PROFILE_COMMENT_MEDIA_EXPORT_QUALITY = 0.72;
-  const PROFILE_COMMENT_MEDIA_MIN_EXPORT_QUALITY = 0.48;
-  const PROFILE_COMMENT_MEDIA_EXPORT_QUALITY_STEP = 0.08;
-  const PROFILE_COMMENT_MEDIA_MAX_DATA_URL_LENGTH = 760000;
-  const PROFILE_LOOKUP_TIMEOUT_MS = 5000;
-  const PROFILE_RUNTIME_CACHE_TTL_MS = 2 * 60 * 1000;
-  const PROFILE_SEARCH_RUNTIME_CACHE_TTL_MS = 45 * 1000;
-  const PROFILE_COMMENTS_RUNTIME_CACHE_TTL_MS = 20 * 1000;
-  const ONLINE_USERS_RUNTIME_CACHE_TTL_MS = 8 * 1000;
-  const PRESENCE_ONLINE_WINDOW_MS = 90 * 1000;
-  const PRESENCE_HEARTBEAT_INTERVAL_MS = 45 * 1000;
-  const PRESENCE_VISIT_RECORD_COOLDOWN_MS = 5 * 60 * 1000;
-  const PRESENCE_TAB_REGISTRY_STORAGE_KEY = "sakura-presence-tabs-v1";
-  const PRESENCE_TAB_REGISTRY_MAX_AGE_MS =
-    PRESENCE_ONLINE_WINDOW_MS + PRESENCE_HEARTBEAT_INTERVAL_MS;
-  const DISPLAY_NAME_MAX_LENGTH = 48;
-  const USER_UPDATE_EVENT = "sakura-user-update";
-  const AUTH_ERROR_EVENT = "sakura-auth-error";
-  const AUTH_STATE_SETTLED_EVENT = "sakura-auth-state-settled";
-  const PRESENCE_DIRTY_EVENT = "sakura-presence-dirty";
-  const CURRENT_PROFILE_ID_STORAGE_KEY = "sakura-current-profile-id";
-  const AUTH_SNAPSHOT_CACHE_STORAGE_KEY = "sakura-auth-snapshot-v1";
-  const GOOGLE_REDIRECT_INTENT_STORAGE_KEY = "sakura-google-redirect-intent-v1";
-  const GOOGLE_REDIRECT_INTENT_MAX_AGE_MS = 3 * 60 * 1000;
-  const AVATAR_CONTENT_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4", "video/webm"]);
-  const LOGIN_PATTERN = /^[A-Za-z\u0400-\u04FF0-9._-]+$/;
-  const PROFILE_THEME_SONG_KEYS = new Set([
-    "where-is-my-mind",
-    "forever-young",
-    "cyberpunk",
-  ]);
-  const PROFILE_THEME_EXTERNAL_URL_PREFIX = "url:";
-  const PROFILE_THEME_EXTERNAL_URL_MAX_LENGTH = 1024;
-  const profileByIdRuntimeCache = new Map();
-  const profileByAuthorRuntimeCache = new Map();
-  const profilesByPrefixRuntimeCache = new Map();
-  const profileCommentsByIdRuntimeCache = new Map();
-  const runtimePendingLookupCache = new Map();
-
-  const createFirebaseError = (code, message) => {
-    const error = new Error(message);
-    error.code = code;
-    return error;
-  };
-
-  const hasOwn = (value, key) =>
-    Boolean(value) && Object.prototype.hasOwnProperty.call(value, key);
-
-  const resolvePhotoURL = (details, fallbackPhotoURL = null) =>
-    hasOwn(details, "photoURL") ? details.photoURL ?? null : fallbackPhotoURL ?? null;
-  const resolveAvatarPath = (details, fallbackAvatarPath = null) =>
-    hasOwn(details, "avatarPath") ? details.avatarPath ?? null : fallbackAvatarPath ?? null;
-  const resolveAvatarType = (details, fallbackAvatarType = null) =>
-    hasOwn(details, "avatarType") ? details.avatarType ?? null : fallbackAvatarType ?? null;
-  const resolveAvatarSize = (details, fallbackAvatarSize = null) =>
-    hasOwn(details, "avatarSize") ? details.avatarSize ?? null : fallbackAvatarSize ?? null;
-  const resolveThemeSongKey = (details, fallbackThemeSongKey = null) =>
-    hasOwn(details, "themeSongKey")
-      ? normalizeProfileThemeSongKey(details.themeSongKey)
-      : normalizeProfileThemeSongKey(fallbackThemeSongKey);
-  const resolveBannedAt = (details, fallbackBannedAt = null) =>
-    hasOwn(details, "bannedAt")
-      ? typeof details.bannedAt === "string"
-        ? details.bannedAt
-        : null
-      : fallbackBannedAt ?? null;
-  const resolveHwid = (details, fallbackHwid = null) => {
-    const hwidValue = hasOwn(details, "hwid") ? details.hwid : fallbackHwid;
-
-    return typeof hwidValue === "string" && hwidValue.trim()
-      ? hwidValue.trim()
-      : null;
-  };
-  const normalizeSubscriptionUntil = (value) => {
-    if (typeof value !== "string" || !value.trim()) {
-      return null;
-    }
-
-    const parsedDate = new Date(value.trim());
-
-    if (Number.isNaN(parsedDate.getTime())) {
-      return null;
-    }
-
-    return parsedDate.toISOString();
-  };
-  const resolveSubscriptionUntil = (details, fallbackSubscriptionUntil = null) => {
-    const candidateValue = hasOwn(details, "subscriptionUntil")
-      ? details.subscriptionUntil
-      : hasOwn(details, "subscription_until")
-        ? details.subscription_until
-        : fallbackSubscriptionUntil;
-
-    return normalizeSubscriptionUntil(candidateValue);
-  };
-  const hasProfileAvatarData = (snapshot) =>
-    Boolean(
-      snapshot &&
-        (
-          (typeof snapshot.photoURL === "string" && snapshot.photoURL.trim()) ||
-          (typeof snapshot.avatarPath === "string" && snapshot.avatarPath.trim())
-        )
-    );
-
-  const readCachedAuthSnapshot = () => {
-    try {
-      const rawSnapshot = window.localStorage?.getItem(AUTH_SNAPSHOT_CACHE_STORAGE_KEY);
-
-      if (!rawSnapshot) {
-        return null;
-      }
-
-      const parsedSnapshot = JSON.parse(rawSnapshot);
-
-      if (!parsedSnapshot || typeof parsedSnapshot.uid !== "string") {
-        window.localStorage?.removeItem(AUTH_SNAPSHOT_CACHE_STORAGE_KEY);
-        return null;
-      }
-
-      return parsedSnapshot;
-    } catch (error) {
-      return null;
-    }
-  };
-
-  const persistCachedAuthSnapshot = (snapshot) => {
-    try {
-      if (snapshot && !snapshot.isAnonymous && typeof snapshot.uid === "string") {
-        window.localStorage?.setItem(
-          AUTH_SNAPSHOT_CACHE_STORAGE_KEY,
-          JSON.stringify(snapshot)
-        );
-        return;
-      }
-
-      window.localStorage?.removeItem(AUTH_SNAPSHOT_CACHE_STORAGE_KEY);
-    } catch (error) {}
-  };
-  const rememberGoogleRedirectIntent = () => {
-    try {
-      window.sessionStorage?.setItem(
-        GOOGLE_REDIRECT_INTENT_STORAGE_KEY,
-        String(Date.now())
-      );
-    } catch (error) {}
-  };
-  const clearGoogleRedirectIntent = () => {
-    try {
-      window.sessionStorage?.removeItem(GOOGLE_REDIRECT_INTENT_STORAGE_KEY);
-    } catch (error) {}
-  };
-  const hasFreshGoogleRedirectIntent = () => {
-    try {
-      const rawStartedAt = window.sessionStorage?.getItem(
-        GOOGLE_REDIRECT_INTENT_STORAGE_KEY
-      );
-
-      if (!rawStartedAt) {
-        return false;
-      }
-
-      const startedAt = Number(rawStartedAt);
-
-      if (!Number.isFinite(startedAt) || startedAt <= 0) {
-        clearGoogleRedirectIntent();
-        return false;
-      }
-
-      if (Date.now() - startedAt > GOOGLE_REDIRECT_INTENT_MAX_AGE_MS) {
-        clearGoogleRedirectIntent();
-        return false;
-      }
-
-      return true;
-    } catch (error) {
-      return false;
-    }
-  };
-
-  if (!window.sakuraCurrentUserSnapshot) {
-    window.sakuraCurrentUserSnapshot = readCachedAuthSnapshot();
-  }
-
-  const withTimeout = (promise, timeoutMs, createTimeoutError) =>
-    new Promise((resolve, reject) => {
-      const timeoutId = window.setTimeout(() => {
-        reject(createTimeoutError());
-      }, timeoutMs);
-
-      promise.then(
-        (value) => {
-          window.clearTimeout(timeoutId);
-          resolve(value);
-        },
-        (error) => {
-          window.clearTimeout(timeoutId);
-          reject(error);
-        }
-      );
-    });
-
-  const readFileAsDataUrl = (file) =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-
-      reader.onload = () => {
-        if (typeof reader.result === "string" && reader.result) {
-          resolve(reader.result);
-          return;
-        }
-
-        reject(createFirebaseError("storage/no-preview", "Could not prepare the selected image."));
-      };
-
-      reader.onerror = () => {
-        reject(createFirebaseError("storage/file-read-failed", "Could not read the selected image."));
-      };
-
-      reader.readAsDataURL(file);
-    });
-
-  const loadImageFromDataUrl = (src) =>
-    new Promise((resolve, reject) => {
-      const image = new Image();
-
-      image.onload = () => resolve(image);
-      image.onerror = () =>
-        reject(createFirebaseError("storage/image-load-failed", "Could not decode the selected image."));
-      image.src = src;
-    });
-
-  const loadAvatarSource = async (file) => {
-    if ("createImageBitmap" in window) {
+    const fetchSupabaseRows = async (table, query = {}) => {
       try {
-        return await createImageBitmap(file);
-      } catch (error) {
-      }
-    }
-
-    const source = await readFileAsDataUrl(file);
-    return loadImageFromDataUrl(source);
-  };
-
-  const createInlineAvatarDataUrl = async (file) => {
-    if (PASSTHROUGH_AVATAR_CONTENT_TYPES.has(file.type)) {
-      return readFileAsDataUrl(file);
-    }
-
-    const image = await loadAvatarSource(file);
-    const width = image.naturalWidth || image.width || 0;
-    const height = image.naturalHeight || image.height || 0;
-
-    if (!width || !height) {
-      throw createFirebaseError("storage/invalid-image-size", "The selected image is empty.");
-    }
-
-    const cropSize = Math.min(width, height);
-    const offsetX = Math.max(0, Math.floor((width - cropSize) / 2));
-    const offsetY = Math.max(0, Math.floor((height - cropSize) / 2));
-    const canvas = document.createElement("canvas");
-
-    canvas.width = AVATAR_INLINE_SIZE;
-    canvas.height = AVATAR_INLINE_SIZE;
-
-    const context = canvas.getContext("2d");
-
-    if (!context) {
-      throw createFirebaseError("storage/no-canvas-context", "Could not prepare the avatar preview.");
-    }
-
-    context.imageSmoothingEnabled = true;
-    context.imageSmoothingQuality = "medium";
-
-    context.drawImage(
-      image,
-      offsetX,
-      offsetY,
-      cropSize,
-      cropSize,
-      0,
-      0,
-      AVATAR_INLINE_SIZE,
-      AVATAR_INLINE_SIZE
-    );
-
-    if ("close" in image && typeof image.close === "function") {
-      image.close();
-    }
-
-    const webpAvatar = canvas.toDataURL("image/webp", AVATAR_EXPORT_QUALITY);
-
-    if (webpAvatar.startsWith("data:image/webp")) {
-      return webpAvatar;
-    }
-
-    return canvas.toDataURL("image/jpeg", AVATAR_EXPORT_QUALITY);
-  };
-
-  const normalizeAvatarUploadPath = (value) =>
-    typeof value === "string" && value ? value : null;
-  const normalizeAvatarUploadType = (value) =>
-    typeof value === "string" && AVATAR_CONTENT_TYPES.has(value)
-      ? value
-      : null;
-  const normalizeAvatarUploadSize = (value) =>
-    typeof value === "number" && Number.isFinite(value) && value > 0
-      ? Math.round(value)
-      : null;
-  const toPreparedAvatarUpload = (value) => {
-    if (!value || typeof value !== "object" || value instanceof File) {
-      return null;
-    }
-
-    const photoURL = typeof value.photoURL === "string" && value.photoURL ? value.photoURL : null;
-
-    if (!photoURL) {
-      return null;
-    }
-
-    return {
-      photoURL,
-      avatarPath: normalizeAvatarUploadPath(value.avatarPath),
-      avatarType: normalizeAvatarUploadType(value.avatarType),
-      avatarSize: normalizeAvatarUploadSize(value.avatarSize),
-    };
-  };
-  const prepareAvatarUpload = async (value, uid) => {
-    if (value instanceof File) {
-      return {
-        photoURL: await resolvePersistedAvatarUrl(uid, value),
-        avatarPath: null,
-        avatarType: null,
-        avatarSize: null,
-      };
-    }
-
-    return toPreparedAvatarUpload(value);
-  };
-
-  const createInlineCommentMedia = async (file) => {
-    if (!(file instanceof File)) {
-      return null;
-    }
-
-    if (!PROFILE_COMMENT_MEDIA_CONTENT_TYPES.has(file.type)) {
-      throw createFirebaseError(
-        "comments/media-unsupported",
-        "Only PNG, JPG, WEBP, GIF, MP4, and WEBM files are supported in comments."
-      );
-    }
-
-    if (file.type === "video/mp4" || file.type === "video/webm") {
-      throw createFirebaseError(
-        "comments/media-upload-required",
-        "Video attachments require Supabase media upload."
-      );
-    }
-
-    if (file.type === "image/gif") {
-      if (file.size > PROFILE_COMMENT_GIF_MAX_BYTES) {
-        throw createFirebaseError(
-          "comments/media-too-large",
-          "GIF attachments for comments must stay under 700 KB."
-        );
-      }
-
-      const mediaURL = await readFileAsDataUrl(file);
-
-      if (mediaURL.length > PROFILE_COMMENT_MEDIA_MAX_DATA_URL_LENGTH) {
-        throw createFirebaseError(
-          "comments/media-too-large",
-          "The selected GIF is too large to save in a Firestore comment."
-        );
-      }
-
-      return {
-        mediaURL,
-        mediaType: file.type,
-      };
-    }
-
-    if (file.size > PROFILE_COMMENT_MEDIA_MAX_BYTES) {
-      throw createFirebaseError(
-        "comments/media-too-large",
-        "Comment images must stay under 5 MB before compression."
-      );
-    }
-
-    const image = await loadAvatarSource(file);
-    const width = image.naturalWidth || image.width || 0;
-    const height = image.naturalHeight || image.height || 0;
-
-    if (!width || !height) {
-      throw createFirebaseError(
-        "comments/media-invalid",
-        "The selected image is empty."
-      );
-    }
-
-    const scale = Math.min(
-      1,
-      PROFILE_COMMENT_MEDIA_MAX_DIMENSION / Math.max(width, height)
-    );
-    const canvas = document.createElement("canvas");
-
-    canvas.width = Math.max(1, Math.round(width * scale));
-    canvas.height = Math.max(1, Math.round(height * scale));
-
-    const context = canvas.getContext("2d");
-
-    if (!context) {
-      throw createFirebaseError(
-        "comments/media-invalid",
-        "Could not prepare the selected image."
-      );
-    }
-
-    context.imageSmoothingEnabled = true;
-    context.imageSmoothingQuality = "high";
-    context.drawImage(image, 0, 0, canvas.width, canvas.height);
-
-    if ("close" in image && typeof image.close === "function") {
-      image.close();
-    }
-
-    let mediaURL = "";
-    let mediaType = "";
-    let exportQuality = PROFILE_COMMENT_MEDIA_EXPORT_QUALITY;
-
-    while (exportQuality >= PROFILE_COMMENT_MEDIA_MIN_EXPORT_QUALITY) {
-      const webpMediaURL = canvas.toDataURL("image/webp", exportQuality);
-
-      if (
-        webpMediaURL.startsWith("data:image/webp") &&
-        webpMediaURL.length <= PROFILE_COMMENT_MEDIA_MAX_DATA_URL_LENGTH
-      ) {
-        mediaURL = webpMediaURL;
-        mediaType = "image/webp";
-        break;
-      }
-
-      const jpegMediaURL = canvas.toDataURL("image/jpeg", exportQuality);
-
-      if (jpegMediaURL.length <= PROFILE_COMMENT_MEDIA_MAX_DATA_URL_LENGTH) {
-        mediaURL = jpegMediaURL;
-        mediaType = "image/jpeg";
-        break;
-      }
-
-      exportQuality -= PROFILE_COMMENT_MEDIA_EXPORT_QUALITY_STEP;
-    }
-
-    if (!mediaURL || mediaURL.length > PROFILE_COMMENT_MEDIA_MAX_DATA_URL_LENGTH) {
-      throw createFirebaseError(
-        "comments/media-too-large",
-        "The selected image is too large to save in a Firestore comment."
-      );
-    }
-
-    return {
-      mediaURL,
-      mediaType,
-    };
-  };
-
-  const normalizeProfileCommentMediaPath = (value) =>
-    typeof value === "string" && value ? value : null;
-  const normalizeProfileCommentMediaSize = (value) =>
-    typeof value === "number" && Number.isFinite(value) && value > 0
-      ? Math.round(value)
-      : null;
-  const toPreparedProfileCommentMedia = (value) => {
-    if (!value || typeof value !== "object" || value instanceof File) {
-      return null;
-    }
-
-    const mediaURL = typeof value.mediaURL === "string" && value.mediaURL ? value.mediaURL : null;
-    const mediaType =
-      typeof value.mediaType === "string" && PROFILE_COMMENT_MEDIA_CONTENT_TYPES.has(value.mediaType)
-        ? value.mediaType
-        : null;
-
-    if (!mediaURL || !mediaType) {
-      return null;
-    }
-
-    return {
-      mediaURL,
-      mediaType,
-      mediaPath: normalizeProfileCommentMediaPath(value.mediaPath),
-      mediaSize: normalizeProfileCommentMediaSize(value.mediaSize),
-    };
-  };
-  const prepareProfileCommentMedia = async (value) => {
-    if (value instanceof File) {
-      const inlineMedia = await createInlineCommentMedia(value);
-
-      return inlineMedia
-        ? {
-            ...inlineMedia,
-            mediaPath: null,
-            mediaSize: null,
-          }
-        : null;
-    }
-
-    return toPreparedProfileCommentMedia(value);
-  };
-
-  const getAvatarStorageExtension = (file) => {
-    switch (file?.type) {
-      case "image/gif":
-        return "gif";
-      case "image/webp":
-        return "webp";
-      case "video/mp4":
-        return "mp4";
-      case "video/webm":
-        return "webm";
-      default:
-        return null;
-    }
-  };
-
-  const getErrorCode = (error) =>
-    typeof error === "object" && error !== null && "code" in error
-      ? String(error.code)
-      : "";
-
-  const shouldFallbackGooglePopupToRedirect = (error) => {
-    const code = getErrorCode(error);
-
-    return (
-      code === "auth/popup-blocked" ||
-      code === "auth/operation-not-supported-in-this-environment"
-    );
-  };
-
-  const isPermissionDeniedError = (error) =>
-    getErrorCode(error) === "permission-denied" ||
-    (error instanceof Error && /Missing or insufficient permissions/i.test(error.message));
-
-  const isFirestoreDocumentTooLargeError = (error) =>
-    error instanceof Error &&
-    /cannot be written because its size .* exceeds the maximum allowed size/i.test(error.message);
-
-  const sanitizeLogin = (value) =>
-    typeof value === "string"
-      ? value
-          .normalize("NFKC")
-          .replace(/[\\u200B-\\u200D\\uFEFF]/g, "")
-          .trim()
-          .replace(/\\s+/g, "")
-          .replace(/[^A-Za-z\u0400-\u04FF0-9._-]/g, "")
-          .slice(0, LOGIN_MAX_LENGTH)
-      : "";
-  const sanitizeDisplayName = (value) =>
-    typeof value === "string"
-      ? value.trim().replace(/\\s+/g, " ").slice(0, DISPLAY_NAME_MAX_LENGTH)
-      : "";
-  const normalizeProfileThemePresetKey = (value) => {
-    const normalizedKey =
-      typeof value === "string"
-        ? value
-            .trim()
-            .toLowerCase()
-            .replace(/[^a-z0-9-]+/g, "-")
-            .replace(/-+/g, "-")
-            .replace(/^-+|-+$/g, "")
-        : "";
-
-    if (!normalizedKey) {
-      return null;
-    }
-
-    return PROFILE_THEME_SONG_KEYS.has(normalizedKey) ? normalizedKey : null;
-  };
-
-  const parseProfileThemeExternalUrl = (value) => {
-    const trimmedValue = typeof value === "string" ? value.trim() : "";
-
-    if (!trimmedValue) {
-      return null;
-    }
-
-    const candidateValue =
-      /^https?:\/\//i.test(trimmedValue)
-        ? trimmedValue
-        : /^[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?:[\\/:?#]|$)/.test(trimmedValue)
-          ? "https://" + trimmedValue
-          : trimmedValue;
-
-    try {
-      return new URL(candidateValue);
-    } catch (error) {
-      return null;
-    }
-  };
-
-  const buildExternalProfileThemeSongKey = (sourceUrl) => {
-    const normalizedSourceUrl = typeof sourceUrl === "string" ? sourceUrl.trim() : "";
-
-    if (!normalizedSourceUrl || normalizedSourceUrl.length > PROFILE_THEME_EXTERNAL_URL_MAX_LENGTH) {
-      return null;
-    }
-
-    return PROFILE_THEME_EXTERNAL_URL_PREFIX + normalizedSourceUrl;
-  };
-
-  const resolveNormalizedProfileThemeExternalSourceUrl = (parsedUrl) =>
-    parsedUrl.protocol + "//" + parsedUrl.host + parsedUrl.pathname + parsedUrl.search;
-  const PROFILE_THEME_AUDIO_URL_PATH_PATTERN = /\.(?:mp3|wav|ogg|aac|flac|m4a|webm)(?:$|[?#])/i;
-  const isProfileThemeAudioFileUrl = (parsedUrl) =>
-    PROFILE_THEME_AUDIO_URL_PATH_PATTERN.test(parsedUrl.pathname + parsedUrl.search);
-
-  const resolveExternalProfileThemeSongKey = (value) => {
-    const rawValue = typeof value === "string" ? value.trim() : "";
-
-    if (!rawValue) {
-      return null;
-    }
-
-    const externalCandidate = rawValue.toLowerCase().startsWith(PROFILE_THEME_EXTERNAL_URL_PREFIX)
-      ? rawValue.slice(PROFILE_THEME_EXTERNAL_URL_PREFIX.length).trim()
-      : rawValue;
-    const parsedUrl = parseProfileThemeExternalUrl(externalCandidate);
-
-    if (!parsedUrl) {
-      return null;
-    }
-
-    const host = parsedUrl.hostname.toLowerCase().replace(/^www\./, "");
-
-    if (host === "soundcloud.com" || host === "m.soundcloud.com" || host === "on.soundcloud.com") {
-      return buildExternalProfileThemeSongKey("https://" + host + parsedUrl.pathname + parsedUrl.search);
-    }
-
-    const sourceUrl = resolveNormalizedProfileThemeExternalSourceUrl(parsedUrl);
-
-    if (isProfileThemeAudioFileUrl(parsedUrl)) {
-      return buildExternalProfileThemeSongKey(sourceUrl);
-    }
-
-    return null;
-  };
-
-  const normalizeProfileThemeSongKey = (value) => {
-    const presetKey = normalizeProfileThemePresetKey(value);
-
-    if (presetKey) {
-      return presetKey;
-    }
-
-    return resolveExternalProfileThemeSongKey(value);
-  };
-
-  const normalizeLogin = (value) => sanitizeLogin(value).toLocaleLowerCase();
-
-  const deriveLoginSeed = (user, preferredDisplayName = null) => {
-    const source =
-      preferredDisplayName?.trim() ||
-      user.displayName?.trim() ||
-      user.email?.split("@")[0]?.trim() ||
-      "sakurauser";
-
-    const cleaned = sanitizeLogin(source);
-
-    return cleaned || \`user\${user.uid.slice(0, 6)}\`;
-  };
-
-  const getProviderIds = (user) =>
-    user.providerData.map((providerData) => providerData?.providerId).filter(Boolean);
-
-  const isUserLikeRole = (role) =>
-    typeof role === "string" && /^u(?:[\\s_-]*s)?[\\s_-]*e[\\s_-]*r$/i.test(role.trim());
-  const toCompactRoleToken = (role) =>
-    typeof role === "string"
-      ? role
-        .trim()
-        .toLowerCase()
-        .replace(/[\u0430]/g, "a")
-        .replace(/[\u0435\u0451]/g, "e")
-        .replace(/[\u043E]/g, "o")
-        .replace(/[\u0440]/g, "p")
-        .replace(/[\u0441]/g, "s")
-        .replace(/[\u0443]/g, "y")
-        .replace(/[\u0445]/g, "x")
-        .replace(/[\u0456]/g, "i")
-        .replace(/[^a-z0-9]+/g, "")
-      : "";
-
-  const normalizeRoleName = (role) => {
-    const normalizedRole =
-      typeof role === "string" ? role.trim().toLowerCase().replace(/\\s+/g, " ") : "";
-    const compactRole = toCompactRoleToken(role);
-
-    if (!normalizedRole) {
-      return "";
-    }
-
-    if (isUserLikeRole(role)) {
-      return "user";
-    }
-
-    if (/^co[\\s_-]*owner$/i.test(role.trim())) {
-      return "co-owner";
-    }
-
-    if (compactRole === "admin" || compactRole === "administrator") {
-      return "administrator";
-    }
-
-    if (compactRole === "superadministrator" || compactRole === "superadmin") {
-      return "super administrator";
-    }
-
-    if (compactRole === "coowner") {
-      return "co-owner";
-    }
-
-    if (
-      compactRole === "root" ||
-      compactRole === "r00t" ||
-      compactRole === "owner"
-    ) {
-      return "root";
-    }
-
-    if (compactRole === "moderator") {
-      return "moderator";
-    }
-
-    if (compactRole === "support" || compactRole === "supp0rt") {
-      return "support";
-    }
-
-    if (
-      compactRole === "sponsor" ||
-      compactRole === "ponsor" ||
-      compactRole === "sponor" ||
-      compactRole === "ponor" ||
-      compactRole === "sp0ns0r" ||
-      compactRole === "p0n0r"
-    ) {
-      return "sponsor";
-    }
-
-    if (compactRole === "tester") {
-      return "tester";
-    }
-
-    if (compactRole === "subscriber") {
-      return "subscriber";
-    }
-
-    if (
-      compactRole === "lifetime" ||
-      compactRole === "lifetimesubscription" ||
-      compactRole === "forever"
-    ) {
-      return "lifetime";
-    }
-
-    if (
-      compactRole === "testperiod" ||
-      compactRole === "trial" ||
-      compactRole === "trialperiod"
-    ) {
-      return "test period";
-    }
-
-    if (compactRole === "user") {
-      return "user";
-    }
-
-    return normalizedRole;
-  };
-
-  const cleanRoleLabel = (role) =>
-    typeof role === "string"
-      ? isUserLikeRole(role)
-        ? "user"
-        : role.trim().replace(/\\s+/g, " ")
-      : "";
-  const canonicalRoleLabel = (role) => {
-    const normalizedRole = normalizeRoleName(role);
-    return normalizedRole || cleanRoleLabel(role);
-  };
-
-  const REMOVED_ROLE_NAMES = new Set([]);
-  const ROLE_SORT_ORDER = new Map([
-    ["root", 0],
-    ["co-owner", 1],
-    ["super administrator", 2],
-    ["administrator", 3],
-    ["moderator", 4],
-    ["support", 5],
-    ["sponsor", 6],
-    ["tester", 7],
-    ["lifetime", 8],
-    ["subscriber", 9],
-    ["test period", 10],
-    ["user", 11],
-  ]);
-  const COMMENT_ACCENT_ROLE_ORDER = new Map([
-    ["root", 0],
-    ["co-owner", 1],
-    ["super administrator", 2],
-    ["administrator", 3],
-    ["moderator", 4],
-    ["support", 5],
-    ["sponsor", 6],
-    ["tester", 7],
-    ["lifetime", 8],
-    ["subscriber", 9],
-    ["test period", 10],
-    ["user", 11],
-  ]);
-  const sortRoles = (roles) =>
-    [...roles].sort((left, right) => {
-      const leftOrder = ROLE_SORT_ORDER.get(normalizeRoleName(left)) ?? Number.MAX_SAFE_INTEGER;
-      const rightOrder = ROLE_SORT_ORDER.get(normalizeRoleName(right)) ?? Number.MAX_SAFE_INTEGER;
-
-      if (leftOrder !== rightOrder) {
-        return leftOrder - rightOrder;
-      }
-
-      return cleanRoleLabel(left).localeCompare(cleanRoleLabel(right), "en");
-    });
-
-  const normalizeRoles = (roles) => {
-    const nextRoles = Array.isArray(roles)
-      ? roles
-        .filter((role) => typeof role === "string")
-        .map(canonicalRoleLabel)
-        .filter(Boolean)
-        .filter((role) => !REMOVED_ROLE_NAMES.has(normalizeRoleName(role)))
-      : [];
-
-    return nextRoles.length
-      ? sortRoles(
-        nextRoles.filter(
-          (role, index, entries) =>
-            index ===
-            entries.findIndex(
-              (candidate) => normalizeRoleName(candidate) === normalizeRoleName(role)
-            )
-        )
-      )
-      : ["user"];
-  };
-  const pickCommentAccentRole = (roles, fallbackRole = "user") => {
-    const normalizedRoles = Array.isArray(roles)
-      ? roles
-        .filter((role) => typeof role === "string")
-        .map((role) => normalizeRoleName(role))
-        .filter(Boolean)
-        .filter((role) => !REMOVED_ROLE_NAMES.has(role))
-      : [];
-    const uniqueRoles = normalizedRoles.filter(
-      (role, index, entries) => index === entries.findIndex((candidate) => candidate === role)
-    );
-    const sortedRoles = [...uniqueRoles].sort((left, right) => {
-      const leftOrder =
-        COMMENT_ACCENT_ROLE_ORDER.get(normalizeRoleName(left)) ?? Number.MAX_SAFE_INTEGER;
-      const rightOrder =
-        COMMENT_ACCENT_ROLE_ORDER.get(normalizeRoleName(right)) ?? Number.MAX_SAFE_INTEGER;
-
-      if (leftOrder !== rightOrder) {
-        return leftOrder - rightOrder;
-      }
-
-      return cleanRoleLabel(left).localeCompare(cleanRoleLabel(right), "en");
-    });
-
-    return (
-      sortedRoles[0] ??
-      normalizeRoleName(fallbackRole ?? "") ??
-      "user"
-    );
-  };
-
-  const ROLE_MANAGER_NAMES = new Set([
-    "root",
-    "co-owner",
-    "owner"
-  ]);
-  const COMMENT_MODERATOR_ROLE_NAMES = new Set([
-    "root",
-    "co-owner",
-    "super administrator",
-    "administrator",
-    "support",
-    "moderator",
-  ]);
-  const canManageRoles = (roles) =>
-    normalizeRoles(roles).some((role) => ROLE_MANAGER_NAMES.has(normalizeRoleName(role)));
-  const hasRole = (roles, expectedRole) =>
-    normalizeRoles(roles).some(
-      (role) => normalizeRoleName(role) === normalizeRoleName(expectedRole)
-    );
-  const isRootRoleHolder = (roles) => hasRole(roles, "root");
-  const isCoOwnerRoleHolder = (roles) => hasRole(roles, "co-owner");
-  const ensureActorCanManageTargetProfile = (actorRoles, targetRoles) => {
-    if (isRootRoleHolder(actorRoles)) {
-      return;
-    }
-
-    if (isCoOwnerRoleHolder(actorRoles) && isRootRoleHolder(targetRoles)) {
-      throw createFirebaseError(
-        "admin/root-target-forbidden",
-        "Co-owner cannot manage root accounts."
-      );
-    }
-  };
-  const ensureActorCanAssignRoles = (actorRoles, targetRoles, nextRoles) => {
-    ensureActorCanManageTargetProfile(actorRoles, targetRoles);
-
-    if (!isRootRoleHolder(actorRoles) && isRootRoleHolder(nextRoles)) {
-      throw createFirebaseError(
-        "roles/root-assignment-forbidden",
-        "Only root can assign the root role."
-      );
-    }
-  };
-  const canModerateComments = (roles) =>
-    normalizeRoles(roles).some((role) =>
-      COMMENT_MODERATOR_ROLE_NAMES.has(normalizeRoleName(role))
-    );
-  const canDeleteCommentAsModerator = async (actorSnapshot, comment) => {
-    const actorRoles = normalizeRoles(actorSnapshot?.roles);
-
-    if (!canModerateComments(actorRoles)) {
-      return false;
-    }
-
-    if (isRootRoleHolder(actorRoles)) {
-      return true;
-    }
-
-    const ownsTargetProfile =
-      typeof actorSnapshot?.profileId === "number" &&
-      typeof comment?.profileId === "number" &&
-      actorSnapshot.profileId === comment.profileId;
-
-    if (
-      isCoOwnerRoleHolder(actorRoles) &&
-      !ownsTargetProfile
-    ) {
-      const fallbackAuthorRole = normalizeRoleName(comment?.authorAccentRole ?? "");
-
-      if (fallbackAuthorRole === "root") {
-        return false;
-      }
-
-      if (typeof comment?.authorUid === "string" && comment.authorUid) {
-        try {
-          const authorSnapshot = await getDoc(userRefFor(comment.authorUid));
-
-          if (authorSnapshot.exists()) {
-            const authorRoles = normalizeRoles(authorSnapshot.data()?.roles);
-
-            if (isRootRoleHolder(authorRoles)) {
-              return false;
-            }
-          }
-        } catch (error) {
-        }
-      }
-    }
-
-    return true;
-  };
-  const canUseEnhancedAvatarMedia = (roles) =>
-    normalizeRoles(roles).some((role) => {
-      const normalizedRole = normalizeRoleName(role);
-      return normalizedRole && normalizedRole !== "user" && normalizedRole !== "test period";
-    });
-  const ensureAvatarUploadAllowedForRoles = (avatarType, roles) => {
-    if (!PREMIUM_AVATAR_CONTENT_TYPES.has(avatarType ?? "")) {
-      return;
-    }
-
-    if (!canUseEnhancedAvatarMedia(roles)) {
-      throw createFirebaseError(
-        "avatar/upgrade-required",
-        "You need a profile upgrade to use GIFs and videos as your avatar. User and Test Period roles support static images only."
-      );
-    }
-  };
-  const requiresEmailVerification = (roles) =>
-    !normalizeRoles(roles).some((role) => normalizeRoleName(role) === "root");
-
-  const buildLoginHistory = (existingHistory, creationTime, lastSignInTime) => {
-    const previousEntries = Array.isArray(existingHistory)
-      ? existingHistory.filter((entry) => typeof entry === "string")
-      : [];
-    const nextEntries = [lastSignInTime ?? null, creationTime ?? null].filter(Boolean);
-
-    return [...new Set([...nextEntries, ...previousEntries])]
-      .sort((left, right) => new Date(right).getTime() - new Date(left).getTime())
-      .slice(0, 8);
-  };
-
-  const normalizePresence = (presence, fallbackPath = null) => ({
-    status: presence?.status === "online" ? "online" : "offline",
-    isOnline: Boolean(presence?.isOnline),
-    currentPath:
-      typeof presence?.currentPath === "string" && presence.currentPath
-        ? presence.currentPath
-        : fallbackPath,
-    lastSeenAt: typeof presence?.lastSeenAt === "string" ? presence.lastSeenAt : null,
-  });
-  const isPresenceFreshOnline = (presence) => {
-    const normalizedPresence = normalizePresence(presence, null);
-    const lastSeenAt = normalizedPresence.lastSeenAt ? Date.parse(normalizedPresence.lastSeenAt) : Number.NaN;
-
-    return (
-      normalizedPresence.status === "online" &&
-      normalizedPresence.isOnline &&
-      Number.isFinite(lastSeenAt) &&
-      Date.now() - lastSeenAt <= PRESENCE_ONLINE_WINDOW_MS
-    );
-  };
-
-  const normalizeVisitHistory = (history) =>
-    Array.isArray(history)
-      ? history.filter(
-          (entry) =>
-            entry &&
-            typeof entry === "object" &&
-            typeof entry.timestamp === "string" &&
-            typeof entry.path === "string" &&
-            typeof entry.source === "string" &&
-            typeof entry.status === "string"
-      )
-      : [];
-  const normalizeProfileCommentMessage = (value) =>
-    typeof value === "string"
-      ? value.replace(/\\r\\n/g, "\\n").trim().slice(0, PROFILE_COMMENT_MAX_LENGTH)
-      : "";
-  const normalizeProfileCommentAuthorName = (value) =>
-    typeof value === "string"
-      ? value.trim().replace(/\\s+/g, " ").slice(0, 48)
-      : "";
-  const normalizeProfileCommentAuthorLookupKey = (value) =>
-    normalizeProfileCommentAuthorName(value).toLocaleLowerCase();
-  const normalizeProfileCommentPhotoURL = (value) =>
-    typeof value === "string" && value ? value : null;
-  const normalizeProfileCommentMediaURL = (value) =>
-    typeof value === "string" && value ? value : null;
-  const normalizeProfileCommentMediaType = (value) =>
-    typeof value === "string" && PROFILE_COMMENT_MEDIA_CONTENT_TYPES.has(value)
-      ? value
-      : null;
-  const normalizeProfileCommentCreatedAt = (value) => {
-    if (typeof value === "string" && value) {
-      return value;
-    }
-
-    if (value && typeof value.toDate === "function") {
-      try {
-        const nextDate = value.toDate();
-
-        return nextDate instanceof Date && !Number.isNaN(nextDate.getTime())
-          ? nextDate.toISOString()
-          : null;
-      } catch (error) {
-      }
-    }
-
-    if (value instanceof Date && !Number.isNaN(value.getTime())) {
-      return value.toISOString();
-    }
-
-    return null;
-  };
-  const normalizeProfileCommentUpdatedBy = (value) => {
-    const normalized =
-      typeof value === "string" ? value.trim().toLowerCase() : "";
-
-    if (normalized === "author" || normalized === "admin") {
-      return normalized;
-    }
-
-    return null;
-  };
-  const stripNullishFields = (value) =>
-    Object.fromEntries(
-      Object.entries(value).filter(([, entryValue]) => entryValue !== null && entryValue !== undefined)
-    );
-  const toStoredProfileComment = (id, details = {}) => ({
-    id,
-    profileId: typeof details.profileId === "number" ? details.profileId : null,
-    authorUid: typeof details.authorUid === "string" ? details.authorUid : null,
-    authorProfileId:
-      typeof details.authorProfileId === "number" ? details.authorProfileId : null,
-    authorName:
-      normalizeProfileCommentAuthorName(details.authorName) ||
-      (typeof details.authorProfileId === "number"
-        ? \`Profile #\${details.authorProfileId}\`
-        : "Member"),
-    authorPhotoURL: normalizeProfileCommentPhotoURL(details.authorPhotoURL),
-    authorAccentRole:
-      typeof details.authorAccentRole === "string"
-        ? normalizeRoleName(details.authorAccentRole)
-        : null,
-    message: normalizeProfileCommentMessage(details.message),
-    mediaURL: normalizeProfileCommentMediaURL(details.mediaURL),
-    mediaType: normalizeProfileCommentMediaType(details.mediaType),
-    mediaPath: normalizeProfileCommentMediaPath(details.mediaPath),
-    mediaSize: normalizeProfileCommentMediaSize(details.mediaSize),
-    createdAt: normalizeProfileCommentCreatedAt(details.createdAt),
-    updatedAt: normalizeProfileCommentCreatedAt(details.updatedAt),
-    updatedBy: normalizeProfileCommentUpdatedBy(details.updatedBy),
-  });
-  const sortProfileComments = (comments) =>
-    [...comments].sort(
-      (left, right) =>
-        new Date(right.createdAt ?? 0).getTime() - new Date(left.createdAt ?? 0).getTime()
-    );
-  const mergeProfileSnapshotWithFallback = (primaryProfile, fallbackProfile) => {
-    if (!primaryProfile) {
-      return fallbackProfile ?? null;
-    }
-
-    if (!fallbackProfile) {
-      return primaryProfile;
-    }
-
-    return {
-      ...primaryProfile,
-      photoURL: primaryProfile.photoURL ?? fallbackProfile.photoURL ?? null,
-      avatarPath: primaryProfile.avatarPath ?? fallbackProfile.avatarPath ?? null,
-      avatarType: primaryProfile.avatarType ?? fallbackProfile.avatarType ?? null,
-      avatarSize: primaryProfile.avatarSize ?? fallbackProfile.avatarSize ?? null,
-    };
-  };
-  const mergeProfileCommentsWithFallback = (primaryComments, fallbackComments) => {
-    if (!Array.isArray(primaryComments) || !primaryComments.length) {
-      return Array.isArray(fallbackComments) ? fallbackComments : [];
-    }
-
-    if (!Array.isArray(fallbackComments) || !fallbackComments.length) {
-      return primaryComments;
-    }
-
-    const mergedCommentsById = new Map(
-      primaryComments.map((comment) => [comment.id, comment])
-    );
-
-    fallbackComments.forEach((fallbackComment) => {
-      const existingComment = mergedCommentsById.get(fallbackComment.id);
-
-      if (!existingComment) {
-        mergedCommentsById.set(fallbackComment.id, fallbackComment);
-        return;
-      }
-
-      mergedCommentsById.set(fallbackComment.id, {
-        ...existingComment,
-        authorPhotoURL: existingComment.authorPhotoURL ?? fallbackComment.authorPhotoURL ?? null,
-        authorAccentRole: existingComment.authorAccentRole ?? fallbackComment.authorAccentRole ?? null,
-        mediaURL: existingComment.mediaURL ?? fallbackComment.mediaURL ?? null,
-        mediaType: existingComment.mediaType ?? fallbackComment.mediaType ?? null,
-        mediaPath: existingComment.mediaPath ?? fallbackComment.mediaPath ?? null,
-        mediaSize: existingComment.mediaSize ?? fallbackComment.mediaSize ?? null,
-      });
-    });
-
-    return sortProfileComments(Array.from(mergedCommentsById.values()));
-  };
-  const enrichProfileCommentsWithAuthors = async (comments) => {
-    const commentsWithAuthors = [...comments];
-    const authorByUid = new Map();
-    const authorByProfileId = new Map();
-    const authorByName = new Map();
-    const authorUids = [...new Set(
-      commentsWithAuthors
-        .map((comment) => comment.authorUid)
-        .filter((authorUid) => typeof authorUid === "string" && authorUid)
-    )];
-
-    await Promise.all(
-      authorUids.map(async (authorUid) => {
-        try {
-          const authorSnapshot = await getDoc(userRefFor(authorUid));
-
-          if (authorSnapshot.exists()) {
-            authorByUid.set(authorUid, authorSnapshot.data());
-          }
-        } catch (error) {
-        }
-      })
-    );
-
-    const profileIds = [...new Set(
-      commentsWithAuthors
-        .filter(
-          (comment) =>
-            typeof comment.authorProfileId === "number" &&
-            !(
-              typeof comment.authorUid === "string" &&
-              comment.authorUid &&
-              authorByUid.has(comment.authorUid)
-            )
-        )
-        .map((comment) => comment.authorProfileId)
-    )];
-
-    await Promise.all(
-      profileIds.map(async (authorProfileId) => {
-        try {
-          const authorDoc = await findUserByProfileId(authorProfileId);
-
-          if (authorDoc) {
-            authorByProfileId.set(authorProfileId, authorDoc.data());
-          }
-        } catch (error) {
-        }
-      })
-    );
-
-    const authorNames = [...new Set(
-      commentsWithAuthors
-        .filter(
-          (comment) =>
-            !(
-              typeof comment.authorUid === "string" &&
-              comment.authorUid &&
-              authorByUid.has(comment.authorUid)
-            ) &&
-            !(
-              typeof comment.authorProfileId === "number" &&
-              authorByProfileId.has(comment.authorProfileId)
-            )
-        )
-        .map((comment) => normalizeProfileCommentAuthorName(comment.authorName ?? ""))
-        .filter(Boolean)
-    )];
-
-    await Promise.all(
-      authorNames.map(async (authorName) => {
-        try {
-          const authorDoc = await findUserByAuthorName(authorName);
-
-          if (authorDoc) {
-            authorByName.set(normalizeProfileCommentAuthorLookupKey(authorName), authorDoc.data());
-          }
-        } catch (error) {
-        }
-      })
-    );
-
-    return commentsWithAuthors.map((comment) => {
-      const authorNameKey = normalizeProfileCommentAuthorLookupKey(comment.authorName ?? "");
-      const authorDetails =
-        (typeof comment.authorUid === "string" && comment.authorUid
-          ? authorByUid.get(comment.authorUid)
-          : null) ??
-        (typeof comment.authorProfileId === "number"
-          ? authorByProfileId.get(comment.authorProfileId)
-          : null) ??
-        (authorNameKey ? authorByName.get(authorNameKey) : null) ??
-        null;
-
-      if (!authorDetails) {
-        return comment;
-      }
-
-      return {
-        ...comment,
-        authorUid:
-          typeof authorDetails?.uid === "string" && authorDetails.uid
-            ? authorDetails.uid
-            : comment.authorUid,
-        authorProfileId:
-          typeof authorDetails?.profileId === "number"
-            ? authorDetails.profileId
-            : comment.authorProfileId,
-        authorPhotoURL:
-          resolveCommentAuthorPhotoURLForPayload(authorDetails) ??
-          comment.authorPhotoURL,
-        authorAccentRole: pickCommentAccentRole(
-          authorDetails?.roles ?? [],
-          comment.authorAccentRole
-        ),
-      };
-    });
-  };
-
-  const buildVisitHistory = (existingHistory, nextEntry) =>
-    [nextEntry, ...normalizeVisitHistory(existingHistory)]
-      .filter(
-        (entry, index, entries) =>
-          index ===
-          entries.findIndex(
-            (candidate) =>
-              candidate.timestamp === entry.timestamp &&
-              candidate.path === entry.path &&
-              candidate.source === entry.source &&
-              candidate.status === entry.status
-          )
-      )
-      .slice(0, 12);
-
-  const buildFallbackUserDetails = (user, options = {}) => {
-    const preferredDisplayName =
-      typeof options.preferredDisplayName === "string" && options.preferredDisplayName.trim()
-        ? options.preferredDisplayName.trim()
-        : null;
-    const requestedLogin =
-      typeof options.requestedLogin === "string" && options.requestedLogin.trim()
-        ? options.requestedLogin.trim()
-        : null;
-    const fallbackLogin = sanitizeLogin(requestedLogin) || null;
-
-      return {
-        login: fallbackLogin,
-        loginLower: fallbackLogin ? normalizeLogin(fallbackLogin) : null,
-        displayName:
-          preferredDisplayName ??
-          user.displayName ??
-          fallbackLogin ??
-          user.email?.split("@")[0] ??
-          null,
-        emailVerified: Boolean(user.emailVerified),
-        profileId: null,
-        photoURL: null,
-        providerIds: getProviderIds(user),
-        roles: ["user"],
-        isBanned: false,
-        bannedAt: null,
-        hwid: null,
-        subscriptionUntil: null,
-        subscription_until: null,
-        loginHistory: buildLoginHistory(
-          [],
-        user.metadata.creationTime ?? null,
-        user.metadata.lastSignInTime ?? null
-      ),
-      visitHistory: [],
-      presence: normalizePresence(null, window.location.pathname),
-    };
-  };
-
-  const buildUserDetailsFromSnapshot = (user, details = {}) => ({
-    login: details.login ?? null,
-    loginLower: details.loginLower ?? null,
-    displayName: details.displayName ?? user.displayName ?? details.login ?? null,
-    emailVerified:
-      typeof details.emailVerified === "boolean" ? details.emailVerified : Boolean(user.emailVerified),
-    profileId: typeof details.profileId === "number" ? details.profileId : null,
-    photoURL: resolvePhotoURL(details, null),
-    avatarPath: resolveAvatarPath(details, null),
-    avatarType: resolveAvatarType(details, null),
-    avatarSize: resolveAvatarSize(details, null),
-    themeSongKey: resolveThemeSongKey(details, null),
-    hwid: resolveHwid(details, null),
-    subscriptionUntil: resolveSubscriptionUntil(details, null),
-    providerIds: Array.isArray(details.providerIds) ? details.providerIds : getProviderIds(user),
-    roles: normalizeRoles(details.roles),
-    isBanned: details.isBanned === true,
-    bannedAt: resolveBannedAt(details),
-    verificationRequired:
-      typeof details.verificationRequired === "boolean"
-        ? details.verificationRequired
-        : requiresEmailVerification(details.roles),
-    loginHistory: Array.isArray(details.loginHistory)
-      ? details.loginHistory
-      : buildLoginHistory([], user.metadata.creationTime ?? null, user.metadata.lastSignInTime ?? null),
-    visitHistory: normalizeVisitHistory(details.visitHistory),
-    presence: normalizePresence(details.presence, window.location.pathname),
-  });
-
-  const toUserSnapshot = (user, details = {}) =>
-    user
-      ? {
-          uid: user.uid,
-          isAnonymous: Boolean(user.isAnonymous),
-          email: user.email ?? null,
-          emailVerified:
-            typeof details.emailVerified === "boolean" ? details.emailVerified : Boolean(user.emailVerified),
-          login: details.login ?? null,
-          displayName: details.displayName ?? user.displayName ?? details.login ?? null,
-          profileId: typeof details.profileId === "number" ? details.profileId : null,
-          photoURL: resolvePhotoURL(details, null),
-          avatarPath: resolveAvatarPath(details, null),
-          avatarType: resolveAvatarType(details, null),
-          avatarSize: resolveAvatarSize(details, null),
-          themeSongKey: resolveThemeSongKey(details, null),
-          hwid: resolveHwid(details, null),
-          subscriptionUntil: resolveSubscriptionUntil(details, null),
-          isFrozen: details.isFrozen === true,
-          frozenAt: typeof details.frozenAt === "string" ? details.frozenAt : null,
-          lastFrozenAt: typeof details.lastFrozenAt === "string" ? details.lastFrozenAt : null,
-          frozenRemainingMs: typeof details.frozenRemainingMs === "number" ? details.frozenRemainingMs : null,
-          roles: normalizeRoles(details.roles),
-          isBanned: details.isBanned === true,
-          bannedAt: resolveBannedAt(details),
-          verificationRequired:
-            typeof details.verificationRequired === "boolean"
-              ? details.verificationRequired
-              : requiresEmailVerification(details.roles),
-          providerIds:
-            user.providerData.map((provider) => provider?.providerId).filter(Boolean) ??
-            details.providerIds ??
-            [],
-          creationTime: user.metadata.creationTime ?? null,
-          lastSignInTime: user.metadata.lastSignInTime ?? null,
-          loginHistory: Array.isArray(details.loginHistory) ? details.loginHistory : [],
-          visitHistory: normalizeVisitHistory(details.visitHistory),
-          activationHistory: Array.isArray(details.activationHistory) ? details.activationHistory : [],
-          hasClaimedTrial:
-            details.hasClaimedTrial === true ||
-            (Array.isArray(details.activationHistory) &&
-              details.activationHistory.some(
-                (item) => item.type === "trial" || item.code === "7-DAYS-TRIAL"
-              )),
-          trialClaimedAt: typeof details.trialClaimedAt === "string" ? details.trialClaimedAt : null,
-          presence: normalizePresence(details.presence, window.location.pathname)
-        }
-      : null;
-
-  const toStoredUserSnapshot = (uid, details = {}) => ({
-    uid,
-    isAnonymous: false,
-    email: typeof details.email === "string" ? details.email : null,
-    emailVerified: typeof details.emailVerified === "boolean" ? details.emailVerified : null,
-    login: typeof details.login === "string" ? details.login : null,
-    displayName:
-      typeof details.displayName === "string"
-        ? details.displayName
-        : typeof details.login === "string"
-          ? details.login
-          : null,
-    profileId: typeof details.profileId === "number" ? details.profileId : null,
-    photoURL: resolvePhotoURL(details, null),
-    avatarPath: resolveAvatarPath(details, null),
-    avatarType: resolveAvatarType(details, null),
-    avatarSize: resolveAvatarSize(details, null),
-    themeSongKey: resolveThemeSongKey(details, null),
-    hwid: resolveHwid(details, null),
-    subscriptionUntil: resolveSubscriptionUntil(details, null),
-    isFrozen: details.isFrozen === true,
-    frozenAt: typeof details.frozenAt === "string" ? details.frozenAt : null,
-    lastFrozenAt: typeof details.lastFrozenAt === "string" ? details.lastFrozenAt : null,
-    frozenRemainingMs: typeof details.frozenRemainingMs === "number" ? details.frozenRemainingMs : null,
-    roles: normalizeRoles(details.roles),
-    isBanned: details.isBanned === true,
-    bannedAt: resolveBannedAt(details),
-    verificationRequired:
-      typeof details.verificationRequired === "boolean"
-        ? details.verificationRequired
-        : requiresEmailVerification(details.roles),
-    providerIds: Array.isArray(details.providerIds)
-      ? details.providerIds.filter((providerId) => typeof providerId === "string")
-      : [],
-    creationTime: typeof details.creationTime === "string" ? details.creationTime : null,
-    lastSignInTime: typeof details.lastSignInTime === "string" ? details.lastSignInTime : null,
-    loginHistory: Array.isArray(details.loginHistory)
-      ? details.loginHistory.filter((entry) => typeof entry === "string")
-      : [],
-    visitHistory: normalizeVisitHistory(details.visitHistory),
-    activationHistory: Array.isArray(details.activationHistory) ? details.activationHistory : [],
-    hasClaimedTrial:
-      details.hasClaimedTrial === true ||
-      (Array.isArray(details.activationHistory) &&
-        details.activationHistory.some(
-          (item) => item.type === "trial" || item.code === "7-DAYS-TRIAL"
-        )),
-    trialClaimedAt: typeof details.trialClaimedAt === "string" ? details.trialClaimedAt : null,
-    presence: normalizePresence(details.presence, null),
-  });
-
-  const SUPABASE_PUBLIC_URL = ${JSON.stringify(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "")};
-  const SUPABASE_PUBLIC_ANON_KEY = ${JSON.stringify(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "")};
-  const SUPABASE_STORAGE_BUCKET = ${JSON.stringify(process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET ?? "")};
-  const SUPABASE_REST_URL = SUPABASE_PUBLIC_URL
-    ? SUPABASE_PUBLIC_URL.replace(/\\/+$/, "") + "/rest/v1"
-    : "";
-  const SUPABASE_FUNCTIONS_URL = SUPABASE_PUBLIC_URL
-    ? SUPABASE_PUBLIC_URL.replace(/\\/+$/, "") + "/functions/v1"
-    : "";
-  const SUPABASE_FIREBASE_SYNC_FUNCTION_URL = SUPABASE_FUNCTIONS_URL
-    ? SUPABASE_FUNCTIONS_URL + "/firebase-sync"
-    : "";
-  const SUPABASE_PUBLIC_READS_ENABLED = Boolean(
-    SUPABASE_REST_URL && SUPABASE_PUBLIC_ANON_KEY
-  );
-  const SUPABASE_PROFILE_SYNC_ENABLED = Boolean(
-    SUPABASE_FIREBASE_SYNC_FUNCTION_URL && SUPABASE_PUBLIC_ANON_KEY
-  );
-  const resolveSupabaseStoragePublicUrl = (objectPath) => {
-    const normalizedPath =
-      typeof objectPath === "string" ? objectPath.trim().replace(/^\\/+/, "") : "";
-
-    if (!normalizedPath || !SUPABASE_PUBLIC_URL || !SUPABASE_STORAGE_BUCKET) {
-      return null;
-    }
-
-    const encodedPath = normalizedPath
-      .split("/")
-      .map((segment) => encodeURIComponent(segment))
-      .join("/");
-
-    return SUPABASE_PUBLIC_URL.replace(/\\/+$/, "") +
-      "/storage/v1/object/public/" +
-      encodeURIComponent(SUPABASE_STORAGE_BUCKET) +
-      "/" +
-      encodedPath;
-  };
-  const resolveCommentAuthorPhotoURLForPayload = (profile) => {
-    const storagePhotoURL = resolveSupabaseStoragePublicUrl(profile?.avatarPath);
-
-    if (storagePhotoURL) {
-      return storagePhotoURL;
-    }
-
-    const directPhotoURL =
-      typeof profile?.photoURL === "string" ? profile.photoURL.trim() : "";
-
-    return directPhotoURL || null;
-  };
-  const SUPABASE_PROFILE_SELECT = [
-    "auth_user_id",
-    "firebase_uid",
-    "profile_id",
-    "email",
-    "email_verified",
-    "verification_required",
-    "login",
-    "display_name",
-    "photo_url",
-    "avatar_path",
-    "avatar_type",
-    "avatar_size",
-    "roles",
-    "is_banned",
-    "banned_at",
-    "subscription_until",
-    "has_claimed_trial",
-    "trial_claimed_at",
-    "is_frozen",
-    "frozen_at",
-    "last_frozen_at",
-    "frozen_remaining_ms",
-    "activation_history",
-    "provider_ids",
-    "login_history",
-    "visit_history",
-    "created_at",
-    "last_sign_in_at"
-  ].join(",");
-  const SUPABASE_PROFILE_PRESENCE_SELECT = [
-    "profile_id",
-    "status",
-    "is_online",
-    "current_path",
-    "last_seen_at"
-  ].join(",");
-  const SUPABASE_PROFILE_COMMENT_SELECT = [
-    "id",
-    "profile_id",
-    "author_profile_id",
-    "auth_user_id",
-    "firebase_author_uid",
-    "author_name",
-    "author_photo_url",
-    "author_accent_role",
-    "message",
-    "media_url",
-    "media_type",
-    "media_path",
-    "media_size",
-    "created_at",
-    "updated_at"
-  ].join(",");
-
-  const normalizeSupabaseInteger = (value) => {
-    if (typeof value === "number" && Number.isFinite(value)) {
-      return Math.trunc(value);
-    }
-
-    if (typeof value === "string" && /^-?\d+$/.test(value.trim())) {
-      const parsedValue = Number(value);
-      return Number.isFinite(parsedValue) ? Math.trunc(parsedValue) : null;
-    }
-
-    return null;
-  };
-
-  const buildSupabaseRestUrl = (table, query = {}) => {
-    const url = new URL(SUPABASE_REST_URL + "/" + table);
-
-    Object.entries(query).forEach(([key, value]) => {
-      if (value === null || value === undefined || value === "") {
-        return;
-      }
-
-      url.searchParams.set(key, String(value));
-    });
-
-    return url.toString();
-  };
-
-  const fetchSupabaseRows = async (table, query = {}) => {
-    if (!SUPABASE_PUBLIC_READS_ENABLED) {
-      return null;
-    }
-
-    try {
-      const response = await fetch(buildSupabaseRestUrl(table, query), {
-        headers: {
-          apikey: SUPABASE_PUBLIC_ANON_KEY,
-          Authorization: "Bearer " + SUPABASE_PUBLIC_ANON_KEY,
-          "Accept-Profile": "public",
-          Accept: "application/json",
-        },
-      });
-
-      if (!response.ok) {
+        const response = await fetch(buildSupabaseRestUrl(table, query), {
+          headers: {
+            apikey: SUPABASE_PUBLIC_ANON_KEY,
+            Authorization: "Bearer " + SUPABASE_PUBLIC_ANON_KEY,
+            "Accept-Profile": "public",
+            Accept: "application/json",
+          },
+        });
+        if (!response.ok) return null;
+        const payload = await response.json();
+        return Array.isArray(payload) ? payload : null;
+      } catch (e) {
         return null;
       }
-
-      const payload = await response.json();
-      return Array.isArray(payload) ? payload : null;
-    } catch (error) {
-      return null;
-    }
-  };
-
-  const callSupabaseRpc = async (funcName: string, params: Record<string, unknown> = {}) => {
-    try {
-      const response = await fetch(SUPABASE_REST_URL + "/rpc/" + funcName, {
-        method: "POST",
-        headers: {
-          apikey: SUPABASE_PUBLIC_ANON_KEY,
-          Authorization: "Bearer " + SUPABASE_PUBLIC_ANON_KEY,
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify(params),
-      });
-
-      if (!response.ok) {
-        let errText = "";
-        try {
-          const errObj = await response.json();
-          errText = errObj?.message || errObj?.error || JSON.stringify(errObj);
-        } catch {
-          errText = await response.text().catch(() => "");
-        }
-        return { ok: false, error: errText || ("Supabase RPC " + funcName + " failed (" + response.status + ")") };
-      }
-
-      const resJson = await response.json();
-      return typeof resJson === "object" && resJson !== null ? resJson : { ok: true, data: resJson };
-    } catch (e) {
-      return { ok: false, error: e instanceof Error ? e.message : "RPC Network Error" };
-    }
-  };
-  const sanitizeSupabaseProfileSyncText = (value, maxLength = 2048) =>
-    typeof value === "string" && value.trim()
-      ? value.trim().slice(0, Math.max(1, Math.trunc(maxLength)))
-      : null;
-  const normalizeSupabaseProfileSyncInteger = (value) => {
-    if (typeof value === "number" && Number.isFinite(value) && value > 0) {
-      return Math.trunc(value);
-    }
-
-    if (typeof value === "string" && /^\\d+$/.test(value.trim())) {
-      const parsedValue = Number(value);
-      return Number.isFinite(parsedValue) && parsedValue > 0 ? Math.trunc(parsedValue) : null;
-    }
-
-    return null;
-  };
-  const syncSupabaseProfileRecord = async (user, snapshot, source = "runtime") => {
-    if (!SUPABASE_PROFILE_SYNC_ENABLED || !user || user.isAnonymous) {
-      return null;
-    }
-
-    const idToken =
-      typeof user.getIdToken === "function" ? await user.getIdToken().catch(() => null) : null;
-
-    if (!idToken) {
-      return null;
-    }
-
-    const payload = {
-      source,
-      profile: {
-        uid: typeof snapshot?.uid === "string" && snapshot.uid ? snapshot.uid : user.uid,
-        profileId: normalizeSupabaseProfileSyncInteger(snapshot?.profileId),
-        email: sanitizeSupabaseProfileSyncText(snapshot?.email, 320),
-        emailVerified: snapshot?.emailVerified === true,
-        verificationRequired: snapshot?.verificationRequired === true,
-        verificationEmailSent: snapshot?.verificationEmailSent === true,
-        login: sanitizeSupabaseProfileSyncText(snapshot?.login, LOGIN_MAX_LENGTH),
-        displayName: sanitizeSupabaseProfileSyncText(
-          snapshot?.displayName,
-          DISPLAY_NAME_MAX_LENGTH
-        ),
-        photoURL: sanitizeSupabaseProfileSyncText(snapshot?.photoURL, 2048),
-        avatarPath: sanitizeSupabaseProfileSyncText(snapshot?.avatarPath, 1024),
-        avatarType: sanitizeSupabaseProfileSyncText(snapshot?.avatarType, 64),
-        avatarSize: normalizeSupabaseProfileSyncInteger(snapshot?.avatarSize),
-        hwid: sanitizeSupabaseProfileSyncText(snapshot?.hwid, 512),
-        subscriptionUntil: sanitizeSupabaseProfileSyncText(
-          resolveSubscriptionUntil(snapshot, null),
-          64
-        ),
-        subscription_until: sanitizeSupabaseProfileSyncText(
-          resolveSubscriptionUntil(snapshot, null),
-          64
-        ),
-        roles: Array.isArray(snapshot?.roles)
-          ? snapshot.roles.filter((role) => typeof role === "string")
-          : [],
-        providerIds: Array.isArray(snapshot?.providerIds)
-          ? snapshot.providerIds.filter((providerId) => typeof providerId === "string")
-          : [],
-        creationTime: sanitizeSupabaseProfileSyncText(snapshot?.creationTime, 64),
-        lastSignInTime: sanitizeSupabaseProfileSyncText(snapshot?.lastSignInTime, 64),
-      },
     };
 
-    const response = await fetch(SUPABASE_FIREBASE_SYNC_FUNCTION_URL, {
-      method: "POST",
-      headers: {
-        apikey: SUPABASE_PUBLIC_ANON_KEY,
-        Authorization: "Bearer " + SUPABASE_PUBLIC_ANON_KEY,
-        "x-firebase-id-token": idToken,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      let errorMessage = "";
-
+    const callSupabaseRpc = async (funcName, params = {}) => {
       try {
-        errorMessage = await response.text();
-      } catch (error) {}
+        const response = await fetch(SUPABASE_REST_URL + "/rpc/" + funcName, {
+          method: "POST",
+          headers: {
+            apikey: SUPABASE_PUBLIC_ANON_KEY,
+            Authorization: "Bearer " + SUPABASE_PUBLIC_ANON_KEY,
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify(params),
+        });
 
-      throw createFirebaseError(
-        "supabase/profile-sync-failed",
-        "Supabase profile sync failed with status " +
-          response.status +
-          (errorMessage ? ": " + errorMessage.slice(0, 220) : ".")
-      );
-    }
-
-    return response
-      .json()
-      .catch(() => null);
-  };
-  function readRuntimeCacheEntry(cache, key) {
-    if (!cache.has(key)) {
-      return { hit: false, value: null };
-    }
-
-    const cachedEntry = cache.get(key);
-
-    if (!cachedEntry || cachedEntry.expiresAt <= Date.now()) {
-      cache.delete(key);
-      return { hit: false, value: null };
-    }
-
-    return { hit: true, value: cachedEntry.value };
-  }
-  function writeRuntimeCacheEntry(cache, key, value, ttlMs) {
-    cache.set(key, {
-      value,
-      expiresAt: Date.now() + ttlMs,
-    });
-
-    return value;
-  }
-  async function runCachedLookup(cache, key, ttlMs, pendingKey, loader) {
-    const cachedEntry = readRuntimeCacheEntry(cache, key);
-
-    if (cachedEntry.hit) {
-      return cachedEntry.value;
-    }
-
-    if (runtimePendingLookupCache.has(pendingKey)) {
-      return runtimePendingLookupCache.get(pendingKey);
-    }
-
-    const pendingLookup = Promise.resolve()
-      .then(loader)
-      .then((value) => {
-        writeRuntimeCacheEntry(cache, key, value, ttlMs);
-        runtimePendingLookupCache.delete(pendingKey);
-        return value;
-      })
-      .catch((error) => {
-        runtimePendingLookupCache.delete(pendingKey);
-        throw error;
-      });
-
-    runtimePendingLookupCache.set(pendingKey, pendingLookup);
-    return pendingLookup;
-  }
-
-  const cacheResolvedProfileSnapshot = (snapshot) => {
-    if (!snapshot || snapshot.isAnonymous) {
-      return snapshot;
-    }
-
-    if (typeof snapshot.profileId === "number" && snapshot.profileId > 0) {
-      writeRuntimeCacheEntry(
-        profileByIdRuntimeCache,
-        String(snapshot.profileId),
-        snapshot,
-        PROFILE_RUNTIME_CACHE_TTL_MS
-      );
-    }
-
-    const normalizedLogin = normalizeLogin(snapshot.login);
-    const normalizedDisplayName = normalizeProfileCommentAuthorName(snapshot.displayName);
-
-    if (normalizedLogin) {
-      writeRuntimeCacheEntry(
-        profileByAuthorRuntimeCache,
-        normalizedLogin,
-        snapshot,
-        PROFILE_RUNTIME_CACHE_TTL_MS
-      );
-    }
-
-    if (normalizedDisplayName) {
-      writeRuntimeCacheEntry(
-        profileByAuthorRuntimeCache,
-        normalizedDisplayName,
-        snapshot,
-        PROFILE_RUNTIME_CACHE_TTL_MS
-      );
-    }
-
-    return snapshot;
-  };
-
-  const mapSupabasePresenceRow = (row) =>
-    row
-      ? {
-          status: row.status === "online" ? "online" : "offline",
-          isOnline: row.is_online === true,
-          currentPath:
-            typeof row.current_path === "string" && row.current_path
-              ? row.current_path
-              : null,
-          lastSeenAt:
-            typeof row.last_seen_at === "string" && row.last_seen_at
-              ? row.last_seen_at
-              : null,
+        if (!response.ok) {
+          let errText = "";
+          try {
+            const errObj = await response.json();
+            errText = errObj?.message || errObj?.error || JSON.stringify(errObj);
+          } catch {
+            errText = await response.text().catch(() => "");
+          }
+          return { ok: false, error: errText || ("Supabase RPC " + funcName + " failed (" + response.status + ")") };
         }
-      : null;
 
-  const mapSupabaseCommentRowToStoredComment = (row) =>
-    toStoredProfileComment(typeof row?.id === "string" ? row.id : "", {
-      profileId: normalizeSupabaseInteger(row?.profile_id),
-      authorUid:
-        typeof row?.firebase_author_uid === "string" && row.firebase_author_uid
-          ? row.firebase_author_uid
-          : null,
-      authorProfileId: normalizeSupabaseInteger(row?.author_profile_id),
-      authorName:
-        typeof row?.author_name === "string" ? row.author_name : null,
-      authorPhotoURL:
-        typeof row?.author_photo_url === "string" ? row.author_photo_url : null,
-      authorAccentRole:
-        typeof row?.author_accent_role === "string" ? row.author_accent_role : null,
-      message: typeof row?.message === "string" ? row.message : "",
-      mediaURL: typeof row?.media_url === "string" ? row.media_url : null,
-      mediaType: typeof row?.media_type === "string" ? row.media_type : null,
-      mediaPath: typeof row?.media_path === "string" ? row.media_path : null,
-      mediaSize: normalizeSupabaseInteger(row?.media_size),
-      createdAt: typeof row?.created_at === "string" ? row.created_at : null,
-      updatedAt: typeof row?.updated_at === "string" ? row.updated_at : null,
-    });
-
-  const mapSupabaseProfileRowToSnapshot = (row, presenceRow = null) => {
-    const uid =
-      typeof row?.firebase_uid === "string" && row.firebase_uid
-        ? row.firebase_uid
-        : typeof row?.auth_user_id === "string" && row.auth_user_id
-          ? row.auth_user_id
-          : null;
-
-    if (!uid) {
-      return null;
-    }
-
-    return cacheResolvedProfileSnapshot(
-      toStoredUserSnapshot(uid, {
-        email: typeof row?.email === "string" ? row.email : null,
-        emailVerified: row?.email_verified === true,
-        login: typeof row?.login === "string" ? row.login : null,
-        displayName:
-          typeof row?.display_name === "string" ? row.display_name : null,
-        profileId: normalizeSupabaseInteger(row?.profile_id),
-        photoURL:
-          typeof row?.photo_url === "string" && row.photo_url ? row.photo_url : null,
-        avatarPath:
-          typeof row?.avatar_path === "string" && row.avatar_path
-            ? row.avatar_path
-            : null,
-        avatarType:
-          typeof row?.avatar_type === "string" && row.avatar_type
-            ? row.avatar_type
-            : null,
-        avatarSize: normalizeSupabaseInteger(row?.avatar_size),
-        hwid: typeof row?.hwid === "string" ? row.hwid : null,
-        subscriptionUntil:
-          typeof row?.subscription_until === "string" ? row.subscription_until : null,
-        subscription_until:
-          typeof row?.subscription_until === "string" ? row.subscription_until : null,
-        hasClaimedTrial: row?.has_claimed_trial === true,
-        trialClaimedAt: typeof row?.trial_claimed_at === "string" ? row.trial_claimed_at : null,
-        isFrozen: row?.is_frozen === true,
-        frozenAt: typeof row?.frozen_at === "string" ? row.frozen_at : null,
-        lastFrozenAt: typeof row?.last_frozen_at === "string" ? row.last_frozen_at : null,
-        frozenRemainingMs: typeof row?.frozen_remaining_ms === "number" ? row.frozen_remaining_ms : null,
-        activationHistory: Array.isArray(row?.activation_history) ? row.activation_history : [],
-        roles: Array.isArray(row?.roles) ? row.roles : [],
-        isBanned: row?.is_banned === true,
-        bannedAt:
-          typeof row?.banned_at === "string" && row.banned_at ? row.banned_at : null,
-        verificationRequired: row?.verification_required === true,
-        providerIds: Array.isArray(row?.provider_ids) ? row.provider_ids : [],
-        creationTime:
-          typeof row?.created_at === "string" && row.created_at ? row.created_at : null,
-        lastSignInTime:
-          typeof row?.last_sign_in_at === "string" && row.last_sign_in_at
-            ? row.last_sign_in_at
-            : null,
-        loginHistory: Array.isArray(row?.login_history) ? row.login_history : [],
-        visitHistory: Array.isArray(row?.visit_history) ? row.visit_history : [],
-        presence: mapSupabasePresenceRow(presenceRow),
-      })
-    );
-  };
-
-  const fetchSupabaseProfileRowsByLoginPrefix = async (loginPrefix) => {
-    const rows = await fetchSupabaseRows("public_profiles", {
-      select: SUPABASE_PROFILE_SELECT,
-      login: "ilike." + loginPrefix + "*",
-      order: "profile_id.asc",
-      limit: 8,
-    });
-
-    return Array.isArray(rows)
-      ? rows
-          .map((row) => mapSupabaseProfileRowToSnapshot(row, null))
-          .filter(Boolean)
-          .filter(
-            (profile, index, profiles) =>
-              typeof profile.login === "string" &&
-              normalizeLogin(profile.login)?.startsWith(loginPrefix) &&
-              index === profiles.findIndex((candidate) => candidate.uid === profile.uid)
-          )
-      : [];
-  };
-
-  const fetchSupabaseProfileByAuthorName = async (authorName) => {
-    const normalizedAuthorName = normalizeProfileCommentAuthorName(authorName);
-
-    if (!normalizedAuthorName) {
-      return null;
-    }
-
-    const profileIdMatch = normalizedAuthorName.match(/^profile\\s*#\\s*(\\d+)$/i);
-
-    if (profileIdMatch) {
-      const byProfileIdRows = await fetchSupabaseRows("public_profiles", {
-        select: SUPABASE_PROFILE_SELECT,
-        profile_id: "eq." + profileIdMatch[1],
-        limit: 1,
-      });
-      const byProfileId = Array.isArray(byProfileIdRows) && byProfileIdRows[0]
-        ? mapSupabaseProfileRowToSnapshot(byProfileIdRows[0], null)
-        : null;
-
-      if (byProfileId) {
-        return byProfileId;
+        const resJson = await response.json();
+        return typeof resJson === "object" && resJson !== null ? resJson : { ok: true, data: resJson };
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : "RPC Network Error" };
       }
-    }
-
-    const byLoginRows = await fetchSupabaseRows("public_profiles", {
-      select: SUPABASE_PROFILE_SELECT,
-      login: "ilike." + normalizedAuthorName,
-      limit: 1,
-    });
-    const byLogin =
-      Array.isArray(byLoginRows) && byLoginRows[0]
-        ? mapSupabaseProfileRowToSnapshot(byLoginRows[0], null)
-        : null;
-
-    if (byLogin) {
-      return byLogin;
-    }
-
-    const byDisplayNameRows = await fetchSupabaseRows("public_profiles", {
-      select: SUPABASE_PROFILE_SELECT,
-      display_name: "ilike." + normalizedAuthorName,
-      limit: 1,
-    });
-
-    return Array.isArray(byDisplayNameRows) && byDisplayNameRows[0]
-      ? mapSupabaseProfileRowToSnapshot(byDisplayNameRows[0], null)
-      : null;
-  };
-
-  const fetchSupabaseProfileById = async (profileId) => {
-    const normalizedProfileId = normalizeSupabaseInteger(profileId);
-    if (!normalizedProfileId || normalizedProfileId <= 0) {
-      return null;
-    }
-
-    const profileRows = await fetchSupabaseRows("public_profiles", {
-      select: SUPABASE_PROFILE_SELECT,
-      profile_id: "eq." + normalizedProfileId,
-      limit: 1,
-    });
-
-    if (!Array.isArray(profileRows) || !profileRows[0]) {
-      return null;
-    }
-
-    const presenceRows = await fetchSupabaseRows("public_profile_presence", {
-      select: SUPABASE_PROFILE_PRESENCE_SELECT,
-      profile_id: "eq." + normalizedProfileId,
-      limit: 1,
-    });
-
-    return mapSupabaseProfileRowToSnapshot(
-      profileRows[0],
-      Array.isArray(presenceRows) ? presenceRows[0] ?? null : null
-    );
-  };
-
-  const fetchSupabaseCommentsByProfileId = async (profileId) => {
-    const normalizedProfileId = normalizeSupabaseInteger(profileId);
-    if (!normalizedProfileId || normalizedProfileId <= 0) {
-      return [];
-    }
-
-    const rows = await fetchSupabaseRows("public_profile_comments", {
-      select: SUPABASE_PROFILE_COMMENT_SELECT,
-      profile_id: "eq." + normalizedProfileId,
-      order: "created_at.desc",
-      limit: 200,
-    });
-
-    if (!Array.isArray(rows)) {
-      return null;
-    }
-
-    const comments = sortProfileComments(
-      rows
-        .map((row) => mapSupabaseCommentRowToStoredComment(row))
-        .filter(
-          (comment) =>
-            comment &&
-            comment.profileId === profileId &&
-            (
-              (typeof comment.message === "string" && comment.message) ||
-              (typeof comment.mediaURL === "string" && comment.mediaURL) ||
-              (typeof comment.mediaPath === "string" && comment.mediaPath)
-            )
-        )
-    );
-
-    return comments;
-  };
-
-  window.firebaseConfig = firebaseConfig;
-  window.sakuraAuthStateSettled = false;
-
-  try {
-    const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
-    window.firebaseFirestoreDb = db;
-    window.firebaseDoc = doc;
-    window.firebaseGetDoc = getDoc;
-    window.firebaseGetDocs = getDocs;
-    window.firebaseSetDoc = setDoc;
-    window.firebaseDeleteDoc = deleteDoc;
-    window.firebaseCollection = collection;
-    window.firebaseQuery = query;
-    window.firebaseWhere = where;
-    const provider = new GoogleAuthProvider();
-    let storageModulePromise = null;
-
-    const ensureStorageSdk = async () => {
-      if (!storageModulePromise) {
-        storageModulePromise = import("https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js").then(
-          ({
-            deleteObject,
-            getDownloadURL,
-            getStorage,
-            ref: storageRef,
-            uploadBytes,
-          }) => ({
-            deleteObject,
-            getDownloadURL,
-            storage: getStorage(app),
-            storageRef,
-            uploadBytes,
-          })
-        );
-      }
-
-      return storageModulePromise;
     };
-
-    const userRefFor = (uid) => doc(db, "users", uid);
-    const countersRef = doc(db, "meta", "counters");
-    const usersCollection = collection(db, "users");
-    const profileCommentsCollection = collection(db, "profileComments");
-    let stopPresenceTracking = () => {};
-    let presenceRuntimePromise = null;
-    let authStateHasSettled = false;
-    const broadcastPresenceDirty = () => {
-      presenceRuntimePromise
-        ?.then((presenceRuntime) => {
-          presenceRuntime?.invalidateSiteOnlineUsersCache?.();
-        })
-        .catch(() => {});
-      window.dispatchEvent(new CustomEvent(PRESENCE_DIRTY_EVENT));
-    };
-
-    const ensurePresenceRuntime = async () => {
-      if (!presenceRuntimePromise) {
-        presenceRuntimePromise = Promise.resolve()
-          .then(() => {
-            if (typeof window.sakuraLoadFirebasePresenceRuntime !== "function") {
-              throw createFirebaseError(
-                "presence/runtime-loader-missing",
-                "Firebase presence runtime is not available."
-              );
-            }
-
-            return window.sakuraLoadFirebasePresenceRuntime();
-          })
-          .then(({ createFirebasePresenceRuntime }) =>
-            createFirebasePresenceRuntime({
-              auth,
-              db,
-              usersCollection,
-              userRefFor,
-              getDoc,
-              setDoc,
-              getDocs,
-              query,
-              collection,
-              where,
-              createFirebaseError,
-              isPermissionDeniedError,
-              buildFallbackUserDetails,
-              normalizeVisitHistory,
-              buildVisitHistory,
-              toUserSnapshot,
-              toStoredUserSnapshot,
-              normalizePresence,
-              isPresenceFreshOnline,
-              pickCommentAccentRole,
-              publishUserSnapshot,
-              constants: {
-                onlineUsersRuntimeCacheTtlMs: ONLINE_USERS_RUNTIME_CACHE_TTL_MS,
-                presenceHeartbeatIntervalMs: PRESENCE_HEARTBEAT_INTERVAL_MS,
-                presenceVisitRecordCooldownMs: PRESENCE_VISIT_RECORD_COOLDOWN_MS,
-                presenceTabRegistryStorageKey: PRESENCE_TAB_REGISTRY_STORAGE_KEY,
-                presenceTabRegistryMaxAgeMs: PRESENCE_TAB_REGISTRY_MAX_AGE_MS,
-              },
-            })
-          )
-          .catch((error) => {
-            presenceRuntimePromise = null;
-            throw error;
-          });
-      }
-
-      return presenceRuntimePromise;
-    };
-
-    const markAuthStateSettled = () => {
-      if (authStateHasSettled) {
-        return;
-      }
-
-      authStateHasSettled = true;
-      window.sakuraAuthStateSettled = true;
-      window.dispatchEvent(new CustomEvent(AUTH_STATE_SETTLED_EVENT));
-    };
-
-    const waitForAuthStateSettlement = () =>
-      window.sakuraAuthStateSettled
-        ? Promise.resolve()
-        : new Promise((resolve) => {
-            const finish = () => {
-              window.clearTimeout(timeoutId);
-              window.removeEventListener(AUTH_STATE_SETTLED_EVENT, finish);
-              resolve();
-            };
-
-            const timeoutId = window.setTimeout(finish, 1500);
-            window.addEventListener(AUTH_STATE_SETTLED_EVENT, finish, { once: true });
-          });
 
     const publishUserSnapshot = (snapshot) => {
       window.sakuraCurrentUserSnapshot = snapshot;
-      cacheResolvedProfileSnapshot(snapshot);
-      persistCachedAuthSnapshot(snapshot);
       try {
         if (typeof snapshot?.profileId === "number" && snapshot.profileId > 0) {
-          window.sessionStorage.setItem(
-            CURRENT_PROFILE_ID_STORAGE_KEY,
-            String(snapshot.profileId)
-          );
+          window.sessionStorage.setItem(CURRENT_PROFILE_ID_STORAGE_KEY, String(snapshot.profileId));
         } else {
           window.sessionStorage.removeItem(CURRENT_PROFILE_ID_STORAGE_KEY);
         }
-      } catch (error) {}
+      } catch (e) {}
+
       window.dispatchEvent(
         new CustomEvent(USER_UPDATE_EVENT, {
           detail: snapshot,
         })
       );
-
       return snapshot;
     };
-    const syncCurrentUserSnapshotFromStoredSnapshot = (snapshot) => {
-      if (
-        window.sakuraCurrentUserSnapshot &&
-        !window.sakuraCurrentUserSnapshot.isAnonymous &&
-        window.sakuraCurrentUserSnapshot.uid === snapshot?.uid
-      ) {
-        return publishUserSnapshot({
-          ...window.sakuraCurrentUserSnapshot,
-          ...snapshot,
-        });
-      }
 
-      return snapshot;
-    };
-    const hasAssignedProfileId = (details) =>
-      typeof details?.profileId === "number" && details.profileId > 0;
-    const readStoredProfileDetails = async (user, fallbackDetails = {}) => {
-      const storedSnapshot = await getDoc(userRefFor(user.uid));
-
-      if (!storedSnapshot.exists()) {
-        return null;
-      }
-
-      const storedDetails = buildUserDetailsFromSnapshot(user, {
-        ...fallbackDetails,
-        ...storedSnapshot.data(),
-      });
-
-      return hasAssignedProfileId(storedDetails) ? storedDetails : null;
-    };
-    const emitAuthError = (message) => {
-      window.sakuraFirebaseAuthError = message;
-      window.dispatchEvent(
-        new CustomEvent(AUTH_ERROR_EVENT, {
-          detail: { message },
-        })
-      );
-    };
-    const clearBrokenProfileSession = async (message) => {
-      stopPresenceTracking();
-
-      if (message) {
-        emitAuthError(message);
-      }
-
-      try {
-        await signOut(auth);
-      } catch (error) {
-      }
-
-      return publishUserSnapshot(null);
-    };
-    const isProfileRecordError = (error) => {
-      const code = getErrorCode(error);
-      return code === "profile/record-missing" || code === "permission-denied";
-    };
-    const ensureRootActorSnapshot = async () => {
-      await waitForAuthStateSettlement();
-      const user = auth.currentUser;
-
-      if (!user || user.isAnonymous) {
-        throw createFirebaseError("auth/no-current-user", "Сессия авторизации не активна. Войдите в аккаунт на главной странице.");
-      }
-
-      let actorSnapshot = window.sakuraCurrentUserSnapshot;
-
-      if (!actorSnapshot || actorSnapshot.isAnonymous || actorSnapshot.uid !== user.uid) {
-        actorSnapshot = await resolveUserSnapshot(user);
-      }
-
-      const actorRoles = actorSnapshot?.roles ?? [];
-      const isActorAllowed = actorSnapshot?.profileId === 1 || canManageRoles(actorRoles) || actorRoles.some((r) =>
-        ROLE_MANAGER_NAMES.has(normalizeRoleName(r))
-      );
-      if (!isActorAllowed) {
-        throw createFirebaseError(
-          "admin/forbidden",
-          "Only root and co-owner accounts can use the admin panel."
-        );
-      }
-
-      return {
-        user,
-        actorSnapshot,
-      };
-    };
-    const refreshStoredUserSnapshot = async (uid, fallbackDetails = {}) => {
-      const refreshedSnapshot = await getDoc(userRefFor(uid));
-      const snapshot = toStoredUserSnapshot(
-        uid,
-        refreshedSnapshot.exists() ? refreshedSnapshot.data() : fallbackDetails
-      );
-
-      syncCurrentUserSnapshotFromStoredSnapshot(snapshot);
-
-      return snapshot;
-    };
-    const enforceActiveSessionNotBanned = async (snapshot, options = {}) => {
-      if (!snapshot?.isBanned) {
-        return snapshot;
-      }
-
-      const message = "This account has been banned by an administrator.";
-
-      stopPresenceTracking();
-      window.sakuraFirebaseAuthError = message;
-      window.dispatchEvent(new CustomEvent(AUTH_ERROR_EVENT));
-
-      try {
-        await signOut(auth);
-      } catch (error) {
-      }
-
-      publishUserSnapshot(null);
-
-      if (options.throwError !== false) {
-        throw createFirebaseError("auth/account-banned", message);
-      }
-
-      return null;
-    };
-    const isEmailVerificationLocked = (snapshot) =>
-      Boolean(
-        snapshot &&
-          !snapshot.isAnonymous &&
-          snapshot.email &&
-          snapshot.emailVerified === false &&
-          snapshot.verificationRequired !== false
-      );
-    const ensureVerifiedSessionAccess = async (user, message) => {
-      let actorSnapshot = window.sakuraCurrentUserSnapshot;
-
-      if (!actorSnapshot || actorSnapshot.isAnonymous || actorSnapshot.uid !== user.uid) {
-        actorSnapshot = await resolveUserSnapshot(user);
-      }
-
-      if (isEmailVerificationLocked(actorSnapshot)) {
-        try {
-          await reload(user);
-        } catch (error) {}
-
-        actorSnapshot = await resolveUserSnapshot(user);
-      }
-
-      if (isEmailVerificationLocked(actorSnapshot)) {
-        throw createFirebaseError(
-          "auth/email-not-verified",
-          message || "Verify your email before using profile actions."
-        );
-      }
-
-      return actorSnapshot;
-    };
-    const findUserByLogin = async (loginLower) => {
-      const snapshot = await getDocs(
-        query(usersCollection, where("loginLower", "==", loginLower), limit(1))
-      );
-
-      return snapshot.empty ? null : snapshot.docs[0];
-    };
-    const findUsersByLoginPrefix = async (loginPrefix) => {
-      const normalizedPrefix = normalizeLogin(loginPrefix);
-
-      if (!normalizedPrefix || normalizedPrefix.length < 2) {
-        return [];
-      }
-
-      const snapshot = await getDocs(
-        query(
-          usersCollection,
-          where("loginLower", ">=", normalizedPrefix),
-          where("loginLower", "<=", normalizedPrefix + "\uf8ff"),
-          limit(8)
-        )
-      );
-
-      return snapshot.docs.filter((userDoc) => {
-        const userDetails = userDoc.data();
-        const userLoginLower =
-          typeof userDetails?.loginLower === "string"
-            ? userDetails.loginLower
-            : normalizeLogin(typeof userDetails?.login === "string" ? userDetails.login : "");
-
-        return Boolean(userLoginLower) && userLoginLower.startsWith(normalizedPrefix);
-      });
-    };
-    const findUserByAuthorName = async (authorName) => {
-      const normalizedAuthorName = normalizeProfileCommentAuthorName(authorName);
-
-      if (!normalizedAuthorName) {
-        return null;
-      }
-
-      const loginLower = normalizeLogin(normalizedAuthorName);
-
-      if (loginLower) {
-        const userByLoginLower = await findUserByLogin(loginLower);
-
-        if (userByLoginLower) {
-          return userByLoginLower;
-        }
-      }
-
-      const userByLogin = await getDocs(
-        query(usersCollection, where("login", "==", normalizedAuthorName), limit(1))
-      );
-
-      if (!userByLogin.empty) {
-        return userByLogin.docs[0];
-      }
-
-      const userByDisplayName = await getDocs(
-        query(usersCollection, where("displayName", "==", normalizedAuthorName), limit(1))
-      );
-
-      if (!userByDisplayName.empty) {
-        return userByDisplayName.docs[0];
-      }
-
-      const authorLookupKey = normalizeProfileCommentAuthorLookupKey(normalizedAuthorName);
-      const userCandidates = await getDocs(query(usersCollection, limit(200)));
-
-      for (const userDoc of userCandidates.docs) {
-        const userDetails = userDoc.data();
-        const candidateKeys = [
-          normalizeProfileCommentAuthorLookupKey(typeof userDetails?.login === "string" ? userDetails.login : ""),
-          normalizeProfileCommentAuthorLookupKey(typeof userDetails?.displayName === "string" ? userDetails.displayName : ""),
-          typeof userDetails?.profileId === "number"
-            ? normalizeProfileCommentAuthorLookupKey("Profile #" + userDetails.profileId)
-            : "",
-        ].filter(Boolean);
-
-        if (candidateKeys.includes(authorLookupKey)) {
-          return userDoc;
-        }
-      }
-
-      return null;
-    };
-
-    const findUserByProfileId = async (profileId) => {
-      const snapshot = await getDocs(
-        query(usersCollection, where("profileId", "==", profileId), limit(1))
-      );
-
-      return snapshot.empty ? null : snapshot.docs[0];
-    };
-    const uploadAvatarToStorage = async (uid, file) => {
-      const extension = getAvatarStorageExtension(file);
-
-      if (!extension) {
-        return null;
-      }
-
-      const { getDownloadURL, storage, storageRef, uploadBytes } = await ensureStorageSdk();
-      const avatarRef = storageRef(storage, \`avatars/\${uid}/avatar.\${extension}\`);
-
-      await uploadBytes(avatarRef, file, {
-        contentType: file.type,
-        cacheControl: "public,max-age=3600",
-      });
-
-      const downloadURL = await getDownloadURL(avatarRef);
-      return \`\${downloadURL}\${downloadURL.includes("?") ? "&" : "?"}v=\${Date.now()}\`;
-    };
-    const resolvePersistedAvatarUrl = async (uid, file) => {
-      if (STORAGE_AVATAR_UPLOADS_ENABLED && STORAGE_AVATAR_CONTENT_TYPES.has(file.type)) {
-        try {
-          const storageUploadPromise = uploadAvatarToStorage(uid, file);
-          const storagePhotoURL = await Promise.race([
-            storageUploadPromise,
-            new Promise((_, reject) => {
-              window.setTimeout(() => {
-                reject(
-                  createFirebaseError(
-                    "storage/upload-timeout",
-                    "Avatar storage upload timed out."
-                  )
-                );
-              }, AVATAR_STORAGE_UPLOAD_TIMEOUT_MS);
-            }),
-          ]).catch((error) => {
-            storageUploadPromise.catch(() => {});
-            throw error;
-          });
-
-          if (storagePhotoURL) {
-            return storagePhotoURL;
-          }
-        } catch (error) {
-          console.error("Failed to upload avatar to storage, falling back to inline data URL:", error);
-        }
-      }
-
-      return createInlineAvatarDataUrl(file);
-    };
-    const deleteAvatarFromStorage = async (uid) => {
-      const extensions = ["gif", "webp", "mp4", "webm"];
-      const { deleteObject, storage, storageRef } = await ensureStorageSdk();
-
-      await Promise.all(
-        extensions.map(async (extension) => {
-          try {
-            await deleteObject(storageRef(storage, \`avatars/\${uid}/avatar.\${extension}\`));
-          } catch (error) {
-            const errorCode = getErrorCode(error);
-
-            if (
-              errorCode === "storage/object-not-found" ||
-              errorCode === "storage/unknown" ||
-              errorCode === "object-not-found"
-            ) {
-              return;
-            }
-
-            throw error;
-          }
-        })
-      );
-    };
-
-    const toAnonymousViewerSnapshot = (user) => ({
-      uid: user.uid,
-      isAnonymous: true,
-      email: null,
-      login: null,
-      displayName: null,
-      profileId: null,
-      photoURL: null,
-      roles: [],
-      providerIds: ["anonymous"],
-      creationTime: user.metadata.creationTime ?? null,
-      lastSignInTime: user.metadata.lastSignInTime ?? null,
-      loginHistory: [],
-      visitHistory: [],
-      presence: null,
-    });
-
-    const ensureProfileViewer = async () => {
-      if (auth.currentUser) {
-        return auth.currentUser;
-      }
-
-      try {
-        const credentials = await signInAnonymously(auth);
-        return credentials.user;
-      } catch (error) {
-        throw createFirebaseError(
-          "profile/public-view-disabled",
-          "Public profile viewing is not enabled yet. Turn on Anonymous Auth or allow public read access in Firestore rules."
-        );
-      }
-    };
-
-    const resolveAvailableLogin = async (requestedLogin, currentUid = null, automatic = false) => {
-      const normalizedRequestedLogin = String(requestedLogin ?? "")
-        .trim()
-        .replace(/\\s+/g, "");
-      const baseLogin = sanitizeLogin(normalizedRequestedLogin);
-
-      if (
-        !baseLogin ||
-        baseLogin.length < LOGIN_MIN_LENGTH ||
-        (!automatic &&
-          (normalizedRequestedLogin.length > LOGIN_MAX_LENGTH ||
-            !LOGIN_PATTERN.test(normalizedRequestedLogin) ||
-            baseLogin !== normalizedRequestedLogin))
-      ) {
-        throw createFirebaseError(
-          "auth/invalid-login",
-          "Username must be 3-24 characters and only contain letters, numbers, dots, underscores, or hyphens."
-        );
-      }
-
-      for (let attempt = 0; attempt < 20; attempt += 1) {
-        const suffix = attempt === 0 ? "" : String(attempt + 1);
-        const trimmedBase = baseLogin.slice(0, LOGIN_MAX_LENGTH - suffix.length);
-        const login = \`\${trimmedBase}\${suffix}\`;
-        const loginLower = normalizeLogin(login);
-        const existingLoginDoc = await findUserByLogin(loginLower);
-
-        if (!existingLoginDoc || existingLoginDoc.id === currentUid) {
-          return {
-            login,
-            loginLower,
-          };
-        }
-
-        if (!automatic) {
-          throw createFirebaseError(
-            "auth/login-already-in-use",
-            "This username is already taken."
-          );
-        }
-      }
-
-      throw createFirebaseError(
-        "auth/login-already-in-use",
-        "This username is already taken."
-      );
-    };
-
-    const resolveEmailForLogin = async (identifier) => {
-      const trimmedIdentifier = identifier.trim();
-
-      if (trimmedIdentifier.includes("@")) {
-        return trimmedIdentifier;
-      }
-
-      const loginLower = normalizeLogin(trimmedIdentifier);
-
-      if (!loginLower) {
-        throw createFirebaseError("auth/invalid-login", "Invalid username.");
-      }
-
-      const userDoc = await findUserByLogin(loginLower);
-
-      if (!userDoc) {
-        throw createFirebaseError("auth/login-not-found", "Username not found.");
-      }
-
-      const userData = userDoc.data();
-
-      if (typeof userData?.email !== "string" || !userData.email) {
-        throw createFirebaseError("auth/login-not-found", "Username not found.");
-      }
-
-      return userData.email;
-    };
-
-    const syncPresence = async (user, options = {}) => {
-      const presenceRuntime = await ensurePresenceRuntime();
-      return presenceRuntime.syncPresence(user, options);
-    };
-
-    const ensureProfileRecord = async (user, options = {}) => {
-      const userRef = userRefFor(user.uid);
-      const userSnapshot = await getDoc(userRef);
-      const existingData = userSnapshot.exists() ? userSnapshot.data() : null;
-      const existingProfileId =
-        typeof existingData?.profileId === "number" ? existingData.profileId : null;
-      const providerIds = getProviderIds(user);
-      const preferredDisplayName =
-        typeof options.preferredDisplayName === "string" && options.preferredDisplayName.trim()
-          ? options.preferredDisplayName.trim()
-          : null;
-
-      const loginDetails =
-        typeof existingData?.login === "string" && typeof existingData?.loginLower === "string"
-          ? {
-              login: existingData.login,
-              loginLower: existingData.loginLower,
-            }
-          : typeof options.requestedLogin === "string" && options.requestedLogin.trim()
-            ? await resolveAvailableLogin(options.requestedLogin, user.uid)
-            : {
-                login: null,
-                loginLower: null,
-              };
-
-      const loginHistory = buildLoginHistory(
-        existingData?.loginHistory,
-        user.metadata.creationTime ?? null,
-        user.metadata.lastSignInTime ?? null
-      );
-      const visitHistory = normalizeVisitHistory(existingData?.visitHistory);
-      const presence = normalizePresence(existingData?.presence, window.location.pathname);
-      const roles = normalizeRoles(existingData?.roles);
-      const storedEmailVerified =
-        typeof existingData?.emailVerified === "boolean" ? existingData.emailVerified : null;
-      const storedVerificationRequired =
-        typeof existingData?.verificationRequired === "boolean"
-          ? existingData.verificationRequired
-          : null;
-      const storedVerificationEmailSent =
-        typeof existingData?.verificationEmailSent === "boolean"
-          ? existingData.verificationEmailSent
-          : null;
-      const profilePayload = {
-        uid: user.uid,
-        email: user.email ?? null,
-        emailVerified:
-          storedEmailVerified !== null ? storedEmailVerified : Boolean(user.emailVerified),
-        login: loginDetails.login,
-        loginLower: loginDetails.loginLower,
-        displayName:
-          preferredDisplayName ??
-          existingData?.displayName ??
-          user.displayName ??
-          loginDetails.login ??
-          existingData?.email?.split("@")[0] ??
-          user.email?.split("@")[0] ??
-          "Sakura User",
-        photoURL: resolvePhotoURL(existingData, null),
-        hwid: resolveHwid(existingData, null),
-        subscriptionUntil: resolveSubscriptionUntil(existingData, null),
-        subscription_until: resolveSubscriptionUntil(existingData, null),
-        roles,
-        isBanned: existingData?.isBanned === true,
-        bannedAt: resolveBannedAt(existingData),
-        verificationRequired:
-          storedVerificationRequired !== null
-            ? storedVerificationRequired
-            : requiresEmailVerification(roles),
-        verificationEmailSent:
-          storedVerificationEmailSent !== null ? storedVerificationEmailSent : false,
-        providerIds,
-        creationTime: user.metadata.creationTime ?? null,
-        lastSignInTime: user.metadata.lastSignInTime ?? null,
-        loginHistory,
-        visitHistory,
-        presence,
-        referredBy: existingData?.referredBy || (typeof window !== "undefined" ? window.localStorage?.getItem("sakura_ref") : null) || null,
-        updatedAt: new Date().toISOString(),
-      };
-
-      const writeProfileData = async (profileId) => {
-        await setDoc(
-          userRef,
-          { ...profilePayload, profileId },
-          { merge: true }
-        );
-
-        return {
-          ...profilePayload,
-          profileId,
-        };
-      };
-
-      if (existingProfileId !== null) {
-        try {
-          return await writeProfileData(existingProfileId);
-        } catch (error) {
-          if (!isPermissionDeniedError(error)) {
-            throw error;
-          }
-
-          const storedDetails = buildUserDetailsFromSnapshot(user, {
-            ...profilePayload,
-            ...existingData,
-          });
-
-          if (hasAssignedProfileId(storedDetails)) {
-            return storedDetails;
-          }
-
-          throw error;
-        }
-      }
-
-      let nextProfileId;
-
-      try {
-        nextProfileId = await runTransaction(db, async (transaction) => {
-          const userSnapshotInTransaction = await transaction.get(userRef);
-          const existingTransactionData = userSnapshotInTransaction.exists()
-            ? userSnapshotInTransaction.data()
-            : null;
-          const existingTransactionProfileId =
-            typeof existingTransactionData?.profileId === "number"
-              ? existingTransactionData.profileId
-              : null;
-
-          if (existingTransactionProfileId !== null) {
-            return existingTransactionProfileId;
-          }
-
-          const countersSnapshot = await transaction.get(countersRef);
-          const currentCount =
-            countersSnapshot.exists() && typeof countersSnapshot.data()?.profileCount === "number"
-              ? countersSnapshot.data().profileCount
-              : 0;
-          const profileId = currentCount + 1;
-
-          transaction.set(countersRef, { profileCount: profileId }, { merge: true });
-          transaction.set(
-            userRef,
-            { ...profilePayload, profileId },
-            { merge: true }
-          );
-
-          return profileId;
-        });
-      } catch (error) {
-        if (isPermissionDeniedError(error)) {
-          const storedDetails = await readStoredProfileDetails(user, profilePayload).catch((readError) => {
-            if (!isPermissionDeniedError(readError)) {
-              throw readError;
-            }
-
-            return null;
-          });
-
-          if (storedDetails) {
-            return storedDetails;
-          }
-        }
-
-        throw error;
-      }
-
-      const finalSnapshot = await getDoc(userRef);
-      const finalData = finalSnapshot.exists() ? finalSnapshot.data() : null;
-
-      return {
-        ...profilePayload,
-        ...(finalData ?? {}),
-        login: typeof finalData?.login === "string" ? finalData.login : profilePayload.login,
-        loginLower:
-          typeof finalData?.loginLower === "string"
-            ? finalData.loginLower
-            : profilePayload.loginLower,
-        displayName:
-          typeof finalData?.displayName === "string"
-            ? finalData.displayName
-            : profilePayload.displayName,
-        roles: normalizeRoles(finalData?.roles ?? roles),
-        hwid: resolveHwid(finalData, profilePayload.hwid),
-        subscriptionUntil: resolveSubscriptionUntil(
-          finalData,
-          profilePayload.subscriptionUntil
-        ),
-        subscription_until: resolveSubscriptionUntil(
-          finalData,
-          profilePayload.subscriptionUntil
-        ),
-        providerIds: Array.isArray(finalData?.providerIds) ? finalData.providerIds : providerIds,
-        loginHistory: Array.isArray(finalData?.loginHistory) ? finalData.loginHistory : loginHistory,
-        visitHistory: normalizeVisitHistory(finalData?.visitHistory ?? visitHistory),
-        presence: normalizePresence(finalData?.presence, window.location.pathname),
-        profileId: typeof finalData?.profileId === "number" ? finalData.profileId : nextProfileId,
-      };
-    };
-
-    const resolveUserSnapshot = async (user, options = {}) => {
-      // 1. Fast path: load profile directly from Supabase
-      if (user && !user.isAnonymous) {
-        try {
-          const supabaseRows = await fetchSupabaseRows("public_profiles", {
-            firebase_uid: "eq." + user.uid,
-            limit: 1,
-          });
-          if (Array.isArray(supabaseRows) && supabaseRows[0]) {
-            const mapped = mapSupabaseProfileRowToSnapshot(supabaseRows[0]);
-            if (mapped && typeof mapped.profileId === "number" && mapped.profileId > 0) {
-              return publishUserSnapshot(toUserSnapshot(user, mapped));
-            }
-          }
-        } catch (sbErr) {
-          console.warn("Supabase fast profile lookup failed, falling back to Firestore:", sbErr);
-        }
-      }
-
-      try {
-        const details = await ensureProfileRecord(user, options);
-
-        return publishUserSnapshot(toUserSnapshot(user, details));
-      } catch (error) {
-        if (!isPermissionDeniedError(error)) {
-          throw error;
-        }
-
-        const fallbackDetails = buildFallbackUserDetails(user, options);
-        const storedDetails = await readStoredProfileDetails(user, fallbackDetails).catch((readError) => {
-          if (!isPermissionDeniedError(readError)) {
-            throw readError;
-          }
-
-          return null;
-        });
-
-        if (storedDetails) {
-          return publishUserSnapshot(toUserSnapshot(user, storedDetails));
-        }
-
-        if (!user.isAnonymous) {
-          throw createFirebaseError(
-            "profile/record-missing",
-            "Profile record could not be created or loaded. Check Firestore rules for users/{uid} and meta/counters."
-          );
-        }
-
-        return publishUserSnapshot(toUserSnapshot(user, fallbackDetails));
-      }
-    };
-
-    const startPresenceTracking = async (user) => {
-      stopPresenceTracking();
-      const presenceRuntime = await ensurePresenceRuntime();
-      stopPresenceTracking = presenceRuntime.startPresenceTracking(user);
-      return stopPresenceTracking;
-    };
-
-    const updateUsername = async (nextUsername, currentPassword = "") => {
-      const user = auth.currentUser;
-
-      if (!user || user.isAnonymous) {
-        throw createFirebaseError("auth/no-current-user", "Sign in again to update your username.");
-      }
-
-      await ensureVerifiedSessionAccess(user, "Verify your email before changing the login.");
-
-      const providerIds = getProviderIds(user);
-
-      if (providerIds.includes("password")) {
-        const email = typeof user.email === "string" ? user.email.trim() : "";
-
-        if (!currentPassword) {
-          throw createFirebaseError(
-            "auth/current-password-required",
-            "Enter your current password to change the login."
-          );
-        }
-
-        if (!email) {
-          throw createFirebaseError(
-            "auth/current-password-required",
-            "This account cannot verify the current password right now."
-          );
-        }
-
-        try {
-          await reauthenticateWithCredential(
-            user,
-            EmailAuthProvider.credential(email, currentPassword)
-          );
-        } catch (error) {
-          const errorCode = getErrorCode(error);
-
-          if (
-            errorCode === "auth/wrong-password" ||
-            errorCode === "auth/invalid-credential" ||
-            errorCode === "auth/user-mismatch"
-          ) {
-            throw createFirebaseError(
-              "auth/current-password-invalid",
-              "Current password is incorrect."
-            );
-          }
-
-          throw error;
-        }
-      }
-
-      const usernameDetails = await resolveAvailableLogin(nextUsername, user.uid);
-      const userRef = userRefFor(user.uid);
-      const existingSnapshot = await getDoc(userRef);
-      const existingData = existingSnapshot.exists() ? existingSnapshot.data() : {};
-      const hasStoredProfileRecord =
-        existingSnapshot.exists() && typeof existingData?.profileId === "number";
-      if (!hasStoredProfileRecord) {
-        return resolveUserSnapshot(user, {
-          requestedLogin: usernameDetails.login,
-        });
-      }
-
-      try {
-        await setDoc(
-          userRef,
-          {
-            login: usernameDetails.login,
-            loginLower: usernameDetails.loginLower,
-            updatedAt: new Date().toISOString(),
-          },
-          { merge: true }
-        );
-      } catch (error) {
-        if (!isPermissionDeniedError(error)) {
-          throw error;
-        }
-
-        if (!hasStoredProfileRecord) {
-          return resolveUserSnapshot(user, {
-            requestedLogin: usernameDetails.login,
-          });
-        }
-
-        throw createFirebaseError(
-          "username/persist-failed",
-          "Username could not be saved. Check Firestore rules for users/{uid}."
-        );
-      }
-
-      const snapshot = publishUserSnapshot(
-        toUserSnapshot(user, {
-          ...existingData,
-          login: usernameDetails.login,
-          loginLower: usernameDetails.loginLower,
-        })
-      );
-
-      return snapshot;
-    };
-    const updatePasswordWithCurrent = async (currentPassword, nextPassword) => {
-      const user = auth.currentUser;
-
-      if (!user || user.isAnonymous) {
-        throw createFirebaseError("auth/no-current-user", "Sign in again to update your password.");
-      }
-
-      await ensureVerifiedSessionAccess(user, "Verify your email before changing the password.");
-
-      const currentPasswordValue = typeof currentPassword === "string" ? currentPassword : "";
-      const nextPasswordValue = typeof nextPassword === "string" ? nextPassword : "";
-      const email = typeof user.email === "string" ? user.email.trim() : "";
-
-      if (!currentPasswordValue) {
-        throw createFirebaseError(
-          "auth/current-password-required",
-          "Enter your current password."
-        );
-      }
-
-      if (!email) {
-        throw createFirebaseError(
-          "auth/missing-email-for-password-reset",
-          "This account does not have a linked email for password recovery."
-        );
-      }
-
-      if (!nextPasswordValue || nextPasswordValue.length < 6) {
-        throw createFirebaseError(
-          "auth/weak-password",
-          "Password must contain at least 6 characters."
-        );
-      }
-
-      try {
-        await reauthenticateWithCredential(
-          user,
-          EmailAuthProvider.credential(email, currentPasswordValue)
-        );
-      } catch (error) {
-        const errorCode = getErrorCode(error);
-
-        if (
-          errorCode === "auth/wrong-password" ||
-          errorCode === "auth/invalid-credential" ||
-          errorCode === "auth/user-mismatch"
-        ) {
-          throw createFirebaseError(
-            "auth/current-password-invalid",
-            "Current password is incorrect."
-          );
-        }
-
-        throw error;
-      }
-
-      await updatePassword(user, nextPasswordValue);
-
-      const snapshot = await resolveUserSnapshot(user);
-      return enforceActiveSessionNotBanned(snapshot);
-    };
-    const sendPasswordReset = async (identifier) => {
-      const normalizedIdentifier = typeof identifier === "string" ? identifier.trim() : "";
-
-      if (!normalizedIdentifier) {
-        throw createFirebaseError("auth/invalid-email", "Enter your email or login.");
-      }
-
-      const email = await resolveEmailForLogin(normalizedIdentifier);
-      await sendPasswordResetEmail(auth, email);
-      return { email };
-    };
-    const deleteCurrentAccount = async () => {
-      const user = auth.currentUser;
-      const userId = user?.uid ?? null;
-
-      if (!user || user.isAnonymous) {
-        throw createFirebaseError("auth/no-current-user", "Sign in again to delete the account.");
-      }
-
-      try {
-        await deleteUser(user);
-      } catch (error) {
-        if (getErrorCode(error) === "auth/requires-recent-login") {
-          throw createFirebaseError(
-            "auth/requires-recent-login",
-            "Sign in again and retry account deletion."
-          );
-        }
-
-        throw error;
-      }
-
-      stopPresenceTracking();
-      publishUserSnapshot(null);
-
-      if (userId) {
-        try {
-          await deleteDoc(userRefFor(userId));
-        } catch (error) {
-          if (!isPermissionDeniedError(error)) {
-            console.error("Failed to cleanup profile record after account deletion:", error);
-          }
-        }
-      }
-
-      try {
-        await signOut(auth);
-      } catch {}
-    };
-    const updateDisplayName = async (nextDisplayName) => {
-      const user = auth.currentUser;
-
-      if (!user || user.isAnonymous) {
-        throw createFirebaseError("auth/no-current-user", "Sign in again to update your profile name.");
-      }
-
-      await ensureVerifiedSessionAccess(user, "Verify your email before changing the profile name.");
-
-      const sanitizedDisplayName = sanitizeDisplayName(nextDisplayName);
-
-      if (!sanitizedDisplayName) {
-        throw createFirebaseError("display-name/empty", "Enter a profile name.");
-      }
-
-      const userRef = userRefFor(user.uid);
-      const existingSnapshot = await getDoc(userRef);
-      const existingData = existingSnapshot.exists() ? existingSnapshot.data() : {};
-      const hasStoredProfileRecord =
-        existingSnapshot.exists() && typeof existingData?.profileId === "number";
-      const syncAuthDisplayNameIfNeeded = async () => {
-        if ((typeof user.displayName === "string" ? user.displayName.trim() : null) !== sanitizedDisplayName) {
-          try {
-            await updateProfile(user, { displayName: sanitizedDisplayName });
-          } catch (error) {
-            console.error("Failed to sync Firebase Auth displayName after profile name change:", error);
-          }
-        }
-      };
-
-      if (!hasStoredProfileRecord) {
-        const recoveredSnapshot = await resolveUserSnapshot(user, {
-          preferredDisplayName: sanitizedDisplayName,
-        });
-
-        await syncAuthDisplayNameIfNeeded();
-        return recoveredSnapshot;
-      }
-
-      try {
-        await setDoc(
-          userRef,
-          {
-            displayName: sanitizedDisplayName,
-            updatedAt: new Date().toISOString(),
-          },
-          { merge: true }
-        );
-      } catch (error) {
-        if (!isPermissionDeniedError(error)) {
-          throw error;
-        }
-
-        if (!hasStoredProfileRecord) {
-          const recoveredSnapshot = await resolveUserSnapshot(user, {
-            preferredDisplayName: sanitizedDisplayName,
-          });
-
-          await syncAuthDisplayNameIfNeeded();
-          return recoveredSnapshot;
-        }
-
-        throw createFirebaseError(
-          "display-name/persist-failed",
-          "Profile name could not be saved. Check Firestore rules for users/{uid}."
-        );
-      }
-
-      await syncAuthDisplayNameIfNeeded();
-
-      return publishUserSnapshot(
-        toUserSnapshot(user, {
-          ...existingData,
-          displayName: sanitizedDisplayName,
-        })
-      );
-    };
-
-    const completeGoogleAccount = async ({ login, displayName, password }) => {
-      const user = auth.currentUser;
-
-      if (!user || user.isAnonymous) {
-        throw createFirebaseError(
-          "auth/no-current-user",
-          "Sign in with Google again to finish the account setup."
-        );
-      }
-
-      if (!user.email) {
-        throw createFirebaseError(
-          "auth/missing-email",
-          "This Google account does not provide an email for password sign-in."
-        );
-      }
-
-      const providerIdsBeforeLink = getProviderIds(user);
-      const loginDetails = await resolveAvailableLogin(login, user.uid);
-      const sanitizedDisplayName = sanitizeDisplayName(displayName);
-
-      if (!password || String(password).length < 6) {
-        throw createFirebaseError(
-          "auth/weak-password",
-          "Password should be at least 6 characters."
-        );
-      }
-
-      if (!providerIdsBeforeLink.includes("password")) {
-        try {
-          await linkWithCredential(
-            user,
-            EmailAuthProvider.credential(user.email, password)
-          );
-        } catch (error) {
-          const errorCode = getErrorCode(error);
-
-          if (errorCode !== "auth/provider-already-linked") {
-            throw error;
-          }
-        }
-      }
-
-      if (sanitizedDisplayName) {
-        try {
-          await updateProfile(user, { displayName: sanitizedDisplayName });
-        } catch (error) {
-          console.error("Failed to sync Firebase Auth displayName after Google completion:", error);
-        }
-      }
-
-      await setDoc(
-        userRefFor(user.uid),
-        stripNullishFields({
-          login: loginDetails.login,
-          loginLower: loginDetails.loginLower,
-          displayName: sanitizedDisplayName || user.displayName || loginDetails.login,
-          providerIds: getProviderIds(user),
-          updatedAt: new Date().toISOString(),
-        }),
-        { merge: true }
-      );
-
-      const snapshot = await resolveUserSnapshot(user, {
-        requestedLogin: loginDetails.login,
-        preferredDisplayName:
-          sanitizedDisplayName || user.displayName || loginDetails.login,
-      });
-      const allowedSnapshot = await enforceActiveSessionNotBanned(snapshot);
-
-      await syncPresence(user, {
-        path: window.location.pathname,
-        source: "google-complete",
-        forceVisit: true,
-      });
-
-      void syncSupabaseProfileRecord(user, allowedSnapshot, "google-complete").catch((error) => {
-        console.error("Failed to sync profile to Supabase after Google completion:", error);
-      });
-
-      return allowedSnapshot;
-    };
-
-    const finalizeGoogleSignIn = async (user) => {
-      try {
-        const snapshot = await resolveUserSnapshot(user, {
-          preferredDisplayName: user.displayName?.trim() || null,
-        });
-        const allowedSnapshot = await enforceActiveSessionNotBanned(snapshot);
-        await syncPresence(user, {
-          path: window.location.pathname,
-          source: "google-login",
-          forceVisit: true,
-        });
-
-        void syncSupabaseProfileRecord(user, allowedSnapshot, "google-login").catch((error) => {
-          console.error("Failed to sync profile to Supabase after Google login:", error);
-        });
-
-        return allowedSnapshot;
-      } catch (error) {
-        if (isProfileRecordError(error)) {
-          await clearBrokenProfileSession(
-            error instanceof Error
-              ? error.message
-              : "Profile record could not be created or loaded."
-          );
-        }
-
-        throw error;
-      }
-    };
-
-    const loginWithGoogle = async () => {
-      try {
-        const result = await signInWithPopup(auth, provider);
-        return await finalizeGoogleSignIn(result.user);
-      } catch (error) {
-        if (shouldFallbackGooglePopupToRedirect(error)) {
-          rememberGoogleRedirectIntent();
-          await signInWithRedirect(auth, provider);
-          return null;
-        }
-
-        throw error;
-      }
-    };
-
-    const getProfileById = async (profileId) => {
-      if (!Number.isInteger(profileId) || profileId <= 0) {
-        throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
-      }
-
-      if (
-        window.sakuraCurrentUserSnapshot &&
-        !window.sakuraCurrentUserSnapshot.isAnonymous &&
-        window.sakuraCurrentUserSnapshot.profileId === profileId
-      ) {
-        if (hasProfileAvatarData(window.sakuraCurrentUserSnapshot)) {
-          return window.sakuraCurrentUserSnapshot;
-        }
-      }
-
-      const cachedProfileSnapshot = readRuntimeCacheEntry(
-        profileByIdRuntimeCache,
-        String(profileId)
-      );
-
-      if (cachedProfileSnapshot.hit) {
-        return cachedProfileSnapshot.value;
-      }
-
-      return runCachedLookup(
-        profileByIdRuntimeCache,
-        String(profileId),
-        PROFILE_RUNTIME_CACHE_TTL_MS,
-        "profile-by-id:" + profileId,
-        async () => {
-          const supabaseFastProfile = await fetchSupabaseProfileById(profileId).catch(() => null);
-
-          if (supabaseFastProfile && hasProfileAvatarData(supabaseFastProfile)) {
-            return cacheResolvedProfileSnapshot(supabaseFastProfile);
-          }
-
-          const readProfileDoc = async () =>
-            withTimeout(
-              findUserByProfileId(profileId),
-              PROFILE_LOOKUP_TIMEOUT_MS,
-              () =>
-                createFirebaseError(
-                  "profile/load-timeout",
-                  "Profile loading took too long. Refresh the page and try again."
-                )
-            );
-
-          let profileDoc = null;
-          let publicReadDenied = false;
-
-          try {
-            profileDoc = await readProfileDoc();
-          } catch (error) {
-            if (!isPermissionDeniedError(error)) {
-              throw error;
-            }
-
-            publicReadDenied = true;
-          }
-
-          if (!publicReadDenied) {
-            const firestoreProfile =
-              profileDoc ? toStoredUserSnapshot(profileDoc.id, profileDoc.data()) : null;
-
-            if (firestoreProfile && !hasProfileAvatarData(firestoreProfile)) {
-              const supabaseFallbackProfile = await fetchSupabaseProfileById(profileId);
-              return cacheResolvedProfileSnapshot(
-                mergeProfileSnapshotWithFallback(firestoreProfile, supabaseFallbackProfile)
-              );
-            }
-
-            return cacheResolvedProfileSnapshot(firestoreProfile);
-          }
-
-          await waitForAuthStateSettlement();
-
-          if (auth.currentUser && !auth.currentUser.isAnonymous) {
-            try {
-              profileDoc = await readProfileDoc();
-              const firestoreProfile =
-                profileDoc ? toStoredUserSnapshot(profileDoc.id, profileDoc.data()) : null;
-
-              if (firestoreProfile && !hasProfileAvatarData(firestoreProfile)) {
-                const supabaseFallbackProfile = await fetchSupabaseProfileById(profileId);
-                return cacheResolvedProfileSnapshot(
-                  mergeProfileSnapshotWithFallback(firestoreProfile, supabaseFallbackProfile)
-                );
-              }
-
-              return cacheResolvedProfileSnapshot(firestoreProfile);
-            } catch (error) {
-              if (!isPermissionDeniedError(error)) {
-                throw error;
-              }
-            }
-          }
-
-          const supabaseProfile = supabaseFastProfile ?? await fetchSupabaseProfileById(profileId);
-
-          if (supabaseProfile) {
-            return supabaseProfile;
-          }
-
-          const viewer = await ensureProfileViewer();
-
-          if (viewer.isAnonymous) {
-            publishUserSnapshot(toAnonymousViewerSnapshot(viewer));
-          }
-
-          try {
-            profileDoc = await readProfileDoc();
-          } catch (error) {
-            if (isPermissionDeniedError(error)) {
-              throw createFirebaseError(
-                "profile/public-view-denied",
-                "Public profile viewing is blocked by Firestore rules. Allow public read access or anonymous users to read users collection."
-              );
-            }
-
-            throw error;
-          }
-
-          const firestoreProfile =
-            profileDoc ? toStoredUserSnapshot(profileDoc.id, profileDoc.data()) : null;
-
-          if (firestoreProfile && !hasProfileAvatarData(firestoreProfile)) {
-            const supabaseFallbackProfile = await fetchSupabaseProfileById(profileId);
-            return cacheResolvedProfileSnapshot(
-              mergeProfileSnapshotWithFallback(firestoreProfile, supabaseFallbackProfile)
-            );
-          }
-
-          return cacheResolvedProfileSnapshot(firestoreProfile);
-        }
-      );
-    };
-
-    const getProfileByAuthorName = async (authorName) => {
-      const normalizedAuthorName = normalizeProfileCommentAuthorName(authorName);
-
-      if (!normalizedAuthorName) {
-        return null;
-      }
-
-      const cachedProfileSnapshot = readRuntimeCacheEntry(
-        profileByAuthorRuntimeCache,
-        normalizedAuthorName
-      );
-
-      if (cachedProfileSnapshot.hit) {
-        return cachedProfileSnapshot.value;
-      }
-
-      return runCachedLookup(
-        profileByAuthorRuntimeCache,
-        normalizedAuthorName,
-        PROFILE_RUNTIME_CACHE_TTL_MS,
-        "profile-by-author:" + normalizedAuthorName,
-        async () => {
-          const supabaseFastProfile = await fetchSupabaseProfileByAuthorName(normalizedAuthorName).catch(() => null);
-
-          if (supabaseFastProfile && hasProfileAvatarData(supabaseFastProfile)) {
-            return cacheResolvedProfileSnapshot(supabaseFastProfile);
-          }
-
-          const readProfileDoc = async () =>
-            withTimeout(
-              findUserByAuthorName(normalizedAuthorName),
-              PROFILE_LOOKUP_TIMEOUT_MS,
-              () =>
-                createFirebaseError(
-                  "profile/load-timeout",
-                  "Profile loading took too long. Refresh the page and try again."
-                )
-            );
-
-          let profileDoc = null;
-          let publicReadDenied = false;
-
-          try {
-            profileDoc = await readProfileDoc();
-          } catch (error) {
-            if (!isPermissionDeniedError(error)) {
-              throw error;
-            }
-
-            publicReadDenied = true;
-          }
-
-          if (!publicReadDenied) {
-            const firestoreProfile =
-              profileDoc ? toStoredUserSnapshot(profileDoc.id, profileDoc.data()) : null;
-
-            if (firestoreProfile && !hasProfileAvatarData(firestoreProfile)) {
-              const supabaseFallbackProfile = await fetchSupabaseProfileByAuthorName(normalizedAuthorName);
-              return cacheResolvedProfileSnapshot(
-                mergeProfileSnapshotWithFallback(firestoreProfile, supabaseFallbackProfile)
-              );
-            }
-
-            return cacheResolvedProfileSnapshot(firestoreProfile);
-          }
-
-          await waitForAuthStateSettlement();
-
-          if (auth.currentUser && !auth.currentUser.isAnonymous) {
-            try {
-              profileDoc = await readProfileDoc();
-              const firestoreProfile =
-                profileDoc ? toStoredUserSnapshot(profileDoc.id, profileDoc.data()) : null;
-
-              if (firestoreProfile && !hasProfileAvatarData(firestoreProfile)) {
-                const supabaseFallbackProfile = await fetchSupabaseProfileByAuthorName(normalizedAuthorName);
-                return cacheResolvedProfileSnapshot(
-                  mergeProfileSnapshotWithFallback(firestoreProfile, supabaseFallbackProfile)
-                );
-              }
-
-              return cacheResolvedProfileSnapshot(firestoreProfile);
-            } catch (error) {
-              if (!isPermissionDeniedError(error)) {
-                throw error;
-              }
-            }
-          }
-
-          const supabaseProfile =
-            supabaseFastProfile ?? await fetchSupabaseProfileByAuthorName(normalizedAuthorName);
-
-          if (supabaseProfile) {
-            return supabaseProfile;
-          }
-
-          const viewer = await ensureProfileViewer();
-
-          if (viewer.isAnonymous) {
-            publishUserSnapshot(toAnonymousViewerSnapshot(viewer));
-          }
-
-          try {
-            profileDoc = await readProfileDoc();
-          } catch (error) {
-            if (isPermissionDeniedError(error)) {
-              throw createFirebaseError(
-                "profile/public-view-denied",
-                "Public profile viewing is blocked by Firestore rules. Allow public read access or anonymous users to read users collection."
-              );
-            }
-
-            throw error;
-          }
-
-          const firestoreProfile =
-            profileDoc ? toStoredUserSnapshot(profileDoc.id, profileDoc.data()) : null;
-
-          if (firestoreProfile && !hasProfileAvatarData(firestoreProfile)) {
-            const supabaseFallbackProfile = await fetchSupabaseProfileByAuthorName(normalizedAuthorName);
-            return cacheResolvedProfileSnapshot(
-              mergeProfileSnapshotWithFallback(firestoreProfile, supabaseFallbackProfile)
-            );
-          }
-
-          return cacheResolvedProfileSnapshot(firestoreProfile);
-        }
-      );
-    };
-    const getProfilesByLoginPrefix = async (loginPrefix) => {
-      const normalizedPrefix = normalizeLogin(loginPrefix);
-
-      if (!normalizedPrefix || normalizedPrefix.length < 2) {
-        return [];
-      }
-
-      return runCachedLookup(
-        profilesByPrefixRuntimeCache,
-        normalizedPrefix,
-        PROFILE_SEARCH_RUNTIME_CACHE_TTL_MS,
-        "profiles-by-prefix:" + normalizedPrefix,
-        async () => {
-          const supabaseProfiles = await fetchSupabaseProfileRowsByLoginPrefix(normalizedPrefix);
-
-          try {
-            const snapshot = await withTimeout(
-              findUsersByLoginPrefix(normalizedPrefix),
-              PROFILE_LOOKUP_TIMEOUT_MS,
-              () =>
-                createFirebaseError(
-                  "profile/load-timeout",
-                  "Profile search took too long. Refresh the page and try again."
-                )
-            );
-
-            const firebaseProfiles = snapshot
-              .map((profileDoc) => cacheResolvedProfileSnapshot(toStoredUserSnapshot(profileDoc.id, profileDoc.data())))
-              .filter(Boolean)
-              .filter(
-                (profile, index, profiles) =>
-                  typeof profile.login === "string" &&
-                  normalizeLogin(profile.login)?.startsWith(normalizedPrefix) &&
-                  index === profiles.findIndex((candidate) => candidate.uid === profile.uid)
-              );
-
-            return [...supabaseProfiles, ...firebaseProfiles]
-              .filter(Boolean)
-              .filter(
-                (profile, index, profiles) =>
-                  index === profiles.findIndex((candidate) => candidate.uid === profile.uid)
-              )
-              .slice(0, 8);
-          } catch (error) {
-            if (supabaseProfiles.length) {
-              return supabaseProfiles.slice(0, 8);
-            }
-
-            throw error;
-          }
-        }
-      );
-    };
-
-    const getProfileComments = async (profileId) => {
-      if (!Number.isInteger(profileId) || profileId <= 0) {
-        throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
-      }
-
-      const commentsCacheKey = String(profileId);
-      const cachedComments = readRuntimeCacheEntry(
-        profileCommentsByIdRuntimeCache,
-        commentsCacheKey
-      );
-
-      if (cachedComments.hit) {
-        return cachedComments.value;
-      }
-
-      const cacheComments = (comments) => {
-        if (Array.isArray(comments) && comments.length > 0) {
-          return writeRuntimeCacheEntry(
-            profileCommentsByIdRuntimeCache,
-            commentsCacheKey,
-            comments,
-            PROFILE_COMMENTS_RUNTIME_CACHE_TTL_MS
-          );
-        }
-
-        return comments;
-      };
-
-      const supabaseComments = await fetchSupabaseCommentsByProfileId(profileId).catch(() => null);
-      if (Array.isArray(supabaseComments)) {
-        return cacheComments(supabaseComments);
-      }
-
-      return [];
-    };
-
-    const isCommentMediaPathReferenced = async (mediaPath) => {
-      const normalizedMediaPath =
-        typeof mediaPath === "string" ? mediaPath.trim() : "";
-
-      if (!normalizedMediaPath) {
-        return false;
-      }
-
-      const snapshot = await getDocs(
-        query(profileCommentsCollection, where("mediaPath", "==", normalizedMediaPath), limit(1))
-      );
-
-      return !snapshot.empty;
-    };
-
-    const addProfileComment = async (profileId, message, mediaFile = null) => {
-      if (!Number.isInteger(profileId) || profileId <= 0) {
-        throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
-      }
-
-      const normalizedMessage = normalizeProfileCommentMessage(message);
-
-      const user = auth.currentUser;
-
-      if (!user || user.isAnonymous) {
-        throw createFirebaseError(
-          "comments/login-required",
-          "Sign in to leave a comment on this profile."
-        );
-      }
-
-      await ensureVerifiedSessionAccess(
-        user,
-        "Verify your email before posting comments."
-      );
-
-      let authorSnapshot = window.sakuraCurrentUserSnapshot;
-      if (
-        !authorSnapshot ||
-        authorSnapshot.isAnonymous ||
-        authorSnapshot.uid !== user.uid ||
-        !hasAssignedProfileId(authorSnapshot)
-      ) {
-        authorSnapshot = await resolveUserSnapshot(user);
-      }
-
-      const commentMedia = await prepareProfileCommentMedia(mediaFile);
-
-      if (!normalizedMessage && !commentMedia) {
-        throw createFirebaseError(
-          "comments/empty-message",
-          "Write a comment or attach media before sending."
-        );
-      }
-
-      const commentRef = doc(profileCommentsCollection);
-      const createdAt = new Date().toISOString();
-      const authorName =
-        authorSnapshot?.login?.trim() ||
-        authorSnapshot?.displayName?.trim() ||
-        user.displayName?.trim() ||
-        user.email?.split("@")[0]?.trim() ||
-        (typeof authorSnapshot?.profileId === "number"
-          ? \`Profile #\${authorSnapshot.profileId}\`
-          : "Member");
-      const persistedCommentPayload = stripNullishFields({
-        profileId,
-        authorUid: user.uid,
-        authorProfileId:
-          typeof authorSnapshot?.profileId === "number" ? authorSnapshot.profileId : null,
-        authorName,
-        message: normalizedMessage,
-        mediaURL: commentMedia?.mediaURL ?? null,
-        mediaType: commentMedia?.mediaType ?? null,
-        mediaPath: commentMedia?.mediaPath ?? null,
-        mediaSize: commentMedia?.mediaSize ?? null,
-        createdAt,
-      });
-      const authorPhotoURL = resolveCommentAuthorPhotoURLForPayload(authorSnapshot);
-      const authorAccentRole = pickCommentAccentRole(authorSnapshot?.roles ?? [], "user");
-
-      const rpcResult = await callSupabaseRpc("add_profile_comment", {
-        p_profile_id: profileId,
-        p_author_profile_id: typeof authorSnapshot?.profileId === "number" ? authorSnapshot.profileId : null,
-        p_author_name: authorName,
-        p_author_photo_url: authorPhotoURL,
-        p_author_accent_role: authorAccentRole,
-        p_message: normalizedMessage,
-        p_media_url: commentMedia?.mediaURL ?? null,
-        p_media_type: commentMedia?.mediaType ?? null,
-        p_media_path: commentMedia?.mediaPath ?? null,
-        p_media_size: commentMedia?.mediaSize ?? null,
-      });
-
-      profileCommentsByIdRuntimeCache.delete(String(profileId));
-
-      const finalId = rpcResult?.id || ("cmt_" + Date.now());
-      return toStoredProfileComment(finalId, {
-        profileId,
-        authorUid: user.uid,
-        authorProfileId: typeof authorSnapshot?.profileId === "number" ? authorSnapshot.profileId : null,
-        authorName,
-        authorPhotoURL,
-        authorAccentRole,
-        message: normalizedMessage,
-        mediaURL: commentMedia?.mediaURL ?? null,
-        mediaType: commentMedia?.mediaType ?? null,
-        mediaPath: commentMedia?.mediaPath ?? null,
-        mediaSize: commentMedia?.mediaSize ?? null,
-        createdAt: rpcResult?.createdAt || new Date().toISOString(),
-      });
-    };
-
-    const deleteProfileComment = async (commentId) => {
-      const normalizedCommentId = typeof commentId === "string" ? commentId.trim() : "";
-
-      if (!normalizedCommentId) {
-        throw createFirebaseError("comments/invalid-id", "Comment id is required.");
-      }
-
-      const user = auth.currentUser;
-
-      if (!user || user.isAnonymous) {
-        throw createFirebaseError(
-          "comments/login-required",
-          "Sign in to manage comments on this profile."
-        );
-      }
-
-      await ensureVerifiedSessionAccess(
-        user,
-        "Verify your email before managing comments."
-      );
-
-      const actorProfileId = window.sakuraCurrentUserSnapshot?.profileId || 1;
-
-      const rpcResult = await callSupabaseRpc("delete_profile_comment", {
-        p_comment_id: normalizedCommentId,
-        p_actor_profile_id: actorProfileId,
-      });
-
-      if (!rpcResult.ok) {
-        throw createFirebaseError("comments/delete-denied", rpcResult.error || "Не удалось удалить комментарий.");
-      }
-
-      profileCommentsByIdRuntimeCache.clear();
-      return normalizedCommentId;
-    };
-
-    const updateProfileComment = async (commentId, message, mediaFile = null, removeMedia = false) => {
-      const normalizedCommentId = typeof commentId === "string" ? commentId.trim() : "";
-
-      if (!normalizedCommentId) {
-        throw createFirebaseError("comments/invalid-id", "Comment id is required.");
-      }
-
-      const normalizedMessage = normalizeProfileCommentMessage(message);
-
-      const user = auth.currentUser;
-
-      if (!user || user.isAnonymous) {
-        throw createFirebaseError(
-          "comments/login-required",
-          "Sign in to manage comments on this profile."
-        );
-      }
-
-      await ensureVerifiedSessionAccess(
-        user,
-        "Verify your email before editing comments."
-      );
-
-      const commentRef = doc(profileCommentsCollection, normalizedCommentId);
-      const commentSnapshot = await getDoc(commentRef);
-
-      if (!commentSnapshot.exists()) {
-        return null;
-      }
-
-      const comment = toStoredProfileComment(commentSnapshot.id, commentSnapshot.data());
-      let actorSnapshot = window.sakuraCurrentUserSnapshot;
-
-      if (!actorSnapshot || actorSnapshot.isAnonymous || actorSnapshot.uid !== user.uid) {
-        actorSnapshot = await resolveUserSnapshot(user);
-      }
-
-      const isAuthor = comment.authorUid === user.uid;
-      const hasCommentEditAccess = canManageRoles(actorSnapshot?.roles ?? []);
-
-      if (!isAuthor && !hasCommentEditAccess) {
-        throw createFirebaseError(
-          "comments/update-forbidden",
-          "You can only edit your own comments unless you are root."
-        );
-      }
-
-      const commentMedia = await prepareProfileCommentMedia(mediaFile);
-      const finalMediaURL = commentMedia
-        ? commentMedia.mediaURL
-        : (removeMedia ? null : (comment.mediaURL ?? null));
-      const finalMediaType = commentMedia
-        ? commentMedia.mediaType
-        : (removeMedia ? null : (comment.mediaType ?? null));
-      const finalMediaPath = commentMedia
-        ? commentMedia.mediaPath ?? null
-        : (removeMedia ? null : (comment.mediaPath ?? null));
-      const finalMediaSize = commentMedia
-        ? commentMedia.mediaSize ?? null
-        : (removeMedia ? null : (comment.mediaSize ?? null));
-
-      if (!normalizedMessage && !finalMediaURL) {
-        throw createFirebaseError(
-          "comments/empty-message",
-          "Write a comment or attach media before saving."
-        );
-      }
-
-      const updatedAt = new Date().toISOString();
-      const updatedBy = isAuthor ? "author" : "admin";
-
-      try {
-        await setDoc(
-          commentRef,
-          {
-            message: normalizedMessage,
-            mediaURL: finalMediaURL,
-            mediaType: finalMediaType,
-            mediaPath: finalMediaPath,
-            mediaSize: finalMediaSize,
-            updatedAt,
-            updatedBy,
-          },
-          { merge: true }
-        );
-      } catch (error) {
-        if (isFirestoreDocumentTooLargeError(error)) {
-          throw createFirebaseError(
-            "comments/media-too-large",
-            "This updated comment is too large for Firestore. Use a smaller image or GIF."
-          );
-        }
-
-        if (isPermissionDeniedError(error)) {
-          throw createFirebaseError(
-            "comments/update-denied",
-            "Comments could not be updated. Check Firestore rules for profileComments."
-          );
-        }
-
-        throw error;
-      }
-
-      if (typeof comment.profileId === "number" && comment.profileId > 0) {
-        profileCommentsByIdRuntimeCache.delete(String(comment.profileId));
-      }
-
-      return toStoredProfileComment(comment.id, {
-        ...comment,
-        message: normalizedMessage,
-        mediaURL: finalMediaURL,
-        mediaType: finalMediaType,
-        mediaPath: finalMediaPath,
-        mediaSize: finalMediaSize,
-        updatedAt,
-        updatedBy,
-      });
-    };
-
-    const updateAvatar = async (file) => {
-      const user = auth.currentUser;
-
-      if (!user) {
-        throw createFirebaseError("auth/no-current-user", "Sign in again to update your avatar.");
-      }
-
-      await ensureVerifiedSessionAccess(user, "Verify your email before updating the avatar.");
-
-      const avatarUpload = await prepareAvatarUpload(file, user.uid);
-
-      if (!avatarUpload?.photoURL) {
-        throw createFirebaseError("storage/invalid-file", "Choose an image before uploading.");
-      }
-
-      const photoURL = avatarUpload.photoURL;
-      const userRef = userRefFor(user.uid);
-      const existingSnapshot = await getDoc(userRef);
-      const existingData = existingSnapshot.exists() ? existingSnapshot.data() : {};
-      const hasStoredProfileRecord =
-        existingSnapshot.exists() && typeof existingData?.profileId === "number";
-      let persistedInFirestore = false;
-      const currentDetails = window.sakuraCurrentUserSnapshot
-        ? buildUserDetailsFromSnapshot(user, window.sakuraCurrentUserSnapshot)
-        : buildFallbackUserDetails(user);
-
-      ensureAvatarUploadAllowedForRoles(
-        avatarUpload.avatarType ?? null,
-        existingData?.roles ?? currentDetails.roles ?? ["user"]
-      );
-
-      if (!hasStoredProfileRecord) {
-        await resolveUserSnapshot(user);
-      }
-
-      try {
-        await setDoc(
-          userRef,
-          {
-            photoURL,
-            avatarPath: avatarUpload.avatarPath ?? null,
-            avatarType: avatarUpload.avatarType ?? null,
-            avatarSize: avatarUpload.avatarSize ?? null,
-            updatedAt: new Date().toISOString(),
-          },
-          { merge: true }
-        );
-        persistedInFirestore = true;
-      } catch (error) {
-        if (!isPermissionDeniedError(error)) {
-          throw error;
-        }
-
-        if (!hasStoredProfileRecord) {
-          await resolveUserSnapshot(user);
-
-          await setDoc(
-            userRef,
-            {
-              photoURL,
-              avatarPath: avatarUpload.avatarPath ?? null,
-              avatarType: avatarUpload.avatarType ?? null,
-              avatarSize: avatarUpload.avatarSize ?? null,
-              updatedAt: new Date().toISOString(),
-            },
-            { merge: true }
-          );
-          persistedInFirestore = true;
-        }
-      }
-
-      if (!persistedInFirestore || !photoURL) {
-        throw createFirebaseError(
-          "avatar/persist-failed",
-          "Avatar could not be saved. Check Firestore rules for users/{uid}."
-        );
-      }
-
-      return publishUserSnapshot(
-        toUserSnapshot(user, {
-          ...currentDetails,
-          photoURL,
-          avatarPath: avatarUpload.avatarPath ?? null,
-          avatarType: avatarUpload.avatarType ?? null,
-          avatarSize: avatarUpload.avatarSize ?? null,
-        })
-      );
-    };
-
-    const deleteAvatar = async () => {
-      const user = auth.currentUser;
-
-      if (!user) {
-        throw createFirebaseError("auth/no-current-user", "Sign in again to update your avatar.");
-      }
-
-      await ensureVerifiedSessionAccess(user, "Verify your email before updating the avatar.");
-
-      const userRef = userRefFor(user.uid);
-      const existingSnapshot = await getDoc(userRef);
-      const existingData = existingSnapshot.exists() ? existingSnapshot.data() : {};
-      const hasStoredProfileRecord =
-        existingSnapshot.exists() && typeof existingData?.profileId === "number";
-
-      if (!hasStoredProfileRecord) {
-        await resolveUserSnapshot(user);
-      }
-
-      if (STORAGE_AVATAR_UPLOADS_ENABLED) {
-        try {
-          await deleteAvatarFromStorage(user.uid);
-        } catch (error) {
-          console.error("Failed to delete avatar file from storage:", error);
-        }
-      }
-
-      try {
-        await setDoc(
-          userRef,
-          {
-            photoURL: null,
-            avatarPath: null,
-            avatarType: null,
-            avatarSize: null,
-            updatedAt: new Date().toISOString(),
-          },
-          { merge: true }
-        );
-      } catch (error) {
-        if (!isPermissionDeniedError(error)) {
-          throw error;
-        }
-
-        if (!hasStoredProfileRecord) {
-          await resolveUserSnapshot(user);
-
-          await setDoc(
-            userRef,
-            {
-              photoURL: null,
-              avatarPath: null,
-              avatarType: null,
-              avatarSize: null,
-              updatedAt: new Date().toISOString(),
-            },
-            { merge: true }
-          );
-        } else {
-          throw createFirebaseError(
-            "avatar/delete-failed",
-            "Avatar could not be deleted. Check Firestore rules for users/{uid}."
-          );
-        }
-      }
-
-      const currentDetails = window.sakuraCurrentUserSnapshot
-        ? buildUserDetailsFromSnapshot(user, window.sakuraCurrentUserSnapshot)
-        : buildFallbackUserDetails(user);
-
-      return publishUserSnapshot(
-        toUserSnapshot(user, {
-          ...currentDetails,
-          photoURL: null,
-          avatarPath: null,
-          avatarType: null,
-          avatarSize: null,
-        })
-      );
-    };
-    const adminUpdateProfileDisplayName = async (profileId, nextDisplayName) => {
-      const { user, actorSnapshot } = await ensureRootActorSnapshot();
-
-      if (!Number.isInteger(profileId) || profileId <= 0) {
-        throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
-      }
-
-      const sanitizedDisplayName = sanitizeDisplayName(nextDisplayName);
-
-      if (!sanitizedDisplayName) {
-        throw createFirebaseError("display-name/empty", "Enter a profile name.");
-      }
-
-      const targetDoc = await findUserByProfileId(profileId);
-
-      if (!targetDoc) {
-        return null;
-      }
-
-      ensureActorCanManageTargetProfile(actorSnapshot?.roles ?? [], targetDoc.data()?.roles ?? []);
-
-      try {
-        await setDoc(
-          userRefFor(targetDoc.id),
-          {
-            displayName: sanitizedDisplayName,
-            updatedAt: new Date().toISOString(),
-          },
-          { merge: true }
-        );
-      } catch (error) {
-        if (!isPermissionDeniedError(error)) {
-          throw error;
-        }
-
-        throw createFirebaseError(
-          "display-name/persist-failed",
-          "Profile name could not be saved. Check Firestore rules for privileged users."
-        );
-      }
-
-      if (targetDoc.id === user.uid) {
-        try {
-          await updateProfile(user, { displayName: sanitizedDisplayName });
-        } catch (error) {
-          console.error("Failed to sync Firebase Auth displayName from admin panel:", error);
-        }
-      }
-
-      void callSupabaseRpc("admin_manage_profile", {
-        p_actor_id: actorSnapshot?.profileId || 1,
-        p_target_id: profileId,
-        p_field: "display_name",
-        p_value: { displayName: sanitizedDisplayName }
-      });
-
-      return refreshStoredUserSnapshot(targetDoc.id, {
-        ...targetDoc.data(),
-        displayName: sanitizedDisplayName,
-      });
-    };
-    const adminUpdateProfileLogin = async (profileId, nextLogin) => {
-      const { actorSnapshot } = await ensureRootActorSnapshot();
-
-      if (!Number.isInteger(profileId) || profileId <= 0) {
-        throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
-      }
-
-      const normalizedRequestedLogin = String(nextLogin ?? "").trim().replace(/\\s+/g, "");
-
-      if (!normalizedRequestedLogin) {
-        throw createFirebaseError("auth/invalid-login", "Enter a login.");
-      }
-
-      const targetDoc = await findUserByProfileId(profileId);
-
-      if (!targetDoc) {
-        return null;
-      }
-
-      ensureActorCanManageTargetProfile(actorSnapshot?.roles ?? [], targetDoc.data()?.roles ?? []);
-
-      const targetDetails = targetDoc.data();
-      const usernameDetails = await resolveAvailableLogin(normalizedRequestedLogin, targetDoc.id);
-
-      try {
-        await setDoc(
-          userRefFor(targetDoc.id),
-          {
-            login: usernameDetails.login,
-            loginLower: usernameDetails.loginLower,
-            updatedAt: new Date().toISOString(),
-          },
-          { merge: true }
-        );
-      } catch (error) {
-        if (!isPermissionDeniedError(error)) {
-          throw error;
-        }
-
-        throw createFirebaseError(
-          "username/persist-failed",
-          "Login could not be saved. Check Firestore rules for privileged users."
-        );
-      }
-
-      void callSupabaseRpc("admin_manage_profile", {
-        p_actor_id: actorSnapshot?.profileId || 1,
-        p_target_id: profileId,
-        p_field: "login",
-        p_value: { login: usernameDetails.login }
-      });
-
-      return refreshStoredUserSnapshot(targetDoc.id, {
-        ...targetDetails,
-        login: usernameDetails.login,
-        loginLower: usernameDetails.loginLower,
-      });
-    };
-    const adminUpdateProfileThemeSong = async (profileId, nextThemeSongKey) => {
-      const { actorSnapshot } = await ensureRootActorSnapshot();
-
-      if (!Number.isInteger(profileId) || profileId <= 0) {
-        throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
-      }
-
-      const targetDoc = await findUserByProfileId(profileId);
-
-      if (!targetDoc) {
-        return null;
-      }
-
-      ensureActorCanManageTargetProfile(actorSnapshot?.roles ?? [], targetDoc.data()?.roles ?? []);
-
-      const normalizedThemeSongKey = normalizeProfileThemeSongKey(nextThemeSongKey);
-
-      if (typeof nextThemeSongKey === "string" && nextThemeSongKey.trim() && !normalizedThemeSongKey) {
-        throw createFirebaseError("profile/invalid-theme-song", "Select a valid profile track key or supported music URL.");
-      }
-
-      try {
-        await setDoc(
-          userRefFor(targetDoc.id),
-          {
-            themeSongKey: normalizedThemeSongKey,
-            updatedAt: new Date().toISOString(),
-          },
-          { merge: true }
-        );
-      } catch (error) {
-        if (!isPermissionDeniedError(error)) {
-          throw error;
-        }
-
-        throw createFirebaseError(
-          "profile/theme-song-persist-failed",
-          "Profile music could not be saved. Check Firestore rules for privileged users."
-        );
-      }
-
-      return refreshStoredUserSnapshot(targetDoc.id, {
-        ...targetDoc.data(),
-        themeSongKey: normalizedThemeSongKey,
-      });
-    };
-    const adminUpdateProfileSubscriptionUntil = async (profileId, nextSubscriptionUntil) => {
-      const { actorSnapshot } = await ensureRootActorSnapshot();
-
-      if (!Number.isInteger(profileId) || profileId <= 0) {
-        throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
-      }
-
-      const targetDoc = await findUserByProfileId(profileId);
-
-      if (!targetDoc) {
-        return null;
-      }
-
-      ensureActorCanManageTargetProfile(actorSnapshot?.roles ?? [], targetDoc.data()?.roles ?? []);
-
-      const normalizedSubscriptionUntil = resolveSubscriptionUntil(
-        { subscriptionUntil: nextSubscriptionUntil },
-        null
-      );
-
-      if (
-        typeof nextSubscriptionUntil === "string" &&
-        nextSubscriptionUntil.trim() &&
-        !normalizedSubscriptionUntil
-      ) {
-        throw createFirebaseError(
-          "profile/invalid-subscription-until",
-          "Enter a valid subscription end date."
-        );
-      }
-
-      const adminHistoryItem = {
-        id: "admin_" + Date.now(),
-        type: "admin_grant",
-        grantedBy: actorSnapshot?.login || "admin",
-        subscriptionUntil: normalizedSubscriptionUntil,
-        activatedAt: new Date().toISOString()
-      };
-      const existingAdminHistory = Array.isArray(targetDoc.data()?.activationHistory) ? targetDoc.data().activationHistory : [];
-      const updatedAdminHistory = [adminHistoryItem, ...existingAdminHistory].slice(0, 50);
-      try {
-        await setDoc(
-          userRefFor(targetDoc.id),
-          {
-            subscriptionUntil: normalizedSubscriptionUntil,
-            subscription_until: normalizedSubscriptionUntil,
-            activationHistory: updatedAdminHistory,
-            updatedAt: new Date().toISOString(),
-          },
-          { merge: true }
-        );
-      } catch (error) {
-        if (!isPermissionDeniedError(error)) {
-          throw error;
-        }
-
-        throw createFirebaseError(
-          "profile/subscription-until-persist-failed",
-          "Subscription end date could not be saved. Check Firestore rules for privileged users."
-        );
-      }
-
-      void callSupabaseRpc("admin_manage_profile", {
-        p_actor_id: actorSnapshot?.profileId || 1,
-        p_target_id: profileId,
-        p_field: "subscription_until",
-        p_value: { subscriptionUntil: normalizedSubscriptionUntil }
-      });
-
-      return refreshStoredUserSnapshot(targetDoc.id, {
-        ...targetDoc.data(),
-        subscriptionUntil: normalizedSubscriptionUntil,
-        subscription_until: normalizedSubscriptionUntil,
-      });
-    };
-    const adminResetProfileHwid = async (profileId) => {
-      const { actorSnapshot } = await ensureRootActorSnapshot();
-
-      if (!Number.isInteger(profileId) || profileId <= 0) {
-        throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
-      }
-
-      const targetDoc = await findUserByProfileId(profileId);
-
-      if (!targetDoc) {
-        return null;
-      }
-
-      ensureActorCanManageTargetProfile(actorSnapshot?.roles ?? [], targetDoc.data()?.roles ?? []);
-
-      try {
-        await setDoc(
-          userRefFor(targetDoc.id),
-          {
-            hwid: null,
-            updatedAt: new Date().toISOString(),
-          },
-          { merge: true }
-        );
-      } catch (error) {
-        if (!isPermissionDeniedError(error)) {
-          throw error;
-        }
-
-        throw createFirebaseError(
-          "profile/hwid-reset-failed",
-          "HWID could not be reset. Check Firestore rules for privileged users."
-        );
-      }
-
-      void callSupabaseRpc("admin_manage_profile", {
-        p_actor_id: actorSnapshot?.profileId || 1,
-        p_target_id: profileId,
-        p_field: "hwid",
-        p_value: {}
-      });
-
-      return refreshStoredUserSnapshot(targetDoc.id, {
-        ...targetDoc.data(),
-        hwid: null,
-      });
-    };
-    const adminUpdateProfileAvatar = async (profileId, file) => {
-      const { actorSnapshot } = await ensureRootActorSnapshot();
-
-      if (!Number.isInteger(profileId) || profileId <= 0) {
-        throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
-      }
-
-      const targetDoc = await findUserByProfileId(profileId);
-
-      if (!targetDoc) {
-        return null;
-      }
-
-      ensureActorCanManageTargetProfile(actorSnapshot?.roles ?? [], targetDoc.data()?.roles ?? []);
-
-      const avatarUpload = await prepareAvatarUpload(file, targetDoc.id);
-
-      if (!avatarUpload?.photoURL) {
-        throw createFirebaseError("storage/invalid-file", "Choose an image before uploading.");
-      }
-
-      ensureAvatarUploadAllowedForRoles(
-        avatarUpload.avatarType ?? null,
-        targetDoc.data()?.roles ?? ["user"]
-      );
-
-      const photoURL = avatarUpload.photoURL;
-
-      try {
-        await setDoc(
-          userRefFor(targetDoc.id),
-          {
-            photoURL,
-            avatarPath: avatarUpload.avatarPath ?? null,
-            avatarType: avatarUpload.avatarType ?? null,
-            avatarSize: avatarUpload.avatarSize ?? null,
-            updatedAt: new Date().toISOString(),
-          },
-          { merge: true }
-        );
-      } catch (error) {
-        if (!isPermissionDeniedError(error)) {
-          throw error;
-        }
-
-        throw createFirebaseError(
-          "avatar/persist-failed",
-          "Avatar could not be saved. Check Firestore rules for privileged users."
-        );
-      }
-
-      if (!photoURL) {
-        throw createFirebaseError(
-          "avatar/persist-failed",
-          "Avatar could not be saved. Check Firestore rules for privileged users."
-        );
-      }
-
-      return refreshStoredUserSnapshot(targetDoc.id, {
-        ...targetDoc.data(),
-        photoURL,
-        avatarPath: avatarUpload.avatarPath ?? null,
-        avatarType: avatarUpload.avatarType ?? null,
-        avatarSize: avatarUpload.avatarSize ?? null,
-      });
-    };
-
-    const adminDeleteProfileAvatar = async (profileId) => {
-      const { actorSnapshot } = await ensureRootActorSnapshot();
-
-      if (!Number.isInteger(profileId) || profileId <= 0) {
-        throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
-      }
-
-      const targetDoc = await findUserByProfileId(profileId);
-
-      if (!targetDoc) {
-        return null;
-      }
-
-      ensureActorCanManageTargetProfile(actorSnapshot?.roles ?? [], targetDoc.data()?.roles ?? []);
-
-      if (STORAGE_AVATAR_UPLOADS_ENABLED) {
-        try {
-          await deleteAvatarFromStorage(targetDoc.id);
-        } catch (error) {
-          console.error("Failed to delete avatar file from storage:", error);
-        }
-      }
-
-      try {
-        await setDoc(
-          userRefFor(targetDoc.id),
-          {
-            photoURL: null,
-            avatarPath: null,
-            avatarType: null,
-            avatarSize: null,
-            updatedAt: new Date().toISOString(),
-          },
-          { merge: true }
-        );
-      } catch (error) {
-        if (!isPermissionDeniedError(error)) {
-          throw error;
-        }
-
-        throw createFirebaseError(
-          "avatar/delete-failed",
-          "Avatar could not be deleted. Check Firestore rules for privileged users."
-        );
-      }
-
-      return refreshStoredUserSnapshot(targetDoc.id, {
-        ...targetDoc.data(),
-        photoURL: null,
-        avatarPath: null,
-        avatarType: null,
-        avatarSize: null,
-      });
-    };
-    const adminSetProfileBan = async (profileId, nextIsBanned) => {
-      const { user, actorSnapshot } = await ensureRootActorSnapshot();
-
-      if (!Number.isInteger(profileId) || profileId <= 0) {
-        throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
-      }
-
-      const targetDoc = await findUserByProfileId(profileId);
-
-      if (!targetDoc) {
-        return null;
-      }
-
-      ensureActorCanManageTargetProfile(actorSnapshot?.roles ?? [], targetDoc.data()?.roles ?? []);
-
-      const isBanned = Boolean(nextIsBanned);
-      const bannedAt = isBanned ? new Date().toISOString() : null;
-
-      if (targetDoc.id === user.uid && isBanned) {
-        throw createFirebaseError(
-          "ban/self-forbidden",
-          "You cannot ban your own account."
-        );
-      }
-
-      try {
-        await setDoc(
-          userRefFor(targetDoc.id),
-          {
-            isBanned,
-            bannedAt,
-            updatedAt: new Date().toISOString(),
-          },
-          { merge: true }
-        );
-      } catch (error) {
-        if (!isPermissionDeniedError(error)) {
-          throw error;
-        }
-
-        throw createFirebaseError(
-          "ban/persist-failed",
-          "Ban status could not be saved. Check Firestore rules for privileged users."
-        );
-      }
-
-      void callSupabaseRpc("admin_manage_profile", {
-        p_actor_id: actorSnapshot?.profileId || 1,
-        p_target_id: profileId,
-        p_field: "is_banned",
-        p_value: { isBanned }
-      });
-
-      const snapshot = await refreshStoredUserSnapshot(targetDoc.id, {
-        ...targetDoc.data(),
-        isBanned,
-        bannedAt,
-      });
-
-      if (targetDoc.id === user.uid && isBanned) {
-        await enforceActiveSessionNotBanned(
-          {
-            ...(window.sakuraCurrentUserSnapshot ?? snapshot),
-            ...snapshot,
-            isBanned: true,
-            bannedAt,
-          },
-          { throwError: true }
-        );
-      }
-
-      return snapshot;
-    };
-    const adminSetProfileEmailVerification = async (profileId, nextIsVerified) => {
-      const { user, actorSnapshot } = await ensureRootActorSnapshot();
-
-      if (!Number.isInteger(profileId) || profileId <= 0) {
-        throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
-      }
-
-      const targetDoc = await findUserByProfileId(profileId);
-
-      if (!targetDoc) {
-        return null;
-      }
-
-      ensureActorCanManageTargetProfile(actorSnapshot?.roles ?? [], targetDoc.data()?.roles ?? []);
-
-      const isVerified = Boolean(nextIsVerified);
-
-      if (targetDoc.id === user.uid && !isVerified) {
-        throw createFirebaseError(
-          "verification/self-forbidden",
-          "You cannot revoke email verification on your own root account."
-        );
-      }
-
-      try {
-        await setDoc(
-          userRefFor(targetDoc.id),
-          {
-            emailVerified: isVerified,
-            verificationRequired: !isVerified,
-            verificationEmailSent: false,
-            updatedAt: new Date().toISOString(),
-          },
-          { merge: true }
-        );
-      } catch (error) {
-        if (!isPermissionDeniedError(error)) {
-          throw error;
-        }
-
-        throw createFirebaseError(
-          "verification/persist-failed",
-          "Email verification status could not be saved. Check Firestore rules for privileged users."
-        );
-      }
-
-      return refreshStoredUserSnapshot(targetDoc.id, {
-        ...targetDoc.data(),
-        emailVerified: isVerified,
-        verificationRequired: !isVerified,
-        verificationEmailSent: false,
-      });
-    };
-
-    const updateProfileRoles = async (profileId, nextRoles) => {
-      const { user, actorSnapshot } = await ensureRootActorSnapshot();
-
-      if (!user || user.isAnonymous) {
-        throw createFirebaseError("auth/no-current-user", "Sign in again to manage roles.");
-      }
-
-      if (!Number.isInteger(profileId) || profileId <= 0) {
-        throw createFirebaseError("profile/invalid-id", "Profile id must be a positive number.");
-      }
-
-      const targetDoc = await findUserByProfileId(profileId);
-
-      if (!targetDoc) {
-        return null;
-      }
-
-      const roles = normalizeRoles(nextRoles);
-      const actorRoles = actorSnapshot?.roles ?? [];
-
-      ensureActorCanAssignRoles(actorRoles, targetDoc.data()?.roles ?? [], roles);
-
-      try {
-        await setDoc(
-          userRefFor(targetDoc.id),
-          {
-            roles,
-            updatedAt: new Date().toISOString(),
-          },
-          { merge: true }
-        );
-      } catch (error) {
-        if (!isPermissionDeniedError(error)) {
-          throw error;
-        }
-
-        throw createFirebaseError(
-          "roles/persist-failed",
-          "Roles could not be updated. Check Firestore rules for privileged users."
-        );
-      }
-
-      void callSupabaseRpc("admin_manage_profile", {
-        p_actor_id: actorSnapshot?.profileId || 1,
-        p_target_id: profileId,
-        p_field: "roles",
-        p_value: roles
-      });
-
-      return refreshStoredUserSnapshot(targetDoc.id, {
-        ...targetDoc.data(),
-        roles,
-      });
-    };
-
-    const freezeSubscription = async () => {
-      await waitForAuthStateSettlement();
-      const user = auth.currentUser;
-      if (!user || user.isAnonymous) {
-        throw createFirebaseError("auth/no-current-user", "Войдите в аккаунт, чтобы управлять подпиской.");
-      }
-      const userProfileId = window.sakuraCurrentUserSnapshot?.profileId;
-      if (!userProfileId) throw createFirebaseError("auth/user-not-found", "Профиль не найден.");
-
-      const res = await callSupabaseRpc("toggle_subscription_freeze", { p_profile_id: userProfileId });
-      if (!res.ok) {
-        throw createFirebaseError("subscription/error", res.error || "Не удалось заморозить подписку.");
-      }
-
-      const refreshed = await fetchSupabaseProfileById(userProfileId);
-      if (refreshed) {
-        publishUserSnapshot(refreshed);
-        return refreshed;
-      }
-      return window.sakuraCurrentUserSnapshot;
-    };
-
-    const unfreezeSubscription = async () => {
-      await waitForAuthStateSettlement();
-      const user = auth.currentUser;
-      if (!user || user.isAnonymous) {
-        throw createFirebaseError("auth/no-current-user", "Войдите в аккаунт, чтобы управлять подпиской.");
-      }
-      const userProfileId = window.sakuraCurrentUserSnapshot?.profileId;
-      if (!userProfileId) throw createFirebaseError("auth/user-not-found", "Профиль не найден.");
-
-      const res = await callSupabaseRpc("toggle_subscription_freeze", { p_profile_id: userProfileId });
-      if (!res.ok) {
-        throw createFirebaseError("subscription/error", res.error || "Не удалось разморозить подписку.");
-      }
-
-      const refreshed = await fetchSupabaseProfileById(userProfileId);
-      if (refreshed) {
-        publishUserSnapshot(refreshed);
-        return refreshed;
-      }
-      return window.sakuraCurrentUserSnapshot;
-    };
-
-    const adminToggleUserFreeze = async (profileId) => {
-      const actorId = window.sakuraCurrentUserSnapshot?.profileId || 1;
-      const res = await callSupabaseRpc("admin_manage_profile", {
-        p_actor_id: actorId,
-        p_target_id: profileId,
-        p_field: "toggle_freeze",
-        p_value: {},
-      });
-      if (!res.ok) {
-        throw createFirebaseError("admin/error", res.error || "Не удалось изменить заморозку.");
-      }
-      return fetchSupabaseProfileById(profileId);
-    };
-
-    const adminCreatePromoCode = async ({ code, durationDays, maxUses, role, note }) => {
-      const actorId = window.sakuraCurrentUserSnapshot?.profileId || 1;
-      const res = await callSupabaseRpc("admin_manage_promo", {
-        p_action: "create",
-        p_actor_id: actorId,
-        p_code: code,
-        p_duration: Number(durationDays) || 30,
-        p_role: role || "subscriber",
-        p_max_uses: Number(maxUses) || 1,
-        p_note: note || "",
-      });
-      if (!res.ok) {
-        throw createFirebaseError("promo/error", res.error || "Не удалось создать промокод.");
-      }
-      return { code: res.code, durationDays, role, maxUses, note };
-    };
-
-    const adminListPromoCodes = async () => {
-      const actorId = window.sakuraCurrentUserSnapshot?.profileId || 1;
-      const res = await callSupabaseRpc("admin_manage_promo", {
-        p_action: "list",
-        p_actor_id: actorId,
-      });
-      if (!res.ok) {
-        throw createFirebaseError("auth/permission-denied", res.error || "Не удалось загрузить список промокодов.");
-      }
-      return res.promos || [];
-    };
-
-    const adminDeletePromoCode = async (codeId) => {
-      const actorId = window.sakuraCurrentUserSnapshot?.profileId || 1;
-      const res = await callSupabaseRpc("admin_manage_promo", {
-        p_action: "delete",
-        p_actor_id: actorId,
-        p_code: codeId,
-      });
-      if (!res.ok) {
-        throw createFirebaseError("promo/error", res.error || "Не удалось удалить промокод.");
-      }
-      return true;
-    };
-
-    const redeemPromoCode = async (inputCode) => {
-      await waitForAuthStateSettlement();
-      const user = auth.currentUser;
-      if (!user || user.isAnonymous) {
-        throw createFirebaseError("auth/no-current-user", "Войдите в аккаунт, чтобы активировать промокод.");
-      }
-      const userProfileId = window.sakuraCurrentUserSnapshot?.profileId;
-      if (!userProfileId) throw createFirebaseError("auth/user-not-found", "Не удалось определить ID профиля.");
-
-      const upperCode = String(inputCode || "").trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "");
-      if (!upperCode) throw createFirebaseError("promo/empty", "Введите промокод.");
-
-      const res = await callSupabaseRpc("redeem_promo_code", {
-        p_code: upperCode,
-        p_profile_id: userProfileId,
-      });
-
-      if (!res.ok) {
-        throw createFirebaseError("promo/error", res.error || "Не удалось активировать промокод.");
-      }
-
-      const refreshed = await fetchSupabaseProfileById(userProfileId);
-      if (refreshed) {
-        publishUserSnapshot(refreshed);
-      }
-
-      return {
-        success: true,
-        durationDays: res.durationDays,
-        isLifetime: res.isLifetime,
-        newUntil: res.subscriptionUntil,
-      };
-    };
-
-    const claimFreeTrial = async () => {
-      await waitForAuthStateSettlement();
-      const user = auth.currentUser;
-      if (!user || user.isAnonymous) {
-        throw createFirebaseError("auth/no-current-user", "Войдите в аккаунт, чтобы получить бесплатный тест.");
-      }
-      const userProfileId = window.sakuraCurrentUserSnapshot?.profileId;
-      if (!userProfileId) throw createFirebaseError("auth/user-not-found", "Не удалось определить ID профиля.");
-
-      const res = await callSupabaseRpc("claim_free_trial", {
-        p_profile_id: userProfileId,
-      });
-
-      if (!res.ok) {
-        throw createFirebaseError("trial/error", res.error || "Не удалось активировать бесплатный тест.");
-      }
-
-      const refreshed = await fetchSupabaseProfileById(userProfileId);
-      if (refreshed) {
-        publishUserSnapshot(refreshed);
-      }
-
-      return {
-        success: true,
-        durationDays: 7,
-        newUntil: res.subscriptionUntil,
-      };
-    };
-
-    const resendVerificationEmail = async () => {
-      const user = auth.currentUser;
-
-      if (!user || user.isAnonymous) {
-        throw createFirebaseError("auth/no-current-user", "Sign in again to verify your email.");
-      }
-
-      const currentRoles = normalizeRoles(window.sakuraCurrentUserSnapshot?.roles ?? []);
-
-      if (!requiresEmailVerification(currentRoles)) {
-        const snapshot = publishUserSnapshot(
-          toUserSnapshot(user, {
-            ...(window.sakuraCurrentUserSnapshot ?? {}),
-            roles: currentRoles,
-            verificationRequired: false,
-            verificationEmailSent: false,
-          })
-        );
-
-        return {
-          ...snapshot,
-          verificationEmailSent: false,
-        };
-      }
-
-      if (user.emailVerified) {
-        const snapshot = publishUserSnapshot(
-          toUserSnapshot(user, {
-            ...(window.sakuraCurrentUserSnapshot ?? {}),
-            emailVerified: true,
-            verificationEmailSent: false,
-          })
-        );
-
-        return {
-          ...snapshot,
-          verificationEmailSent: false,
-        };
-      }
-
-      await sendEmailVerification(user);
-
-      const snapshot = publishUserSnapshot(
-        toUserSnapshot(user, {
-          ...(window.sakuraCurrentUserSnapshot ?? {}),
-          emailVerified: false,
-          verificationEmailSent: true,
-        })
-      );
-
-      return {
-        ...snapshot,
-        verificationEmailSent: true,
-      };
-    };
-    const refreshVerificationStatus = async () => {
-      const user = auth.currentUser;
-
-      if (!user || user.isAnonymous) {
-        throw createFirebaseError(
-          "auth/no-current-user",
-          "Sign in again to refresh email verification."
-        );
-      }
-
-      await reload(user);
-
-      if (user.emailVerified) {
-        try {
-          await setDoc(
-            userRefFor(user.uid),
-            {
-              emailVerified: true,
-              verificationRequired: false,
-              verificationEmailSent: false,
-              updatedAt: new Date().toISOString(),
-            },
-            { merge: true }
-          );
-        } catch (error) {}
-      }
-
-      const snapshot = await resolveUserSnapshot(user);
-      const allowedSnapshot = await enforceActiveSessionNotBanned(snapshot);
-
-      return {
-        ...allowedSnapshot,
-        verificationEmailSent: false,
-      };
-    };
-    const getSiteOnlineCount = async () => {
-      const presenceRuntime = await ensurePresenceRuntime();
-      return presenceRuntime.getSiteOnlineCount();
-    };
-    const getSiteOnlineUsers = async () => {
-      const presenceRuntime = await ensurePresenceRuntime();
-      return presenceRuntime.getSiteOnlineUsers();
-    };
-
-    const redirectResultPromise = getRedirectResult(auth).catch((error) => {
-      if (getErrorCode(error) !== "auth/no-auth-event") {
-        clearGoogleRedirectIntent();
-        const message =
-          error instanceof Error ? error.message : "Google redirect sign-in could not be completed.";
-        window.dispatchEvent(new CustomEvent(AUTH_ERROR_EVENT, { detail: message }));
-      }
-
-      return null;
-    });
-
-    window.sakuraFirebaseRuntimeVersion = AUTH_RUNTIME_VERSION;
-    window.sakuraFirebaseAuth = {
-      __runtimeVersion: AUTH_RUNTIME_VERSION,
-      register: async ({ login, displayName, email, password }) => {
-        const credentials = await createUserWithEmailAndPassword(auth, email, password);
-        const preferredLogin =
-          sanitizeLogin(login) ||
-          (typeof login === "string" ? login.trim() : "") ||
-          ("user" + credentials.user.uid.slice(0, 6));
-        const preferredDisplayName = sanitizeDisplayName(displayName);
-        let verificationEmailSent = false;
-
-        try {
-          let snapshot = await resolveUserSnapshot(credentials.user, {
-            requestedLogin: login,
-            preferredDisplayName: preferredDisplayName || preferredLogin,
-          });
-          const storedRegistrationSnapshot = await getDoc(userRefFor(credentials.user.uid)).catch(
-            (error) => {
-              if (!isPermissionDeniedError(error)) {
-                throw error;
-              }
-
-              return null;
-            }
-          );
-          const storedRegistrationData = storedRegistrationSnapshot?.exists()
-            ? storedRegistrationSnapshot.data()
-            : null;
-          const storedRegistrationLogin =
-            typeof storedRegistrationData?.login === "string" ? storedRegistrationData.login : null;
-          const storedRegistrationLoginLower =
-            typeof storedRegistrationData?.loginLower === "string"
-              ? storedRegistrationData.loginLower
-              : null;
-
-          if ((!storedRegistrationLogin || !storedRegistrationLoginLower) && preferredLogin) {
-            const recoveredLoginDetails = await resolveAvailableLogin(
-              snapshot?.login || preferredLogin,
-              credentials.user.uid
-            );
-
-            await setDoc(
-              userRefFor(credentials.user.uid),
-              {
-                login: recoveredLoginDetails.login,
-                loginLower: recoveredLoginDetails.loginLower,
-                updatedAt: new Date().toISOString(),
-              },
-              { merge: true }
-            );
-
-            snapshot = publishUserSnapshot(
-              toUserSnapshot(credentials.user, {
-                ...(window.sakuraCurrentUserSnapshot ?? snapshot ?? {}),
-                ...storedRegistrationData,
-                login: recoveredLoginDetails.login,
-                loginLower: recoveredLoginDetails.loginLower,
-                displayName:
-                  snapshot?.displayName ?? preferredDisplayName ?? recoveredLoginDetails.login,
-              })
-            );
-          }
-
-          const registrationDisplayName =
-            snapshot?.displayName ?? preferredDisplayName ?? snapshot?.login ?? preferredLogin;
-
-          await updateProfile(credentials.user, {
-            displayName: registrationDisplayName,
-          });
-
-          try {
-            await sendEmailVerification(credentials.user);
-            verificationEmailSent = true;
-          } catch (error) {
-            console.error("Failed to send verification email:", error);
-          }
-
-          await syncPresence(credentials.user, {
-            path: window.location.pathname,
-            source: "register",
-            forceVisit: true,
-          });
-
-          const allowedSnapshot = await enforceActiveSessionNotBanned(snapshot);
-          const registrationSnapshot = {
-            ...allowedSnapshot,
-            emailVerified: Boolean(credentials.user.emailVerified),
-            verificationEmailSent,
-          };
-
-          void syncSupabaseProfileRecord(
-            credentials.user,
-            registrationSnapshot,
-            "register"
-          ).catch((error) => {
-            console.error("Failed to sync profile to Supabase after registration:", error);
-          });
-
-          return {
-            ...registrationSnapshot,
-          };
-        } catch (error) {
-          const errorCode = getErrorCode(error);
-
-          if (
-            errorCode === "auth/login-already-in-use" ||
-            errorCode === "auth/invalid-login" ||
-            errorCode === "profile/record-missing" ||
-            errorCode === "permission-denied"
-          ) {
-            try {
-              await deleteUser(credentials.user);
-            } catch (cleanupError) {
-              console.error("Failed to rollback registration:", cleanupError);
-              await clearBrokenProfileSession(
-                error instanceof Error
-                  ? error.message
-                  : "Profile record could not be created or loaded."
-              );
-            }
-          }
-
-          throw error;
-        }
-      },
-      login: async (identifier, password) => {
-        const email = await resolveEmailForLogin(identifier);
-        const credentials = await signInWithEmailAndPassword(auth, email, password);
-
-        try {
-          const snapshot = await resolveUserSnapshot(credentials.user);
-          const allowedSnapshot = await enforceActiveSessionNotBanned(snapshot);
-          await syncPresence(credentials.user, {
-            path: window.location.pathname,
-            source: "login",
-            forceVisit: true,
-          });
-
-          void syncSupabaseProfileRecord(credentials.user, allowedSnapshot, "login").catch(
-            (error) => {
-              console.error("Failed to sync profile to Supabase after login:", error);
-            }
-          );
-
-          return allowedSnapshot;
-        } catch (error) {
-          if (isProfileRecordError(error)) {
-            await clearBrokenProfileSession(
-              error instanceof Error
-                ? error.message
-                : "Profile record could not be created or loaded."
-            );
-          }
-
-          throw error;
-        }
-      },
-      completeGoogleAccount,
-      loginWithGoogle,
-      sendPasswordReset,
-      deleteCurrentAccount,
-      updatePassword: updatePasswordWithCurrent,
-      updateDisplayName,
-      updateUsername,
-      adminUpdateProfileDisplayName,
-      adminUpdateProfileLogin,
-      adminUpdateProfileThemeSong,
-      adminUpdateProfileSubscriptionUntil,
-      adminResetProfileHwid,
-      adminSetProfileBan,
-      adminSetProfileEmailVerification,
-      getProfileById,
-      getProfileByAuthorName,
-      getProfilesByLoginPrefix,
-      getProfileComments,
-      isCommentMediaPathReferenced,
-      addProfileComment,
-      updateProfileComment,
-      deleteProfileComment,
-      resendVerificationEmail,
-      refreshVerificationStatus,
-      getSiteOnlineCount,
-      getSiteOnlineUsers,
-      updateProfileRoles,
-      freezeSubscription,
-      unfreezeSubscription,
-      adminToggleUserFreeze,
-      adminCreatePromoCode,
-      adminListPromoCodes,
-      adminDeletePromoCode,
-      redeemPromoCode,
-      claimFreeTrial,
-      updateAvatar,
-      deleteAvatar,
-      adminUpdateProfileAvatar,
-      adminDeleteProfileAvatar,
-      syncPresence: async (options = {}) => {
-        const user = auth.currentUser;
-
-        if (!user) {
-          return publishUserSnapshot(null);
-        }
-
-        return syncPresence(user, options);
-      },
-      logout: async () => {
-        stopPresenceTracking();
-        await signOut(auth);
-        publishUserSnapshot(null);
-      },
-      onAuthStateChanged: (callback) =>
-        onAuthStateChanged(auth, async (user) => {
-          stopPresenceTracking();
-          markAuthStateSettled();
-
-          if (!user) {
-            const redirectResult = await redirectResultPromise;
-
-            if (redirectResult?.user) {
-              const snapshot = await finalizeGoogleSignIn(redirectResult.user);
-              const allowedSnapshot = await enforceActiveSessionNotBanned(snapshot, {
-                throwError: false,
-              });
-
-              clearGoogleRedirectIntent();
-
-              if (!allowedSnapshot) {
-                callback(publishUserSnapshot(null));
-                return;
-              }
-
-              callback(allowedSnapshot);
-              startPresenceTracking(redirectResult.user);
-              return;
-            }
-
-            if (hasFreshGoogleRedirectIntent()) {
-              clearGoogleRedirectIntent();
-              emitAuthError(
-                "Google sign-in was not completed. Repeat login and allow popups/redirect in your browser."
-              );
-            }
-
-            callback(publishUserSnapshot(null));
-            return;
-          }
-
-          if (user.isAnonymous) {
-            callback(publishUserSnapshot(toAnonymousViewerSnapshot(user)));
-            return;
-          }
-
-          try {
-            const redirectResult = await redirectResultPromise;
-            const snapshot =
-              redirectResult?.user?.uid === user.uid
-                ? await finalizeGoogleSignIn(user)
-                : await resolveUserSnapshot(user);
-            const allowedSnapshot = await enforceActiveSessionNotBanned(snapshot, {
-              throwError: false,
-            });
-
-            if (!allowedSnapshot) {
-              clearGoogleRedirectIntent();
-              callback(publishUserSnapshot(null));
-              return;
-            }
-
-            clearGoogleRedirectIntent();
-            callback(allowedSnapshot);
-            startPresenceTracking(user);
-          } catch (error) {
-            clearGoogleRedirectIntent();
-            await clearBrokenProfileSession(
-              error instanceof Error
-                ? error.message
-                : "Profile record could not be created or loaded."
-            );
-            callback(window.sakuraCurrentUserSnapshot ?? null);
-          }
-        })
-    };
-    window.loginWithGoogle = loginWithGoogle;
-
-      window.dispatchEvent(new CustomEvent("sakura-auth-ready"));
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to initialize Firebase Auth.";
-
-      window.sakuraFirebaseAuthError = message;
+    const markAuthStateSettled = () => {
+      if (authStateSettled) return;
+      authStateSettled = true;
       window.sakuraAuthStateSettled = true;
       window.dispatchEvent(new CustomEvent(AUTH_STATE_SETTLED_EVENT));
-      window.dispatchEvent(
-        new CustomEvent("sakura-auth-error", {
-          detail: { message }
-        })
-      );
-      console.error("Firebase Auth init failed:", error);
-    }
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to load Firebase Auth modules.";
-
-      window.sakuraFirebaseAuthError = message;
-      window.sakuraAuthStateSettled = true;
-      window.dispatchEvent(new CustomEvent("sakura-auth-state-settled"));
-      window.dispatchEvent(
-        new CustomEvent("sakura-auth-error", {
-          detail: { message }
-        })
-      );
-      console.error("Firebase Auth module load failed:", error);
-    }
-      })();
-
-      return loadPromise;
     };
 
-    window.sakuraFirebaseRuntimeVersion = AUTH_RUNTIME_VERSION;
+    const mapSupabaseProfileRowToSnapshot = (row) => {
+      if (!row) return null;
+      const uid = row.firebase_uid || row.auth_user_id || (row.profile_id ? String(row.profile_id) : "user");
+      return {
+        uid,
+        isAnonymous: false,
+        email: row.email ?? null,
+        emailVerified: row.email_verified === true,
+        login: row.login ?? null,
+        displayName: row.display_name ?? row.login ?? "Sakura User",
+        profileId: typeof row.profile_id === "number" ? row.profile_id : Number(row.profile_id) || null,
+        photoURL: row.photo_url || null,
+        avatarPath: row.avatar_path || null,
+        avatarType: row.avatar_type || null,
+        avatarSize: row.avatar_size || null,
+        roles: Array.isArray(row.roles) ? row.roles : [],
+        isBanned: row.is_banned === true,
+        bannedAt: row.banned_at || null,
+        subscriptionUntil: row.subscription_until || null,
+        subscription_until: row.subscription_until || null,
+        hasClaimedTrial: row.has_claimed_trial === true,
+        trialClaimedAt: row.trial_claimed_at || null,
+        isFrozen: row.is_frozen === true,
+        frozenAt: row.frozen_at || null,
+        lastFrozenAt: row.last_frozen_at || null,
+        frozenRemainingMs: typeof row.frozen_remaining_ms === "number" ? row.frozen_remaining_ms : null,
+        activationHistory: Array.isArray(row.activation_history) ? row.activation_history : [],
+        verificationRequired: row.verification_required === true,
+        providerIds: Array.isArray(row.provider_ids) && row.provider_ids.length > 0 ? row.provider_ids : ["password"],
+        creationTime: row.created_at || null,
+        lastSignInTime: row.last_sign_in_at || null,
+        loginHistory: Array.isArray(row.login_history) ? row.login_history : [],
+        visitHistory: Array.isArray(row.visit_history) ? row.visit_history : [],
+        presence: {
+          lastSeenAt: row.last_sign_in_at || null,
+          isOnline: true,
+          status: "online"
+        }
+      };
+    };
+
+    const resolveUserSnapshot = async (user) => {
+      if (!user) return null;
+      const uid = user.id;
+      const email = user.email || "";
+
+      let rows = await fetchSupabaseRows("public_profiles", {
+        auth_user_id: "eq." + uid,
+        limit: 1
+      });
+
+      if (!rows || rows.length === 0) {
+        if (email) {
+          rows = await fetchSupabaseRows("public_profiles", {
+            email: "ilike." + email,
+            limit: 1
+          });
+        }
+      }
+
+      let profileRow = rows && rows[0] ? rows[0] : null;
+
+      if (!profileRow) {
+        const syncRes = await callSupabaseRpc("get_or_sync_auth_profile", {
+          p_auth_user_id: uid,
+          p_email: email,
+          p_suggested_login: user.user_metadata?.login || null,
+          p_suggested_display_name: user.user_metadata?.display_name || user.user_metadata?.full_name || null
+        });
+        if (syncRes?.ok && syncRes.profile) {
+          profileRow = syncRes.profile;
+        }
+      }
+
+      if (profileRow) {
+        const snap = mapSupabaseProfileRowToSnapshot(profileRow);
+        snap.emailVerified = Boolean(user.email_confirmed_at || profileRow.email_verified);
+        return publishUserSnapshot(snap);
+      }
+
+      const fallbackSnap = {
+        uid,
+        isAnonymous: false,
+        email: user.email ?? null,
+        emailVerified: Boolean(user.email_confirmed_at),
+        login: user.user_metadata?.login || (email ? email.split("@")[0] : "user"),
+        displayName: user.user_metadata?.display_name || user.user_metadata?.login || "User",
+        profileId: null,
+        photoURL: user.user_metadata?.avatar_url || null,
+        roles: ["user"],
+        isBanned: false,
+        providerIds: ["password"],
+        creationTime: user.created_at || null,
+        lastSignInTime: user.last_sign_in_at || null,
+        loginHistory: [],
+        visitHistory: [],
+        presence: null
+      };
+      return publishUserSnapshot(fallbackSnap);
+    };
+
+    const createInlineAvatarDataUrl = async (file) => {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(createFirebaseError("storage/read-error", "Failed to read image file."));
+        reader.readAsDataURL(file);
+      });
+    };
+
+    let startPromise = null;
+    const startFirebaseAuth = () => {
+      if (startPromise) return startPromise;
+
+      startPromise = (async () => {
+        try {
+          const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+          supabase = createClient(SUPABASE_PUBLIC_URL, SUPABASE_PUBLIC_ANON_KEY, {
+            auth: {
+              persistSession: true,
+              autoRefreshToken: true,
+              detectSessionInUrl: true,
+              storage: window.localStorage,
+            }
+          });
+          window.supabaseClient = supabase;
+
+          const bridge = {
+            __runtimeVersion: AUTH_RUNTIME_VERSION,
+
+            login: async (identifier, password) => {
+              let email = (identifier || "").trim();
+              if (!email.includes("@")) {
+                const rows = await fetchSupabaseRows("public_profiles", { login: "ilike." + email, limit: 1 });
+                if (!rows || !rows[0] || !rows[0].email) {
+                  throw createFirebaseError("auth/login-not-found", "Пользователь с таким логином не найден.");
+                }
+                email = rows[0].email;
+              }
+
+              const { data, error } = await supabase.auth.signInWithPassword({
+                email,
+                password
+              });
+
+              if (error) {
+                if (error.message.includes("Invalid login credentials") || error.message.includes("invalid_grant")) {
+                  throw createFirebaseError("auth/wrong-password", "Неверный логин, email или пароль.");
+                }
+                if (error.message.includes("Email not confirmed")) {
+                  throw createFirebaseError("auth/email-not-verified", "Подтвердите email для входа.");
+                }
+                throw createFirebaseError("auth/error", error.message);
+              }
+
+              return await resolveUserSnapshot(data.user);
+            },
+
+            register: async ({ login, displayName, email, password }) => {
+              const cleanLogin = (login || "").trim().replace(/\\s+/g, "");
+              const cleanEmail = (email || "").trim().toLowerCase();
+              const cleanDisplay = (displayName || "").trim() || cleanLogin;
+
+              if (cleanLogin.length < 3) {
+                throw createFirebaseError("auth/invalid-login", "Логин должен содержать от 3 символов.");
+              }
+
+              const existingLogin = await fetchSupabaseRows("public_profiles", { login: "ilike." + cleanLogin, limit: 1 });
+              if (existingLogin && existingLogin.length > 0) {
+                throw createFirebaseError("auth/login-already-in-use", "Этот логин уже занят.");
+              }
+
+              const existingEmail = await fetchSupabaseRows("public_profiles", { email: "ilike." + cleanEmail, limit: 1 });
+              if (existingEmail && existingEmail.length > 0) {
+                throw createFirebaseError("auth/email-already-in-use", "Этот email уже зарегистрирован.");
+              }
+
+              const { data, error } = await supabase.auth.signUp({
+                email: cleanEmail,
+                password,
+                options: {
+                  data: {
+                    login: cleanLogin,
+                    display_name: cleanDisplay
+                  }
+                }
+              });
+
+              if (error) {
+                if (error.message.includes("User already registered")) {
+                  throw createFirebaseError("auth/email-already-in-use", "Этот email уже зарегистрирован.");
+                }
+                throw createFirebaseError("auth/registration-failed", error.message);
+              }
+
+              if (data?.user) {
+                await callSupabaseRpc("register_profile", {
+                  p_login: cleanLogin,
+                  p_display_name: cleanDisplay,
+                  p_email: cleanEmail,
+                  p_auth_user_id: data.user.id
+                });
+              }
+
+              return await resolveUserSnapshot(data.user);
+            },
+
+            loginWithGoogle: async () => {
+              const { data, error } = await supabase.auth.signInWithOAuth({
+                provider: "google",
+                options: {
+                  redirectTo: window.location.origin
+                }
+              });
+              if (error) {
+                throw createFirebaseError("auth/google-error", error.message);
+              }
+              return null;
+            },
+
+            completeGoogleAccount: async ({ login, displayName, password }) => {
+              const { data: { session } } = await supabase.auth.getSession();
+              if (!session?.user) {
+                throw createFirebaseError("auth/no-current-user", "Авторизуйтесь через Google.");
+              }
+
+              if (password) {
+                await supabase.auth.updateUser({ password });
+              }
+
+              const res = await callSupabaseRpc("complete_google_profile", {
+                p_auth_user_id: session.user.id,
+                p_login: login.trim(),
+                p_display_name: displayName?.trim() || login.trim()
+              });
+
+              if (res && !res.ok) {
+                throw createFirebaseError("auth/invalid-login", res.error || "Не удалось завершить Google-аккаунт.");
+              }
+
+              return await resolveUserSnapshot(session.user);
+            },
+
+            sendPasswordReset: async (identifier) => {
+              let email = (identifier || "").trim();
+              if (!email.includes("@")) {
+                const rows = await fetchSupabaseRows("public_profiles", { login: "ilike." + email, limit: 1 });
+                if (!rows || !rows[0] || !rows[0].email) {
+                  throw createFirebaseError("auth/login-not-found", "Пользователь с таким логином не найден.");
+                }
+                email = rows[0].email;
+              }
+
+              const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+                redirectTo: window.location.origin
+              });
+
+              if (error) {
+                throw createFirebaseError("auth/reset-failed", error.message);
+              }
+
+              return { email };
+            },
+
+            updatePassword: async (currentPassword, nextPassword) => {
+              const { data, error } = await supabase.auth.updateUser({ password: nextPassword });
+              if (error) {
+                throw createFirebaseError("auth/update-failed", error.message);
+              }
+              return await resolveUserSnapshot(data.user);
+            },
+
+            deleteCurrentAccount: async () => {
+              await supabase.auth.signOut();
+              publishUserSnapshot(null);
+            },
+
+            updateDisplayName: async (displayName) => {
+              const profileId = window.sakuraCurrentUserSnapshot?.profileId;
+              if (!profileId) throw createFirebaseError("auth/no-current-user", "Not signed in.");
+              await callSupabaseRpc("update_profile_info", {
+                p_profile_id: profileId,
+                p_display_name: displayName.trim()
+              });
+              const { data: { session } } = await supabase.auth.getSession();
+              return await resolveUserSnapshot(session?.user);
+            },
+
+            updateUsername: async (username) => {
+              const session = (await supabase.auth.getSession()).data.session;
+              if (!session?.user) throw createFirebaseError("auth/no-current-user", "Not signed in.");
+              const res = await callSupabaseRpc("complete_google_profile", {
+                p_auth_user_id: session.user.id,
+                p_login: username.trim()
+              });
+              if (res && !res.ok) {
+                throw createFirebaseError("auth/invalid-login", res.error || "Failed to update login.");
+              }
+              return await resolveUserSnapshot(session.user);
+            },
+
+            adminUpdateProfileDisplayName: async (profileId, displayName) => {
+              const actorId = window.sakuraCurrentUserSnapshot?.profileId || 1;
+              const res = await callSupabaseRpc("admin_manage_profile", {
+                p_actor_id: actorId,
+                p_target_id: profileId,
+                p_field: "display_name",
+                p_value: { displayName: displayName.trim() }
+              });
+              if (res && !res.ok) throw new Error(res.error || "Failed");
+              return await bridge.getProfileById(profileId);
+            },
+
+            adminUpdateProfileLogin: async (profileId, login) => {
+              const actorId = window.sakuraCurrentUserSnapshot?.profileId || 1;
+              const res = await callSupabaseRpc("admin_manage_profile", {
+                p_actor_id: actorId,
+                p_target_id: profileId,
+                p_field: "login",
+                p_value: { login: login.trim() }
+              });
+              if (res && !res.ok) throw new Error(res.error || "Failed");
+              return await bridge.getProfileById(profileId);
+            },
+
+            adminUpdateProfileThemeSong: async (profileId, themeSongKey) => {
+              return await bridge.getProfileById(profileId);
+            },
+
+            adminUpdateProfileSubscriptionUntil: async (profileId, subscriptionUntil) => {
+              const actorId = window.sakuraCurrentUserSnapshot?.profileId || 1;
+              const res = await callSupabaseRpc("admin_manage_profile", {
+                p_actor_id: actorId,
+                p_target_id: profileId,
+                p_field: "subscription_until",
+                p_value: { subscriptionUntil }
+              });
+              if (res && !res.ok) throw new Error(res.error || "Failed");
+              return await bridge.getProfileById(profileId);
+            },
+
+            adminResetProfileHwid: async (profileId) => {
+              const actorId = window.sakuraCurrentUserSnapshot?.profileId || 1;
+              const res = await callSupabaseRpc("admin_manage_profile", {
+                p_actor_id: actorId,
+                p_target_id: profileId,
+                p_field: "hwid",
+                p_value: {}
+              });
+              if (res && !res.ok) throw new Error(res.error || "Failed");
+              return await bridge.getProfileById(profileId);
+            },
+
+            adminSetProfileBan: async (profileId, isBanned) => {
+              const actorId = window.sakuraCurrentUserSnapshot?.profileId || 1;
+              const res = await callSupabaseRpc("admin_manage_profile", {
+                p_actor_id: actorId,
+                p_target_id: profileId,
+                p_field: "is_banned",
+                p_value: { isBanned }
+              });
+              if (res && !res.ok) throw new Error(res.error || "Failed");
+              return await bridge.getProfileById(profileId);
+            },
+
+            adminSetProfileEmailVerification: async (profileId, isVerified) => {
+              return await bridge.getProfileById(profileId);
+            },
+
+            updateProfileRoles: async (profileId, roles) => {
+              const actorId = window.sakuraCurrentUserSnapshot?.profileId || 1;
+              const res = await callSupabaseRpc("admin_manage_profile", {
+                p_actor_id: actorId,
+                p_target_id: profileId,
+                p_field: "roles",
+                p_value: roles
+              });
+              if (res && !res.ok) throw new Error(res.error || "Failed");
+              return await bridge.getProfileById(profileId);
+            },
+
+            freezeSubscription: async () => {
+              const profileId = window.sakuraCurrentUserSnapshot?.profileId;
+              if (!profileId) throw createFirebaseError("auth/no-current-user", "Sign in first.");
+              const res = await callSupabaseRpc("toggle_subscription_freeze", { p_profile_id: profileId });
+              if (res && !res.ok) throw new Error(res.error || "Freeze failed");
+              return await bridge.getProfileById(profileId);
+            },
+
+            unfreezeSubscription: async () => {
+              const profileId = window.sakuraCurrentUserSnapshot?.profileId;
+              if (!profileId) throw createFirebaseError("auth/no-current-user", "Sign in first.");
+              const res = await callSupabaseRpc("toggle_subscription_freeze", { p_profile_id: profileId });
+              if (res && !res.ok) throw new Error(res.error || "Unfreeze failed");
+              return await bridge.getProfileById(profileId);
+            },
+
+            adminToggleUserFreeze: async (profileId) => {
+              const actorId = window.sakuraCurrentUserSnapshot?.profileId || 1;
+              const res = await callSupabaseRpc("admin_manage_profile", {
+                p_actor_id: actorId,
+                p_target_id: profileId,
+                p_field: "toggle_freeze",
+                p_value: {}
+              });
+              if (res && !res.ok) throw new Error(res.error || "Toggle freeze failed");
+              return await bridge.getProfileById(profileId);
+            },
+
+            adminCreatePromoCode: async ({ code, durationDays, maxUses, role, note }) => {
+              const actorId = window.sakuraCurrentUserSnapshot?.profileId || 1;
+              const res = await callSupabaseRpc("admin_manage_promo", {
+                p_action: "create",
+                p_actor_id: actorId,
+                p_code: code,
+                p_duration: durationDays,
+                p_max_uses: maxUses,
+                p_role: role || "subscriber",
+                p_note: note || ""
+              });
+              if (res && !res.ok) throw new Error(res.error || "Create promo failed");
+              return res;
+            },
+
+            adminListPromoCodes: async () => {
+              const actorId = window.sakuraCurrentUserSnapshot?.profileId || 1;
+              const res = await callSupabaseRpc("admin_manage_promo", {
+                p_action: "list",
+                p_actor_id: actorId
+              });
+              return res?.ok && Array.isArray(res.promos) ? res.promos : [];
+            },
+
+            adminDeletePromoCode: async (code) => {
+              const actorId = window.sakuraCurrentUserSnapshot?.profileId || 1;
+              const res = await callSupabaseRpc("admin_manage_promo", {
+                p_action: "delete",
+                p_actor_id: actorId,
+                p_code: code
+              });
+              return Boolean(res?.ok);
+            },
+
+            redeemPromoCode: async (code) => {
+              const profileId = window.sakuraCurrentUserSnapshot?.profileId;
+              if (!profileId) throw createFirebaseError("auth/no-current-user", "Sign in first.");
+              const res = await callSupabaseRpc("redeem_promo_code", {
+                p_code: code,
+                p_profile_id: profileId
+              });
+              if (res && !res.ok) throw new Error(res.error || "Failed to redeem promo");
+              await bridge.getProfileById(profileId);
+              return {
+                success: true,
+                durationDays: res.durationDays,
+                isLifetime: res.isLifetime,
+                newUntil: res.subscriptionUntil
+              };
+            },
+
+            claimFreeTrial: async () => {
+              const profileId = window.sakuraCurrentUserSnapshot?.profileId;
+              if (!profileId) throw createFirebaseError("auth/no-current-user", "Sign in first.");
+              const res = await callSupabaseRpc("claim_free_trial", {
+                p_profile_id: profileId
+              });
+              if (res && !res.ok) throw new Error(res.error || "Failed to claim trial");
+              await bridge.getProfileById(profileId);
+              return {
+                success: true,
+                durationDays: res.durationDays,
+                newUntil: res.subscriptionUntil
+              };
+            },
+
+            updateAvatar: async (file) => {
+              const profileId = window.sakuraCurrentUserSnapshot?.profileId;
+              if (!profileId) throw createFirebaseError("auth/no-current-user", "Sign in first.");
+              const dataUrl = await createInlineAvatarDataUrl(file);
+              await callSupabaseRpc("update_profile_info", {
+                p_profile_id: profileId,
+                p_photo_url: dataUrl
+              });
+              const updated = {
+                ...window.sakuraCurrentUserSnapshot,
+                photoURL: dataUrl
+              };
+              return publishUserSnapshot(updated);
+            },
+
+            deleteAvatar: async () => {
+              const profileId = window.sakuraCurrentUserSnapshot?.profileId;
+              if (!profileId) throw createFirebaseError("auth/no-current-user", "Sign in first.");
+              await callSupabaseRpc("update_profile_info", {
+                p_profile_id: profileId,
+                p_photo_url: ""
+              });
+              const updated = {
+                ...window.sakuraCurrentUserSnapshot,
+                photoURL: null
+              };
+              return publishUserSnapshot(updated);
+            },
+
+            adminUpdateProfileAvatar: async (profileId, file) => {
+              const dataUrl = await createInlineAvatarDataUrl(file);
+              await callSupabaseRpc("update_profile_info", {
+                p_profile_id: profileId,
+                p_photo_url: dataUrl
+              });
+              return await bridge.getProfileById(profileId);
+            },
+
+            adminDeleteProfileAvatar: async (profileId) => {
+              await callSupabaseRpc("update_profile_info", {
+                p_profile_id: profileId,
+                p_photo_url: ""
+              });
+              return await bridge.getProfileById(profileId);
+            },
+
+            getProfileById: async (profileId) => {
+              const rows = await fetchSupabaseRows("public_profiles", { profile_id: "eq." + profileId, limit: 1 });
+              if (rows && rows[0]) {
+                const snap = mapSupabaseProfileRowToSnapshot(rows[0]);
+                if (window.sakuraCurrentUserSnapshot?.profileId === profileId) {
+                  publishUserSnapshot(snap);
+                }
+                return snap;
+              }
+              return null;
+            },
+
+            getProfileByAuthorName: async (name) => {
+              const rows = await fetchSupabaseRows("public_profiles", {
+                login: "ilike." + name,
+                limit: 1
+              });
+              if (rows && rows[0]) return mapSupabaseProfileRowToSnapshot(rows[0]);
+              return null;
+            },
+
+            getProfilesByLoginPrefix: async (loginPrefix) => {
+              const rows = await fetchSupabaseRows("public_profiles", {
+                login: "ilike." + loginPrefix + "*",
+                order: "profile_id.asc",
+                limit: 8
+              });
+              return Array.isArray(rows) ? rows.map(mapSupabaseProfileRowToSnapshot).filter(Boolean) : [];
+            },
+
+            getProfileComments: async (profileId) => {
+              const rows = await fetchSupabaseRows("public_profile_comments", {
+                profile_id: "eq." + profileId,
+                order: "created_at.desc",
+                limit: 50
+              });
+              if (!Array.isArray(rows)) return [];
+              return rows.map((r) => ({
+                id: r.id,
+                profileId: r.profile_id,
+                authorProfileId: r.author_profile_id,
+                authorName: r.author_name,
+                authorPhotoURL: r.author_photo_url,
+                authorAccentRole: r.author_accent_role,
+                message: r.message,
+                mediaURL: r.media_url,
+                mediaType: r.media_type,
+                mediaPath: r.media_path,
+                mediaSize: r.media_size,
+                createdAt: r.created_at,
+                updatedAt: r.updated_at
+              }));
+            },
+
+            isCommentMediaPathReferenced: async () => false,
+
+            addProfileComment: async (payload) => {
+              const res = await callSupabaseRpc("add_profile_comment", {
+                p_profile_id: payload.profileId,
+                p_author_profile_id: payload.authorProfileId,
+                p_author_name: payload.authorName,
+                p_author_photo_url: payload.authorPhotoURL || null,
+                p_author_accent_role: payload.authorAccentRole || null,
+                p_message: payload.message || "",
+                p_media_url: payload.mediaURL || null,
+                p_media_type: payload.mediaType || null,
+                p_media_path: payload.mediaPath || null,
+                p_media_size: payload.mediaSize || null
+              });
+              if (res && !res.ok) throw new Error(res.error || "Failed to add comment");
+              return res;
+            },
+
+            updateProfileComment: async () => {
+              return null;
+            },
+
+            deleteProfileComment: async (commentId, actorProfileId) => {
+              const actorId = actorProfileId || window.sakuraCurrentUserSnapshot?.profileId || 1;
+              const res = await callSupabaseRpc("delete_profile_comment", {
+                p_comment_id: commentId,
+                p_actor_profile_id: actorId
+              });
+              if (res && !res.ok) throw new Error(res.error || "Failed to delete comment");
+              return true;
+            },
+
+            resendVerificationEmail: async () => {
+              const session = (await supabase.auth.getSession()).data.session;
+              if (session?.user?.email) {
+                await supabase.auth.resend({
+                  type: "signup",
+                  email: session.user.email
+                });
+              }
+              return window.sakuraCurrentUserSnapshot || null;
+            },
+
+            refreshVerificationStatus: async () => {
+              const { data: { user } } = await supabase.auth.getUser();
+              if (user) {
+                return await resolveUserSnapshot(user);
+              }
+              return window.sakuraCurrentUserSnapshot || null;
+            },
+
+            getSiteOnlineCount: async () => 1,
+
+            getSiteOnlineUsers: async () => {
+              const rows = await fetchSupabaseRows("public_profiles", {
+                select: "auth_user_id,profile_id,display_name,login,photo_url,roles,last_sign_in_at",
+                limit: 20
+              });
+              if (!Array.isArray(rows)) return [];
+              return rows.map((r) => ({
+                uid: r.auth_user_id || String(r.profile_id),
+                profileId: r.profile_id,
+                displayName: r.display_name,
+                login: r.login,
+                photoURL: r.photo_url,
+                accentRole: (r.roles && r.roles[0]) || null,
+                presence: { lastSeenAt: r.last_sign_in_at }
+              }));
+            },
+
+            syncPresence: async (options = {}) => {
+              const profileId = window.sakuraCurrentUserSnapshot?.profileId;
+              if (profileId) {
+                void callSupabaseRpc("touch_presence", {
+                  p_profile_id: profileId,
+                  p_path: options?.path || window.location.pathname,
+                  p_is_online: true
+                }).catch(() => {});
+              }
+              return window.sakuraCurrentUserSnapshot || null;
+            },
+
+            logout: async () => {
+              await supabase.auth.signOut();
+              publishUserSnapshot(null);
+            },
+
+            onAuthStateChanged: (callback) => {
+              const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+                if (session?.user) {
+                  const snap = await resolveUserSnapshot(session.user);
+                  callback(snap);
+                } else {
+                  callback(publishUserSnapshot(null));
+                }
+                markAuthStateSettled();
+              });
+
+              // Initial check
+              supabase.auth.getSession().then(async ({ data: { session } }) => {
+                if (session?.user) {
+                  const snap = await resolveUserSnapshot(session.user);
+                  callback(snap);
+                } else {
+                  callback(publishUserSnapshot(null));
+                }
+                markAuthStateSettled();
+              }).catch(() => {
+                markAuthStateSettled();
+              });
+
+              return () => {
+                subscription.unsubscribe();
+              };
+            }
+          };
+
+          window.sakuraFirebaseAuth = bridge;
+          window.loginWithGoogle = bridge.loginWithGoogle;
+          window.sakuraFirebaseRuntimeVersion = AUTH_RUNTIME_VERSION;
+
+          window.dispatchEvent(
+            new CustomEvent("sakura-auth-runtime-installed", {
+              detail: { version: AUTH_RUNTIME_VERSION }
+            })
+          );
+          window.dispatchEvent(new CustomEvent("sakura-auth-ready"));
+        } catch (error) {
+          console.error("Failed to start Supabase Auth runtime:", error);
+          const message = error instanceof Error ? error.message : "Failed to initialize Auth.";
+          window.sakuraFirebaseAuthError = message;
+          markAuthStateSettled();
+          window.dispatchEvent(new CustomEvent("sakura-auth-error", { detail: { message } }));
+        }
+      })();
+
+      return startPromise;
+    };
+
     window.sakuraStartFirebaseAuth = startFirebaseAuth;
-    window.dispatchEvent(
-      new CustomEvent("sakura-auth-runtime-installed", {
-        detail: { version: AUTH_RUNTIME_VERSION }
-      })
-    );
     startFirebaseAuth();
   })();
 `;
 
 export default firebaseModuleScript;
-
