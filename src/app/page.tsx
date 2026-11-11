@@ -1190,14 +1190,16 @@ function HeaderAuth() {
     try {
       const snapshot = await window.sakuraFirebaseAuth.resendVerificationEmail();
       setCurrentUser(snapshot);
-      setVerificationSuccess(
-        snapshot?.verificationEmailSent
-          ? t(
-              "Verification email sent again. Check Spam/Junk if it is not in Inbox.",
-              "Письмо подтверждения отправлено повторно. Проверьте папку Спам, если его нет во входящих."
-            )
-          : t("Email is already verified.", "Email уже подтвержден.")
-      );
+      if (snapshot?.emailVerified) {
+        setVerificationSuccess(t("Email is already verified.", "Email уже подтвержден."));
+      } else {
+        setVerificationSuccess(
+          t(
+            "Verification email sent again. Check Spam/Junk if it is not in Inbox.",
+            "Письмо подтверждения отправлено повторно. Проверьте папку Спам, если его нет во входящих."
+          )
+        );
+      }
     } catch (error) {
       setVerificationError(getFirebaseErrorMessage(error));
     } finally {
@@ -1224,12 +1226,27 @@ function HeaderAuth() {
       setCurrentUser(snapshot);
 
       if (isEmailVerificationLocked(snapshot)) {
-        setVerificationSuccess("Verification not found yet. Check your email and try again.");
+        setVerificationSuccess(
+          t(
+            "Verification not found yet. Check your email and try again.",
+            "Подтверждение еще не найдено. Проверьте почту, папку Спам и перейдите по ссылке."
+          )
+        );
         return;
       }
 
-      setFlashMessage("Email verified. Profile access is now unlocked.");
-      setVerificationSuccess("Email verified. You can now open your profile.");
+      setFlashMessage(
+        t(
+          "Email verified. Profile access is now unlocked.",
+          "Email подтвержден. Доступ к профилю разблокирован."
+        )
+      );
+      setVerificationSuccess(
+        t(
+          "Email verified. You can now open your profile.",
+          "Email подтвержден. Теперь вы можете открыть свой профиль."
+        )
+      );
     } catch (error) {
       setVerificationError(getFirebaseErrorMessage(error));
     } finally {

@@ -363,6 +363,11 @@ const firebaseModuleScript = `
               }
 
               if (data?.user) {
+                if (typeof window !== "undefined") {
+                  try {
+                    window.localStorage.setItem("sakura_pending_verification_email", cleanEmail);
+                  } catch (e) {}
+                }
                 await callSupabaseRpc("register_profile", {
                   p_login: cleanLogin,
                   p_display_name: cleanDisplay,
@@ -783,13 +788,61 @@ const firebaseModuleScript = `
 
             resendVerificationEmail: async () => {
               const session = (await supabase.auth.getSession()).data.session;
-              if (session?.user?.email) {
-                await supabase.auth.resend({
-                  type: "signup",
-                  email: session.user.email
-                });
+              const targetEmail =
+                session?.user?.email ||
+                window.sakuraCurrentUserSnapshot?.email ||
+                (typeof window !== "undefined" ? window.localStorage.getItem("sakura_pending_verification_email") : null);
+
+              if (!targetEmail) {
+                throw createFirebaseError(
+                  "auth/no-current-user",
+                  "Не удалось определить email для отправки. Войдите или зарегистрируйтесь снова."
+                );
               }
-              return window.sakuraCurrentUserSnapshot || null;
+
+              if (window.sakuraCurrentUserSnapshot?.emailVerified) {
+                return {
+                  ...window.sakuraCurrentUserSnapshot,
+                  verificationEmailSent: false,
+                  emailVerified: true
+                };
+              }
+
+              const { data, error } = await supabase.auth.resend({
+                type: "signup",
+                email: targetEmail,
+                options: {
+                  emailRedirectTo: getAppRedirectUrl()
+                }
+              });
+
+              if (error) {
+                const msg = (error.message || "").toLowerCase();
+                if (msg.includes("already confirmed") || msg.includes("already verified")) {
+                  const updated = {
+                    ...(window.sakuraCurrentUserSnapshot || {}),
+                    emailVerified: true,
+                    verificationEmailSent: false
+                  };
+                  publishUserSnapshot(updated);
+                  return updated;
+                }
+                if (msg.includes("rate limit") || msg.includes("rate_limit")) {
+                  throw createFirebaseError(
+                    "auth/rate-limit-exceeded",
+                    "Превышен лимит отправки писем. Подождите пару минут перед повторной отправкой."
+                  );
+                }
+                throw createFirebaseError("auth/resend-failed", error.message);
+              }
+
+              const currentSnap = window.sakuraCurrentUserSnapshot;
+              const updatedSnap = currentSnap
+                ? { ...currentSnap, verificationEmailSent: true, emailVerified: false }
+                : { verificationEmailSent: true, email: targetEmail, emailVerified: false };
+
+              publishUserSnapshot(updatedSnap);
+              return updatedSnap;
             },
 
             refreshVerificationStatus: async () => {
@@ -797,6 +850,25 @@ const firebaseModuleScript = `
               if (user) {
                 return await resolveUserSnapshot(user);
               }
+
+              const session = (await supabase.auth.getSession()).data.session;
+              if (session?.user) {
+                return await resolveUserSnapshot(session.user);
+              }
+
+              const pendingEmail =
+                window.sakuraCurrentUserSnapshot?.email ||
+                (typeof window !== "undefined" ? window.localStorage.getItem("sakura_pending_verification_email") : null);
+
+              if (pendingEmail) {
+                const rows = await fetchSupabaseRows("public_profiles", { email: "ilike." + pendingEmail, limit: 1 });
+                if (rows && rows[0] && rows[0].email_verified === true) {
+                  const snap = mapSupabaseProfileRowToSnapshot(rows[0]);
+                  snap.emailVerified = true;
+                  return publishUserSnapshot(snap);
+                }
+              }
+
               return window.sakuraCurrentUserSnapshot || null;
             },
 
