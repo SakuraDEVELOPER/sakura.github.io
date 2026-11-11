@@ -74,6 +74,51 @@ const reloadOnChunkFailure = () => {
   }
 };
 
+const hasPersistedSupabaseSession = () => {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  try {
+    for (let index = 0; index < window.localStorage.length; index += 1) {
+      const storageKey = window.localStorage.key(index);
+
+      if (storageKey?.startsWith("sb-") && storageKey?.endsWith("-auth-token")) {
+        return true;
+      }
+    }
+  } catch {
+    return false;
+  }
+
+  return false;
+};
+
+const purgeLegacyStorage = () => {
+  if (typeof window === "undefined") return;
+  try {
+    const hasSupabase = hasPersistedSupabaseSession();
+    const toRemove: string[] = ["sakura_trial_claimed"];
+
+    for (let index = 0; index < window.localStorage.length; index += 1) {
+      const storageKey = window.localStorage.key(index);
+      if (storageKey?.startsWith(FIREBASE_AUTH_STORAGE_KEY_PREFIX)) {
+        toRemove.push(storageKey);
+      }
+    }
+
+    if (!hasSupabase) {
+      toRemove.push("sakura-auth-snapshot-v1");
+    }
+
+    toRemove.forEach((key) => {
+      try {
+        window.localStorage.removeItem(key);
+      } catch {}
+    });
+  } catch {}
+};
+
 const hasPersistedFirebaseSession = () => {
   if (typeof window === "undefined") {
     return false;
@@ -128,6 +173,7 @@ const shouldBootImmediately = () => {
 
   return (
     /(?:^|\/)profile(?:\/|$)/.test(window.location.pathname) ||
+    hasPersistedSupabaseSession() ||
     hasPersistedFirebaseSession()
   );
 };
@@ -137,6 +183,8 @@ export default function FirebaseAuthBoot() {
     if (typeof window === "undefined") {
       return;
     }
+
+    purgeLegacyStorage();
 
     const runtime = getWindowState();
     let idleTimerId = 0;

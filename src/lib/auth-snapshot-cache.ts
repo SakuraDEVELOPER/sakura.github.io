@@ -17,6 +17,15 @@ export function readCachedAuthSnapshot<T extends CachedAuthSnapshotShape>(): T |
   }
 
   try {
+    // Only return cached auth snapshot if there is an active Supabase session in localStorage
+    const hasSupabaseSession = Object.keys(window.localStorage).some(
+      (k) => k.startsWith("sb-") && k.endsWith("-auth-token")
+    );
+    if (!hasSupabaseSession) {
+      window.localStorage.removeItem(AUTH_SNAPSHOT_CACHE_STORAGE_KEY);
+      return null;
+    }
+
     const rawSnapshot = window.localStorage.getItem(AUTH_SNAPSHOT_CACHE_STORAGE_KEY);
 
     if (!rawSnapshot) {

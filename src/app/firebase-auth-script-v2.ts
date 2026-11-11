@@ -136,6 +136,12 @@ const firebaseModuleScript = `
           window.sessionStorage.removeItem(CURRENT_PROFILE_ID_STORAGE_KEY);
           stopPresenceHeartbeat();
         }
+
+        if (snapshot && snapshot.uid) {
+          window.localStorage.setItem("sakura-auth-snapshot-v1", JSON.stringify(snapshot));
+        } else {
+          window.localStorage.removeItem("sakura-auth-snapshot-v1");
+        }
       } catch (e) {}
 
       window.dispatchEvent(
@@ -952,6 +958,10 @@ const firebaseModuleScript = `
 
             logout: async () => {
               stopPresenceHeartbeat();
+              try {
+                window.localStorage.removeItem("sakura-auth-snapshot-v1");
+                window.localStorage.removeItem("sakura_pending_verification_email");
+              } catch (e) {}
               await supabase.auth.signOut();
               publishUserSnapshot(null);
             },

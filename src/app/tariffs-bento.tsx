@@ -34,18 +34,25 @@ export function TariffsBento({
   const [claimSuccessMessage, setClaimSuccessMessage] = useState<string | null>(null);
   const [claimErrorMessage, setClaimErrorMessage] = useState<string | null>(null);
   const [hasClaimedLocal, setHasClaimedLocal] = useState(false);
-  const [hasClaimedStorage] = useState(() => {
-    if (typeof window === "undefined") return false;
+  const [hasClaimedStorage, setHasClaimedStorage] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
     try {
-      return (
-        window.localStorage.getItem(TRIAL_CLAIMED_STORAGE_KEY) === "true" ||
-        (Boolean(currentUser?.uid) &&
-          window.localStorage.getItem(`${TRIAL_CLAIMED_STORAGE_KEY}_${currentUser?.uid}`) === "true")
-      );
+      // Clear legacy global un-keyed flag that poisoned all accounts in this browser
+      window.localStorage.removeItem(TRIAL_CLAIMED_STORAGE_KEY);
+
+      if (currentUser?.uid) {
+        const userClaimed =
+          window.localStorage.getItem(`${TRIAL_CLAIMED_STORAGE_KEY}_${currentUser.uid}`) === "true";
+        setHasClaimedStorage(userClaimed);
+      } else {
+        setHasClaimedStorage(false);
+      }
     } catch {
-      return false;
+      setHasClaimedStorage(false);
     }
-  });
+  }, [currentUser?.uid]);
 
   const isLoggedIn = Boolean(currentUser && !currentUser.isAnonymous);
 
@@ -66,10 +73,7 @@ export function TariffsBento({
         lower === "trial" ||
         lower === "subscriber" ||
         lower === "sub" ||
-        lower === "lifetime" ||
-        lower === "admin" ||
-        lower === "root" ||
-        lower === "owner"
+        lower === "lifetime"
       );
     }) ||
     currentUser?.activationHistory?.some(
@@ -77,17 +81,14 @@ export function TariffsBento({
     )
   );
 
-  // Sync to local storage to eliminate hydration layout shift on subsequent loads
+  // Sync to local storage for THIS user
   useEffect(() => {
-    if (hasAlreadyClaimed && typeof window !== "undefined") {
+    if ((hasClaimedLocal || currentUser?.hasClaimedTrial) && currentUser?.uid && typeof window !== "undefined") {
       try {
-        window.localStorage.setItem(TRIAL_CLAIMED_STORAGE_KEY, "true");
-        if (currentUser?.uid) {
-          window.localStorage.setItem(`${TRIAL_CLAIMED_STORAGE_KEY}_${currentUser.uid}`, "true");
-        }
+        window.localStorage.setItem(`${TRIAL_CLAIMED_STORAGE_KEY}_${currentUser.uid}`, "true");
       } catch {}
     }
-  }, [hasAlreadyClaimed, currentUser?.uid]);
+  }, [hasClaimedLocal, currentUser?.hasClaimedTrial, currentUser?.uid]);
 
   const handleOpenAuth = () => {
     if (typeof window === "undefined") return;
