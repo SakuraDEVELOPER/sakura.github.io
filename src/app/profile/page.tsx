@@ -1872,7 +1872,7 @@ export default function ProfilePage() {
   }, []);
   const [adminPanelActiveTab, setAdminPanelActiveTab] = useState<"sub" | "roles" | "promos" | "security" | "edit">("sub");
   const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
-  const [editProfileActiveTab, setEditProfileActiveTab] = useState<"general" | "avatar" | "music" | "security">("general");
+  const [editProfileActiveTab, setEditProfileActiveTab] = useState<"general" | "avatar" | "security">("general");
   const [isBanSaving, setIsBanSaving] = useState(false);
   const [banError, setBanError] = useState<string | null>(null);
   const [banSuccess, setBanSuccess] = useState<string | null>(null);
@@ -7956,56 +7956,56 @@ export default function ProfilePage() {
               </div>
 
               {/* User Self-Edit Profile Modal */}
-              {isEditProfileModalOpen && isOwner && activeProfile && (
-                <div className="fixed inset-0 z-[140] flex items-center justify-center p-4">
-                  <div
-                    className="absolute inset-0 bg-black/80 backdrop-blur-md"
-                    onClick={() => setIsEditProfileModalOpen(false)}
-                  />
-                  <div className="relative w-full max-w-xl overflow-hidden rounded-[32px] border border-[#ffb7c5]/35 bg-[#0c070a] shadow-[0_0_80px_rgba(255,183,197,0.2)]">
-                    {/* Modal Header */}
-                    <div className="border-b border-[#24151b] bg-[radial-gradient(circle_at_top,rgba(255,183,197,0.18),transparent_65%)] px-6 py-5">
-                      <div className="flex items-center justify-between gap-4">
-                        <div>
-                          <h2 className="text-base font-bold text-white">
-                            {t("Edit Profile", "Редактирование профиля")}
-                          </h2>
-                          <p className="text-xs text-gray-400">
-                            {primaryName} · @{activeProfile.login || "user"} · UID #{activeProfile.profileId}
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setIsEditProfileModalOpen(false)}
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#311c24] bg-[#140b0f] text-gray-400 hover:border-[#ffb7c5]/50 hover:text-white transition"
-                        >
-                          ✕
-                        </button>
-                      </div>
+              {isClientMounted && isEditProfileModalOpen && isOwner && activeProfile && typeof document !== "undefined"
+                ? createPortal(
+                    <div className="fixed inset-0 z-[140] flex items-center justify-center p-4">
+                      <div
+                        className="absolute inset-0 bg-black/80 backdrop-blur-md"
+                        onClick={() => setIsEditProfileModalOpen(false)}
+                      />
+                      <div className="relative w-full max-w-xl overflow-hidden rounded-[32px] border border-[#ffb7c5]/35 bg-[#0c070a] shadow-[0_0_80px_rgba(255,183,197,0.2)]">
+                        {/* Modal Header */}
+                        <div className="border-b border-[#24151b] bg-[radial-gradient(circle_at_top,rgba(255,183,197,0.18),transparent_65%)] px-6 py-5">
+                          <div className="flex items-center justify-between gap-4">
+                            <div>
+                              <h2 className="text-base font-bold text-white">
+                                {t("Edit Profile", "Редактирование профиля")}
+                              </h2>
+                              <p className="text-xs text-gray-400">
+                                {primaryName} · @{activeProfile.login || "user"} · UID #{activeProfile.profileId}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setIsEditProfileModalOpen(false)}
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#311c24] bg-[#140b0f] text-gray-400 hover:border-[#ffb7c5]/50 hover:text-white transition"
+                            >
+                              ✕
+                            </button>
+                          </div>
 
-                      {/* Tabs Bar */}
-                      <div className="mt-4 flex flex-wrap gap-1.5 border-t border-[#1f1217] pt-3">
-                        {[
-                          { id: "general", label: t("General", "Основное") },
-                          { id: "avatar", label: t("Avatar", "Аватар") },
-                          { id: "music", label: t("Theme Music", "Музыка темы") },
-                          { id: "security", label: t("Security", "Безопасность") },
-                        ].map((tab) => (
-                          <button
-                            key={tab.id}
-                            type="button"
-                            onClick={() => setEditProfileActiveTab(tab.id as any)}
-                            className={`rounded-xl px-3.5 py-1.5 text-xs font-bold transition ${
-                              editProfileActiveTab === tab.id
-                                ? "bg-[#ffb7c5] text-black shadow-[0_0_14px_rgba(255,183,197,0.3)]"
-                                : "border border-[#23141a] bg-[#10090c] text-gray-400 hover:text-white"
-                            }`}
-                          >
-                            <span>{tab.label}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+                          {/* Tabs Bar */}
+                          <div className="mt-4 flex flex-wrap gap-1.5 border-t border-[#1f1217] pt-3">
+                            {[
+                              { id: "general", label: t("General", "Основное") },
+                              { id: "avatar", label: t("Avatar", "Аватар") },
+                              { id: "security", label: t("Security", "Безопасность") },
+                            ].map((tab) => (
+                              <button
+                                key={tab.id}
+                                type="button"
+                                onClick={() => setEditProfileActiveTab(tab.id as any)}
+                                className={`rounded-xl px-3.5 py-1.5 text-xs font-bold transition ${
+                                  editProfileActiveTab === tab.id
+                                    ? "bg-[#ffb7c5] text-black shadow-[0_0_14px_rgba(255,183,197,0.3)]"
+                                    : "border border-[#23141a] bg-[#10090c] text-gray-400 hover:text-white"
+                                }`}
+                              >
+                                <span>{tab.label}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
 
                     {/* Modal Body */}
                     <div className="max-h-[70vh] overflow-y-auto px-6 py-5 space-y-4">
@@ -8169,80 +8169,7 @@ export default function ProfilePage() {
                         </div>
                       )}
 
-                      {/* Tab 3: Music Theme */}
-                      {editProfileActiveTab === "music" && (
-                        <div className="rounded-2xl border border-[#23141a] bg-[#10090c] p-5 space-y-4">
-                          <div>
-                            <label className="block">
-                              <span className="mb-1.5 block text-xs font-mono uppercase tracking-[0.16em] text-gray-400">
-                                {t("Theme Song (SoundCloud URL or Preset)", "Музыка профиля (SoundCloud URL или пресет)")}
-                              </span>
-                              <input
-                                type="text"
-                                list="profile-theme-track-options-modal"
-                                value={adminThemeSongInput}
-                                onChange={(e) => {
-                                  setAdminThemeSongInput(e.target.value);
-                                  setAdminThemeSongError(null);
-                                  setAdminThemeSongSuccess(null);
-                                }}
-                                placeholder="where-is-my-mind or https://soundcloud.com/..."
-                                className="w-full rounded-xl border border-[#2b1820] bg-[#080507] px-4 py-2.5 text-xs text-white outline-none focus:border-[#ffb7c5] transition"
-                              />
-                              <datalist id="profile-theme-track-options-modal">
-                                {PROFILE_THEME_OPTIONS.map((themeOption) => (
-                                  <option key={themeOption.key} value={themeOption.key}>
-                                    {themeOption.title}
-                                  </option>
-                                ))}
-                              </datalist>
-                            </label>
-                            <p className="mt-1.5 text-[11px] text-gray-500">
-                              {t("Current:", "Текущий трек:")} {profileThemeTitle ?? t("None", "Не задан")}
-                            </p>
-                          </div>
-
-                          <div className="flex flex-wrap items-center gap-2.5">
-                            <button
-                              type="button"
-                              onClick={() => adminThemeSongFileInputRef.current?.click()}
-                              disabled={isAdminThemeSongSaving || isAdminThemeSongUploading || isAdminThemeSongDeleting}
-                              className="rounded-full border border-[#3a2029] bg-[#170e13] px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-[#ffb7c5] hover:border-[#ffb7c5] transition disabled:opacity-50"
-                            >
-                              {isAdminThemeSongUploading ? t("Uploading...", "Загрузка...") : t("Upload Audio File", "Загрузить MP3")}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={handleAdminThemeSongSave}
-                              disabled={isAdminThemeSongSaving || isAdminThemeSongUploading || isAdminThemeSongDeleting}
-                              className="rounded-full border border-[#ffb7c5]/40 bg-[#ffb7c5] px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-black transition hover:bg-white disabled:opacity-50"
-                            >
-                              {isAdminThemeSongSaving ? t("Saving...", "Сохранение...") : t("Save Music", "Сохранить музыку")}
-                            </button>
-                            {profileThemeTitle && (
-                              <button
-                                type="button"
-                                onClick={handleAdminThemeSongDelete}
-                                disabled={isAdminThemeSongSaving || isAdminThemeSongUploading || isAdminThemeSongDeleting || isAdminThemeSongDeleteLocked}
-                                className="rounded-full border border-[#ff5a54]/30 bg-[#16080b] px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-[#ff9aa9] hover:bg-[#ff5a54] hover:text-black transition disabled:opacity-50"
-                              >
-                                {isAdminThemeSongDeleting ? t("Deleting...", "Удаление...") : t("Remove", "Удалить")}
-                              </button>
-                            )}
-                            <input
-                              ref={adminThemeSongFileInputRef}
-                              type="file"
-                              accept={PROFILE_THEME_AUDIO_FILE_ACCEPT}
-                              onChange={handleAdminThemeSongUpload}
-                              className="hidden"
-                            />
-                          </div>
-                          {adminThemeSongSuccess && <p className="text-xs text-[#8ce5b2]">✓ {adminThemeSongSuccess}</p>}
-                          {adminThemeSongError && <p className="text-xs text-[#ff9aa9]">⚠ {adminThemeSongError}</p>}
-                        </div>
-                      )}
-
-                      {/* Tab 4: Security */}
+                      {/* Tab 3: Security */}
                       {editProfileActiveTab === "security" && (
                         <div className="space-y-4">
                           {requiresUsernamePasswordConfirmation ? (
@@ -8374,8 +8301,10 @@ export default function ProfilePage() {
                       )}
                     </div>
                   </div>
-                </div>
-              )}
+                </div>,
+                document.body
+              )
+            : null}
 
             </div>
           </section>
