@@ -906,7 +906,7 @@ function HeaderAuth() {
     const handleError = (event: Event) => {
       const message = getAuthBridgeErrorMessage(
         event,
-        "Firebase Auth module did not load. Check your connection and Firebase settings."
+        "Auth module did not load. Check your connection."
       );
 
       if (isRecoverableStaleRuntimeError(message) && recoverFromStaleRuntime()) {
@@ -919,7 +919,7 @@ function HeaderAuth() {
     const timeoutId = window.setTimeout(() => {
       if (!hasCurrentFirebaseAuthRuntime() && !window.sakuraFirebaseAuthError) {
         setAuthLoadError(
-          "Firebase Auth module did not load. Check your connection and Firebase settings."
+          "Auth module did not load. Check your connection."
         );
       }
     }, 4000);
@@ -1480,7 +1480,7 @@ function HeaderAuth() {
 
     if (!window.sakuraFirebaseAuth) {
       setSubmitError(
-        authLoadError ?? t("Firebase Auth is not ready yet. Wait a few seconds and try again.", "Firebase Auth ещё не готов. Подождите пару секунд и попробуйте снова.")
+        authLoadError ?? t("Auth is not ready yet. Wait a few seconds and try again.", "Авторизация ещё не готова. Подождите пару секунд и попробуйте снова.")
       );
       return;
     }
@@ -1525,7 +1525,7 @@ function HeaderAuth() {
   const handleLogout = async () => {
     if (!window.sakuraFirebaseAuth) {
       setFlashMessage(
-        authLoadError ?? t("Firebase Auth is not ready yet. Wait a few seconds and try again.", "Firebase Auth ещё не готов. Подождите пару секунд и попробуйте снова.")
+        authLoadError ?? t("Auth is not ready yet. Wait a few seconds and try again.", "Авторизация ещё не готова. Подождите пару секунд и попробуйте снова.")
       );
       return;
     }
@@ -1755,8 +1755,8 @@ function HeaderAuth() {
                             "Создайте имя профиля и отдельный логин для входа."
                           )
                         : t(
-                            "You can sign in with your email or login through Firebase Auth.",
-                            "Вы можете войти по email или логину через Firebase Auth."
+                            "You can sign in with your email or login.",
+                            "Вы можете войти по email или логину."
                           )}
                   </p>
                   <p className="mt-2 hidden text-sm text-gray-400">
@@ -1766,8 +1766,8 @@ function HeaderAuth() {
                           "Создайте логин, чтобы он отображался в профиле и использовался для входа."
                         )
                       : t(
-                          "Sign in with your email or login through Firebase Auth.",
-                          "Войдите по email или логину через Firebase Auth."
+                          "Sign in with your email or login.",
+                          "Войдите по email или логину."
                         )}
                   </p>
                 </div>
@@ -1823,7 +1823,7 @@ function HeaderAuth() {
 
               {!authReady && !authLoadError ? (
                 <div className="mt-5 rounded-2xl border border-[#2b1b1e] bg-[#120d0f] px-4 py-3 text-sm text-[#f2c0cb]">
-                  {t("Connecting Firebase Auth...", "Подключение Firebase Auth...")}
+                  {t("Connecting Auth...", "Подключение авторизации...")}
                 </div>
               ) : null}
 

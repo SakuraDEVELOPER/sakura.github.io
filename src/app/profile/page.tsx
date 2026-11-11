@@ -2234,7 +2234,7 @@ export default function ProfilePage() {
       {
         const message = getAuthBridgeErrorMessage(
           event,
-          "Firebase Auth is still loading. Reload the page if this does not clear soon."
+          "Auth is still loading. Reload the page if this does not clear soon."
         );
 
         if (isRecoverableStaleRuntimeError(message) && recoverFromStaleRuntime()) {
@@ -2250,7 +2250,7 @@ export default function ProfilePage() {
         currentRuntime.sakuraFirebaseRuntimeVersion === FIREBASE_AUTH_RUNTIME_VERSION &&
         !currentRuntime.sakuraFirebaseAuthError
       )
-        setAuthError("Firebase Auth is still loading. Reload the page if this does not clear soon.");
+        setAuthError("Auth is still loading. Reload the page if this does not clear soon.");
     }, 12000);
     sync();
     window.addEventListener(AUTH_READY_EVENT, sync);
