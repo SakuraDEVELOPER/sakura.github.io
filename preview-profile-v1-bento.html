@@ -647,6 +647,185 @@
       line-height: 1.4;
     }
 
+    /* Inactive subscription & muted modifiers */
+    .sub-status-pill.inactive {
+      border: 1px solid #38232b;
+      background: #140d10;
+      color: #9d858f;
+      box-shadow: none;
+    }
+    .sub-days-num.muted {
+      color: #8a7882;
+    }
+    .sub-days-unit.muted {
+      color: #6d5b65;
+    }
+    .sub-progress-track.empty {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px dashed rgba(255, 183, 197, 0.15);
+    }
+    .spec-value.muted {
+      color: #6d5b65;
+    }
+    .hwid-badge-gray {
+      font-family: monospace;
+      font-size: 10px;
+      color: #8a7882;
+      letter-spacing: 0.1em;
+      font-weight: 700;
+    }
+
+    /* Music Card (UID 2 Egoiste Authorized Music Theme) */
+    .music-card-minimal {
+      border-radius: 30px;
+      border: 1px solid #201517;
+      background: radial-gradient(circle at top left, rgba(255, 183, 197, 0.08), transparent 60%), #0d0a0d;
+      padding: 26px 28px;
+      box-shadow: 0 0 60px rgba(255, 183, 197, 0.04);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .music-track-title {
+      font-size: 20px;
+      font-weight: 900;
+      color: #ffffff;
+      letter-spacing: -0.01em;
+      text-transform: uppercase;
+      margin-top: 4px;
+    }
+    .music-track-sub {
+      font-size: 12px;
+      color: #8f7a85;
+      margin-top: 4px;
+    }
+    .music-eq-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin: 20px 0 22px;
+    }
+    .eq-bars-container {
+      display: flex;
+      align-items: flex-end;
+      gap: 3px;
+      height: 28px;
+      padding: 2px 0;
+    }
+    .eq-bar {
+      width: 3px;
+      border-radius: 2px;
+      background: #ffb7c5;
+      animation: barWave 1.2s ease-in-out infinite;
+    }
+    .eq-bar:nth-child(2) { animation-delay: 0.2s; height: 16px; }
+    .eq-bar:nth-child(3) { animation-delay: 0.4s; height: 24px; }
+    .eq-bar:nth-child(4) { animation-delay: 0.1s; height: 12px; }
+    .eq-bar:nth-child(5) { animation-delay: 0.5s; height: 26px; }
+    .eq-bar:nth-child(6) { animation-delay: 0.3s; height: 18px; }
+    @keyframes barWave {
+      0%, 100% { height: 6px; }
+      50% { height: 26px; }
+    }
+    .music-controls-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .btn-music-play {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 18px;
+      border-radius: 16px;
+      background: #ff2d75;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 0 20px rgba(255, 45, 117, 0.4);
+    }
+    .btn-music-play:hover {
+      background: #ff4887;
+    }
+
+    /* Admin Action Button in Guest Profile */
+    .btn-admin-panel {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 9px 18px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      background: #140d11;
+      border: 1px solid #3a222c;
+      color: #ffb7c5;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-admin-panel:hover {
+      border-color: #ffb7c5;
+      color: #ffffff;
+    }
+
+    /* View Switcher Top Bar */
+    .view-switcher-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 18px;
+      margin-bottom: 24px;
+      background: rgba(14, 10, 14, 0.85);
+      border: 1px solid #281820;
+      border-radius: 24px;
+      backdrop-filter: blur(14px);
+      box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .view-switcher-label {
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.22em;
+      color: #ffb7c5;
+      margin-right: 6px;
+      white-space: nowrap;
+    }
+    .view-tab-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border-radius: 14px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      border: 1px solid #281920;
+      background: #120b0f;
+      color: #b78a95;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+    .view-tab-btn:hover {
+      border-color: rgba(255, 183, 197, 0.4);
+      color: #ffffff;
+    }
+    .view-tab-btn.active {
+      background: #ff2d75;
+      border-color: #ff2d75;
+      color: #ffffff;
+      box-shadow: 0 0 20px rgba(255, 45, 117, 0.4);
+    }
+
     /* ========================================================
        COMMENTS CARD (Full Width Original Style)
        ======================================================== */
@@ -897,191 +1076,641 @@
       </div>
     </header>
 
-    <!-- Profile Hero Card (Identity Top Section) -->
-    <section class="hero-banner-card">
-      <div class="hero-cover">
-        <div class="hero-cover-pattern"></div>
-      </div>
-
-      <div class="hero-content">
-        <div class="avatar-block">
-          <div class="avatar-box">LI</div>
-          <span class="status-badge online">Онлайн</span>
-        </div>
-
-        <div class="user-info">
-          <h1 class="user-name">lirreur</h1>
-          <p class="user-login">@lirreur</p>
-
-          <div class="user-meta-lines">
-            <div class="meta-line-item">
-              <span class="meta-pink-dot"></span>
-              <span>UID: 1</span>
-            </div>
-            <div class="meta-line-item">
-              <span class="meta-pink-dot"></span>
-              <span>Аккаунт создан 12 ноября 2026, 02:13</span>
-            </div>
-          </div>
-
-          <!-- Exact Production Role Badges with Sakura Vectors -->
-          <div class="roles-strip">
-            <span class="role-badge root" title="Создатель проекта">
-              <svg viewBox="0 0 352 352"><path fill="#ffd5d2" d="M176 176 C114 110 129 44 129 44 Q157 41 176 67 Q195 41 223 44 C223 44 238 110 176 176 Z"/></svg>
-              <span>ROOT</span>
-            </span>
-            <span class="role-badge lifetime" title="Бессрочная подписка">
-              <svg viewBox="0 0 352 352"><path fill="#fff3c4" d="M176 176 C114 110 129 44 129 44 Q157 41 176 67 Q195 41 223 44 C223 44 238 110 176 176 Z"/></svg>
-              <span>LIFETIME</span>
-            </span>
-            <span class="role-badge subscriber" title="Подписчик софта">
-              <span>ПОДПИСЧИК</span>
-            </span>
-            <span class="role-badge user" title="Пользователь">
-              <span>USER</span>
-            </span>
-          </div>
-        </div>
-
-        <!-- Hero Actions: Compact "Редактировать профиль" (Moved back up) -->
-        <div class="hero-actions">
-          <button class="btn-edit-profile-compact" onclick="openEditModal()">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            <span>Редактировать профиль</span>
-          </button>
-        </div>
-      </div>
-    </section>
-
-    <!-- ========================================================
-         SINGLE 1-ROW BENTO: MINIMALISTIC SUBSCRIPTION (LEFT) + RIGHT STACK (EDIT BUTTON + COMPACT HWID)
-         ======================================================== -->
-    <div class="bento-single-row">
-
-      <!-- Card 1: Minimalist Subscription Card (Exact Match to User Reference Screenshot) -->
-      <div class="sub-card-minimal">
-        <div>
-          <!-- Header: Label + Pill -->
-          <div class="sub-header">
-            <span class="sub-title-mono">ПОДПИСКА</span>
-            <span class="sub-status-pill">АКТИВНА</span>
-          </div>
-
-          <!-- Number + Days Unit inline -->
-          <div class="sub-days-row">
-            <span class="sub-days-num">29</span>
-            <span class="sub-days-unit">дней</span>
-          </div>
-
-          <div class="sub-valid-date">Действует до: 12.12.2026</div>
-
-          <!-- Glowing Gradient Progress Bar (Pink to Mint Green) -->
-          <div class="sub-progress-bar-wrapper">
-            <div class="sub-progress-track">
-              <div class="sub-progress-fill"></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Minimalist Buttons Row -->
-        <div class="sub-buttons-row">
-          <button class="btn-sub-cta" onclick="alert('Скачивание SakuraLoader.exe запущено...');">
-            СКАЧАТЬ ЧИТ
-          </button>
-          <button class="btn-sub-secondary" onclick="alert('Подписка заморожена. Дни сохранены.');">
-            ЗАМОРОЗИТЬ
-          </button>
-          <a href="https://funpay.com/lots/offer?id=67099133" target="_blank" class="btn-sub-secondary">
-            ПРОДЛИТЬ
-          </a>
-          <button class="btn-sub-promo" onclick="openPromoModal()" title="Активировать промокод">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="4" width="18" height="16" rx="3"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="7" y1="8" x2="11" y2="8"/></svg>
-            <span>ПРОМОКОД</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Card 2: Compact System & HWID Specs -->
-      <div class="card-hwid-compact">
-        <div class="hwid-header">
-          <span class="hwid-title-mono">СИСТЕМА & HWID</span>
-          <span class="hwid-badge-green">UNDETECTED</span>
-        </div>
-
-        <div class="specs-list">
-          <div class="spec-item">
-            <span class="spec-name">HWID привязка</span>
-            <span class="spec-value green">АКТИВНА</span>
-          </div>
-          <div class="spec-item">
-            <span class="spec-name">Статус античита</span>
-            <span class="spec-value green">VAC SAFE</span>
-          </div>
-          <div class="spec-item">
-            <span class="spec-name">Сброс HWID</span>
-            <span class="spec-value link" onclick="alert('Запрос на сброс HWID отправлен администратору.')">Запросить сброс</span>
-          </div>
-          <div class="spec-item">
-            <span class="spec-name">Версия клиента</span>
-            <span class="spec-value">v3.2.0 (Stable)</span>
-          </div>
-        </div>
-
-        <div class="hwid-footer-note">
-          Все серверные компоненты работают штатно
-        </div>
-      </div>
-
+    <!-- Interactive View Switcher Bar (Test all scenarios requested by user) -->
+    <div class="view-switcher-bar">
+      <span class="view-switcher-label">Сценарий:</span>
+      <button id="btn-owner-active" class="view-tab-btn active" onclick="switchViewState('owner-active')">
+        <span>Мой профиль (Подписка активна)</span>
+      </button>
+      <button id="btn-owner-expired" class="view-tab-btn" onclick="switchViewState('owner-expired')">
+        <span>Мой профиль (Без подписки)</span>
+      </button>
+      <button id="btn-guest-egoiste" class="view-tab-btn" onclick="switchViewState('guest-egoiste')">
+        <span>Чужой профиль: Egoiste (с музыкой)</span>
+      </button>
+      <button id="btn-guest-regular" class="view-tab-btn" onclick="switchViewState('guest-regular')">
+        <span>Чужой профиль: Гость (без подписки)</span>
+      </button>
     </div>
 
     <!-- ========================================================
-         COMMENTS WALL (Full Width Original Style)
+         VIEW 1: MY PROFILE — ACTIVE SUBSCRIPTION
          ======================================================== -->
-    <section class="comments-card">
-      <div class="comments-header-row">
-        <span class="comments-title">Комментарии профиля</span>
-        <span class="comments-count-tag">2 сообщения</span>
-      </div>
+    <div id="view-owner-active" class="profile-view-state">
+      <!-- Profile Hero Card (Identity Top Section) -->
+      <section class="hero-banner-card">
+        <div class="hero-cover">
+          <div class="hero-cover-pattern"></div>
+        </div>
 
-      <div class="comment-form">
-        <textarea class="comment-textarea" rows="2" placeholder="Напишите что-нибудь для lirreur..."></textarea>
-        <div class="comment-toolbar">
-          <button type="button" class="btn-media-attach">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-            <span>Медиа</span>
-          </button>
-          <div style="display:flex; align-items:center; gap:12px;">
-            <span style="font-size:11px; color:#66525b; font-family:monospace;">0 / 280</span>
-            <button type="button" class="btn-post">Отправить</button>
+        <div class="hero-content">
+          <div class="avatar-block">
+            <div class="avatar-box">LI</div>
+            <span class="status-badge online">Онлайн</span>
+          </div>
+
+          <div class="user-info">
+            <h1 class="user-name">lirreur</h1>
+            <p class="user-login">@lirreur</p>
+
+            <div class="user-meta-lines">
+              <div class="meta-line-item">
+                <span class="meta-pink-dot"></span>
+                <span>UID: 1</span>
+              </div>
+              <div class="meta-line-item">
+                <span class="meta-pink-dot"></span>
+                <span>Аккаунт создан 12 ноября 2026, 02:13</span>
+              </div>
+            </div>
+
+            <!-- Exact Production Role Badges with Sakura Vectors -->
+            <div class="roles-strip">
+              <span class="role-badge root" title="Создатель проекта">
+                <svg viewBox="0 0 352 352"><path fill="#ffd5d2" d="M176 176 C114 110 129 44 129 44 Q157 41 176 67 Q195 41 223 44 C223 44 238 110 176 176 Z"/></svg>
+                <span>ROOT</span>
+              </span>
+              <span class="role-badge lifetime" title="Бессрочная подписка">
+                <svg viewBox="0 0 352 352"><path fill="#fff3c4" d="M176 176 C114 110 129 44 129 44 Q157 41 176 67 Q195 41 223 44 C223 44 238 110 176 176 Z"/></svg>
+                <span>LIFETIME</span>
+              </span>
+              <span class="role-badge subscriber" title="Подписчик софта">
+                <span>ПОДПИСЧИК</span>
+              </span>
+              <span class="role-badge user" title="Пользователь">
+                <span>USER</span>
+              </span>
+            </div>
+          </div>
+
+          <!-- Hero Actions: Compact "Редактировать профиль" -->
+          <div class="hero-actions">
+            <button class="btn-edit-profile-compact" onclick="openEditModal()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              <span>Редактировать профиль</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Bento Row: Subscription + System & HWID -->
+      <div class="bento-single-row">
+        <!-- Card 1: Minimalist Subscription Card -->
+        <div class="sub-card-minimal">
+          <div>
+            <div class="sub-header">
+              <span class="sub-title-mono">ПОДПИСКА</span>
+              <span class="sub-status-pill">АКТИВНА</span>
+            </div>
+
+            <div class="sub-days-row">
+              <span class="sub-days-num">29</span>
+              <span class="sub-days-unit">дней</span>
+            </div>
+
+            <div class="sub-valid-date">Действует до: 12.12.2026</div>
+
+            <div class="sub-progress-bar-wrapper">
+              <div class="sub-progress-track">
+                <div class="sub-progress-fill"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="sub-buttons-row">
+            <button class="btn-sub-cta" onclick="alert('Скачивание SakuraLoader.exe запущено...');">
+              СКАЧАТЬ ЧИТ
+            </button>
+            <button class="btn-sub-secondary" onclick="alert('Подписка заморожена. Дни сохранены.');">
+              ЗАМОРОЗИТЬ
+            </button>
+            <a href="https://funpay.com/lots/offer?id=67099133" target="_blank" class="btn-sub-secondary">
+              ПРОДЛИТЬ
+            </a>
+            <button class="btn-sub-promo" onclick="openPromoModal()" title="Активировать промокод">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="4" width="18" height="16" rx="3"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="7" y1="8" x2="11" y2="8"/></svg>
+              <span>ПРОМОКОД</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Card 2: Compact System & HWID Specs -->
+        <div class="card-hwid-compact">
+          <div class="hwid-header">
+            <span class="hwid-title-mono">СИСТЕМА & HWID</span>
+            <span class="hwid-badge-green">UNDETECTED</span>
+          </div>
+
+          <div class="specs-list">
+            <div class="spec-item">
+              <span class="spec-name">HWID привязка</span>
+              <span class="spec-value green">АКТИВНА</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-name">Статус античита</span>
+              <span class="spec-value green">VAC SAFE</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-name">Сброс HWID</span>
+              <span class="spec-value link" onclick="alert('Запрос на сброс HWID отправлен администратору.')">Запросить сброс</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-name">Версия клиента</span>
+              <span class="spec-value">v3.2.0 (Stable)</span>
+            </div>
+          </div>
+
+          <div class="hwid-footer-note">
+            Все серверные компоненты работают штатно
           </div>
         </div>
       </div>
 
-      <!-- Comment Row 1 -->
-      <div class="comment-row">
-        <div class="comment-avatar-circle">VK</div>
-        <div class="comment-body">
-          <div class="comment-meta">
-            <span class="author-name-text">vladimir_k</span>
-            <span class="comment-time">Сегодня в 14:20</span>
+      <!-- Comments Wall -->
+      <section class="comments-card">
+        <div class="comments-header-row">
+          <span class="comments-title">Комментарии профиля</span>
+          <span class="comments-count-tag">2 сообщения</span>
+        </div>
+
+        <div class="comment-form">
+          <textarea class="comment-textarea" rows="2" placeholder="Напишите что-нибудь для lirreur..."></textarea>
+          <div class="comment-toolbar">
+            <button type="button" class="btn-media-attach">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+              <span>Медиа</span>
+            </button>
+            <div style="display:flex; align-items:center; gap:12px;">
+              <span style="font-size:11px; color:#66525b; font-family:monospace;">0 / 280</span>
+              <button type="button" class="btn-post">Отправить</button>
+            </div>
           </div>
-          <p class="comment-text-content">Отличный апдейт софта. Легит аимбот на Shadow Fiend отрабатывает идеально, никаких детектов.</p>
+        </div>
+
+        <div class="comment-row">
+          <div class="comment-avatar-circle">VK</div>
+          <div class="comment-body">
+            <div class="comment-meta">
+              <span class="author-name-text">vladimir_k</span>
+              <span class="comment-time">Сегодня в 14:20</span>
+            </div>
+            <p class="comment-text-content">Отличный апдейт софта. Легит аимбот на Shadow Fiend отрабатывает идеально, никаких детектов.</p>
+          </div>
+        </div>
+
+        <div class="comment-row">
+          <div class="comment-avatar-circle" style="color:#ffd5d2; border-color:#ff3b30;">LI</div>
+          <div class="comment-body">
+            <div class="comment-meta">
+              <span class="author-name-text" style="color:#ffd5d2;">lirreur</span>
+              <span class="role-badge root" style="height:20px; padding:0 8px; font-size:9px;">ROOT</span>
+              <span class="comment-time">Вчера в 21:05</span>
+            </div>
+            <p class="comment-text-content">Добро пожаловать в проект Sakura. База данных и система UID полностью синхронизированы.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ========================================================
+         VIEW 2: MY PROFILE — NO SUBSCRIPTION (EXPIRED)
+         ======================================================== -->
+    <div id="view-owner-expired" class="profile-view-state" style="display:none;">
+      <!-- Hero Card: lirreur without subscriber badges -->
+      <section class="hero-banner-card">
+        <div class="hero-cover">
+          <div class="hero-cover-pattern"></div>
+        </div>
+
+        <div class="hero-content">
+          <div class="avatar-block">
+            <div class="avatar-box">LI</div>
+            <span class="status-badge online">Онлайн</span>
+          </div>
+
+          <div class="user-info">
+            <h1 class="user-name">lirreur</h1>
+            <p class="user-login">@lirreur</p>
+
+            <div class="user-meta-lines">
+              <div class="meta-line-item">
+                <span class="meta-pink-dot"></span>
+                <span>UID: 1</span>
+              </div>
+              <div class="meta-line-item">
+                <span class="meta-pink-dot"></span>
+                <span>Аккаунт создан 12 ноября 2026, 02:13</span>
+              </div>
+            </div>
+
+            <!-- Only USER role (subscription expired) -->
+            <div class="roles-strip">
+              <span class="role-badge user" title="Пользователь">
+                <span>USER</span>
+              </span>
+            </div>
+          </div>
+
+          <!-- Hero Actions: Compact "Редактировать профиль" -->
+          <div class="hero-actions">
+            <button class="btn-edit-profile-compact" onclick="openEditModal()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              <span>Редактировать профиль</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Bento Row: Inactive Subscription + Inactive HWID -->
+      <div class="bento-single-row">
+        <!-- Card 1: Inactive Subscription Card -->
+        <div class="sub-card-minimal">
+          <div>
+            <div class="sub-header">
+              <span class="sub-title-mono">ПОДПИСКА</span>
+              <span class="sub-status-pill inactive">НЕАКТИВНА</span>
+            </div>
+
+            <div class="sub-days-row">
+              <span class="sub-days-num muted">0</span>
+              <span class="sub-days-unit muted">дней</span>
+            </div>
+
+            <div class="sub-valid-date">Действует до: Нет активной подписки</div>
+
+            <!-- Empty / Inactive Progress Bar Track -->
+            <div class="sub-progress-bar-wrapper">
+              <div class="sub-progress-track empty">
+                <div class="sub-progress-fill" style="width: 0%;"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Inactive Subscription Action Buttons: Buy, Trial, Promo -->
+          <div class="sub-buttons-row">
+            <a href="https://funpay.com/lots/offer?id=67099133" target="_blank" class="btn-sub-cta" style="text-decoration:none;">
+              КУПИТЬ ПОДПИСКУ
+            </a>
+            <button class="btn-sub-secondary" onclick="alert('Пробный период на 7 дней успешно активирован!');">
+              ТЕСТ НА 7 ДНЕЙ
+            </button>
+            <button class="btn-sub-promo" onclick="openPromoModal()" title="Активировать промокод">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="4" width="18" height="16" rx="3"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="7" y1="8" x2="11" y2="8"/></svg>
+              <span>ПРОМОКОД</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Card 2: System & HWID Awaiting Subscription -->
+        <div class="card-hwid-compact">
+          <div class="hwid-header">
+            <span class="hwid-title-mono">СИСТЕМА & HWID</span>
+            <span class="hwid-badge-gray">ОЖИДАНИЕ</span>
+          </div>
+
+          <div class="specs-list">
+            <div class="spec-item">
+              <span class="spec-name">HWID привязка</span>
+              <span class="spec-value muted">НЕАКТИВНА</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-name">Статус античита</span>
+              <span class="spec-value green">VAC SAFE</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-name">Сброс HWID</span>
+              <span class="spec-value muted">Недоступно</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-name">Версия клиента</span>
+              <span class="spec-value">v3.2.0 (Stable)</span>
+            </div>
+          </div>
+
+          <div class="hwid-footer-note">
+            Для активации HWID и загрузки чита оформите подписку
+          </div>
         </div>
       </div>
 
-      <!-- Comment Row 2 -->
-      <div class="comment-row">
-        <div class="comment-avatar-circle" style="color:#ffd5d2; border-color:#ff3b30;">LI</div>
-        <div class="comment-body">
-          <div class="comment-meta">
-            <span class="author-name-text" style="color:#ffd5d2;">lirreur</span>
-            <span class="role-badge root" style="height:20px; padding:0 8px; font-size:9px;">ROOT</span>
-            <span class="comment-time">Вчера в 21:05</span>
+      <!-- Comments Wall -->
+      <section class="comments-card">
+        <div class="comments-header-row">
+          <span class="comments-title">Комментарии профиля</span>
+          <span class="comments-count-tag">2 сообщения</span>
+        </div>
+
+        <div class="comment-form">
+          <textarea class="comment-textarea" rows="2" placeholder="Напишите что-нибудь для lirreur..."></textarea>
+          <div class="comment-toolbar">
+            <button type="button" class="btn-media-attach">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+              <span>Медиа</span>
+            </button>
+            <div style="display:flex; align-items:center; gap:12px;">
+              <span style="font-size:11px; color:#66525b; font-family:monospace;">0 / 280</span>
+              <button type="button" class="btn-post">Отправить</button>
+            </div>
           </div>
-          <p class="comment-text-content">Добро пожаловать в проект Sakura. База данных и система UID полностью синхронизированы.</p>
+        </div>
+
+        <div class="comment-row">
+          <div class="comment-avatar-circle">VK</div>
+          <div class="comment-body">
+            <div class="comment-meta">
+              <span class="author-name-text">vladimir_k</span>
+              <span class="comment-time">Сегодня в 14:20</span>
+            </div>
+            <p class="comment-text-content">Отличный апдейт софта. Легит аимбот на Shadow Fiend отрабатывает идеально, никаких детектов.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ========================================================
+         VIEW 3: GUEST VIEW — EGOISTE (UID 2, AUTHORIZED MUSIC)
+         ======================================================== -->
+    <div id="view-guest-egoiste" class="profile-view-state" style="display:none;">
+      <!-- Hero Card: Egoiste (UID 2) -->
+      <section class="hero-banner-card">
+        <div class="hero-cover">
+          <div class="hero-cover-pattern"></div>
+        </div>
+
+        <div class="hero-content">
+          <div class="avatar-block">
+            <div class="avatar-box" style="background:#170912; color:#ff9fbd; border-color:#3a1d28;">EG</div>
+            <span class="status-badge online">Онлайн</span>
+          </div>
+
+          <div class="user-info">
+            <h1 class="user-name">Egoiste</h1>
+            <p class="user-login">@egoiste</p>
+
+            <div class="user-meta-lines">
+              <div class="meta-line-item">
+                <span class="meta-pink-dot"></span>
+                <span>UID: 2</span>
+              </div>
+              <div class="meta-line-item">
+                <span class="meta-pink-dot"></span>
+                <span>Аккаунт создан 12 ноября 2026, 04:30</span>
+              </div>
+            </div>
+
+            <!-- Roles: Subscriber + User -->
+            <div class="roles-strip">
+              <span class="role-badge subscriber" title="Подписчик софта">
+                <span>ПОДПИСЧИК</span>
+              </span>
+              <span class="role-badge user" title="Пользователь">
+                <span>USER</span>
+              </span>
+            </div>
+          </div>
+
+          <!-- Hero Actions: No Edit Profile button! Guest or Admin button -->
+          <div class="hero-actions">
+            <button class="btn-admin-panel" onclick="alert('Открыта административная панель для профиля Egoiste (UID 2)');">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/></svg>
+              <span>Панель админа</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Bento Row: Custom Audio Player (UID 2 Face - Forever Young) + Public Info -->
+      <div class="bento-single-row">
+        <!-- Card 1: Music Player Card (Permitted for UID 2) -->
+        <div class="music-card-minimal">
+          <div>
+            <div class="sub-header">
+              <span class="sub-title-mono">АУДИО-ТЕМА ПРОФИЛЯ</span>
+              <span class="sub-status-pill">ИГРАЕТ</span>
+            </div>
+
+            <div class="music-track-title">FACE — FOREVER YOUNG</div>
+            <div class="music-track-sub">Индивидуальный саундтрек профиля Egoiste</div>
+
+            <!-- Animated Equalizer Bars -->
+            <div class="music-eq-row">
+              <div class="eq-bars-container">
+                <div class="eq-bar"></div>
+                <div class="eq-bar"></div>
+                <div class="eq-bar"></div>
+                <div class="eq-bar"></div>
+                <div class="eq-bar"></div>
+                <div class="eq-bar"></div>
+              </div>
+              <div style="font-family: monospace; font-size: 11px; color: #ffb7c5; letter-spacing: 0.1em;">
+                <span id="musicTimerText">01:24</span> / 02:48
+              </div>
+            </div>
+          </div>
+
+          <div class="music-controls-bar">
+            <button class="btn-music-play" id="btnToggleMusic" onclick="toggleAudioPreview()">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+              <span id="btnMusicText">ПАУЗА</span>
+            </button>
+            <div style="font-size: 11px; color: #8f7a85;">Громкость: 80%</div>
+          </div>
+        </div>
+
+        <!-- Card 2: Public Status & Info Card (HWID Hidden for foreign users) -->
+        <div class="card-hwid-compact">
+          <div class="hwid-header">
+            <span class="hwid-title-mono">ИНФОРМАЦИЯ & СТАТУС</span>
+            <span class="hwid-badge-green">ПОДПИСЧИК</span>
+          </div>
+
+          <div class="specs-list">
+            <div class="spec-item">
+              <span class="spec-name">Статус подписки</span>
+              <span class="spec-value green">АКТИВНА</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-name">Доступ к софту</span>
+              <span class="spec-value green">РАЗРЕШЁН</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-name">Приватность HWID</span>
+              <span class="spec-value">Скрыто</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-name">Клиент чита</span>
+              <span class="spec-value">v3.2.0 (Stable)</span>
+            </div>
+          </div>
+
+          <div class="hwid-footer-note">
+            Конфиденциальные данные HWID скрыты владельцем
+          </div>
         </div>
       </div>
-    </section>
+
+      <!-- Comments Wall for Egoiste -->
+      <section class="comments-card">
+        <div class="comments-header-row">
+          <span class="comments-title">Комментарии в профиле Egoiste</span>
+          <span class="comments-count-tag">1 сообщение</span>
+        </div>
+
+        <div class="comment-form">
+          <textarea class="comment-textarea" rows="2" placeholder="Напишите сообщение для Egoiste..."></textarea>
+          <div class="comment-toolbar">
+            <button type="button" class="btn-media-attach">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+              <span>Медиа</span>
+            </button>
+            <div style="display:flex; align-items:center; gap:12px;">
+              <span style="font-size:11px; color:#66525b; font-family:monospace;">0 / 280</span>
+              <button type="button" class="btn-post">Отправить</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="comment-row">
+          <div class="comment-avatar-circle" style="color:#ffd5d2; border-color:#ff3b30;">LI</div>
+          <div class="comment-body">
+            <div class="comment-meta">
+              <span class="author-name-text" style="color:#ffd5d2;">lirreur</span>
+              <span class="role-badge root" style="height:20px; padding:0 8px; font-size:9px;">ROOT</span>
+              <span class="comment-time">Сегодня в 18:12</span>
+            </div>
+            <p class="comment-text-content">Отличный конфиг на Инвокера, трек в профиле топ!</p>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ========================================================
+         VIEW 4: GUEST VIEW — REGULAR USER (UID 7, NO SUBSCRIPTION)
+         ======================================================== -->
+    <div id="view-guest-regular" class="profile-view-state" style="display:none;">
+      <!-- Hero Card: Nikita (UID 7) -->
+      <section class="hero-banner-card">
+        <div class="hero-cover">
+          <div class="hero-cover-pattern"></div>
+        </div>
+
+        <div class="hero-content">
+          <div class="avatar-block">
+            <div class="avatar-box" style="background:#120c10; color:#b78a95; border-color:#2a1b22;">NK</div>
+            <span class="status-badge online">Онлайн</span>
+          </div>
+
+          <div class="user-info">
+            <h1 class="user-name">Nikita</h1>
+            <p class="user-login">@nikita</p>
+
+            <div class="user-meta-lines">
+              <div class="meta-line-item">
+                <span class="meta-pink-dot"></span>
+                <span>UID: 7</span>
+              </div>
+              <div class="meta-line-item">
+                <span class="meta-pink-dot"></span>
+                <span>Аккаунт создан 12 ноября 2026, 18:45</span>
+              </div>
+            </div>
+
+            <!-- Only USER role -->
+            <div class="roles-strip">
+              <span class="role-badge user" title="Пользователь">
+                <span>USER</span>
+              </span>
+            </div>
+          </div>
+
+          <!-- Hero Actions: No Edit button -->
+          <div class="hero-actions"></div>
+        </div>
+      </section>
+
+      <!-- Bento Row: Public Subscription Status (Inactive) + Public Account Info -->
+      <div class="bento-single-row">
+        <!-- Card 1: Public Subscription Status -->
+        <div class="sub-card-minimal">
+          <div>
+            <div class="sub-header">
+              <span class="sub-title-mono">ПОДПИСКА</span>
+              <span class="sub-status-pill inactive">НЕАКТИВНА</span>
+            </div>
+
+            <div style="font-size: 22px; font-weight: 900; color: #ffffff; letter-spacing: -0.02em; text-transform: uppercase;">
+              НЕТ ПОДПИСКИ
+            </div>
+            <div class="sub-valid-date" style="margin-top: 6px;">Пользователь ещё не приобрёл подписку на Sakura</div>
+
+            <div style="margin: 20px 0; padding: 14px 16px; border-radius: 16px; border: 1px solid #23151b; background: #120b0e; font-size: 12px; color: #8f7a85; line-height: 1.5;">
+              Пользователь является зарегистрированным участником сообщества Sakura. Доступ к читу пока не оформлен.
+            </div>
+          </div>
+
+          <div style="font-size: 11px; color: #66525b; font-family: monospace;">
+            Приватные функции и загрузчик доступны только владельцу аккаунта
+          </div>
+        </div>
+
+        <!-- Card 2: Public Account Info -->
+        <div class="card-hwid-compact">
+          <div class="hwid-header">
+            <span class="hwid-title-mono">ИНФОРМАЦИЯ О ПРОФИЛЕ</span>
+            <span class="hwid-badge-gray">УЧАСТНИК</span>
+          </div>
+
+          <div class="specs-list">
+            <div class="spec-item">
+              <span class="spec-name">Статус профиля</span>
+              <span class="spec-value green">АКТИВЕН</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-name">UID пользователя</span>
+              <span class="spec-value">7</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-name">Сообщений на стене</span>
+              <span class="spec-value">0</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-name">Приватные данные</span>
+              <span class="spec-value">Скрыты</span>
+            </div>
+          </div>
+
+          <div class="hwid-footer-note">
+            Публичная карточка пользователя Sakura
+          </div>
+        </div>
+      </div>
+
+      <!-- Comments Wall for Nikita -->
+      <section class="comments-card">
+        <div class="comments-header-row">
+          <span class="comments-title">Комментарии в профиле Nikita</span>
+          <span class="comments-count-tag">0 сообщений</span>
+        </div>
+
+        <div class="comment-form">
+          <textarea class="comment-textarea" rows="2" placeholder="Оставьте первое сообщение для Nikita..."></textarea>
+          <div class="comment-toolbar">
+            <button type="button" class="btn-media-attach">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+              <span>Медиа</span>
+            </button>
+            <div style="display:flex; align-items:center; gap:12px;">
+              <span style="font-size:11px; color:#66525b; font-family:monospace;">0 / 280</span>
+              <button type="button" class="btn-post">Отправить</button>
+            </div>
+          </div>
+        </div>
+
+        <div style="text-align: center; padding: 24px 0; color: #6d5b65; font-size: 12px;">
+          В этом профиле пока нет сообщений. Будьте первым!
+        </div>
+      </section>
+    </div>
 
   </div>
 
@@ -1144,6 +1773,39 @@
   </div>
 
   <script>
+    // State switcher for previewing different profile modes
+    function switchViewState(stateId) {
+      document.querySelectorAll('.profile-view-state').forEach(el => el.style.display = 'none');
+      document.querySelectorAll('.view-tab-btn').forEach(btn => btn.classList.remove('active'));
+
+      const target = document.getElementById(`view-${stateId}`);
+      if (target) {
+        target.style.display = 'block';
+      }
+
+      const activeBtn = document.getElementById(`btn-${stateId}`);
+      if (activeBtn) {
+        activeBtn.classList.add('active');
+      }
+    }
+
+    // Interactive audio preview toggle for UID 2 (Egoiste)
+    let isPlayingAudio = true;
+    function toggleAudioPreview() {
+      isPlayingAudio = !isPlayingAudio;
+      const btn = document.getElementById("btnToggleMusic");
+      const label = document.getElementById("btnMusicText");
+      const bars = document.querySelectorAll(".eq-bar");
+
+      if (isPlayingAudio) {
+        label.textContent = "ПАУЗА";
+        bars.forEach(bar => bar.style.animationPlayState = "running");
+      } else {
+        label.textContent = "ИГРАТЬ";
+        bars.forEach(bar => bar.style.animationPlayState = "paused");
+      }
+    }
+
     function openPromoModal() {
       document.getElementById("promoModal").classList.add("active");
       setTimeout(() => document.getElementById("promoInputModal")?.focus(), 50);
