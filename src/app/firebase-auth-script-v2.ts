@@ -250,6 +250,9 @@ const firebaseModuleScript = `
         if (snap.emailVerified) {
           snap.verificationRequired = false;
         }
+        if (user.email_confirmed_at && !profileRow.email_verified && email) {
+          void callSupabaseRpc("sync_user_verification", { p_email: email }).catch(() => {});
+        }
         return publishUserSnapshot(snap);
       }
 
@@ -844,21 +847,85 @@ const firebaseModuleScript = `
 
             isCommentMediaPathReferenced: async () => false,
 
-            addProfileComment: async (payload) => {
+            addProfileComment: async (targetProfileIdOrPayload, maybeMessage, maybeMedia) => {
+              let targetProfileId;
+              let messageText = "";
+              let mediaObj = null;
+              let authorSnap = window.sakuraCurrentUserSnapshot;
+
+              if (typeof targetProfileIdOrPayload === "object" && targetProfileIdOrPayload !== null) {
+                targetProfileId = targetProfileIdOrPayload.profileId;
+                messageText = targetProfileIdOrPayload.message || "";
+                mediaObj = targetProfileIdOrPayload.media || targetProfileIdOrPayload;
+                if (targetProfileIdOrPayload.authorProfileId) {
+                  authorSnap = {
+                    ...authorSnap,
+                    profileId: targetProfileIdOrPayload.authorProfileId,
+                    displayName: targetProfileIdOrPayload.authorName || authorSnap?.displayName,
+                    photoURL: targetProfileIdOrPayload.authorPhotoURL || authorSnap?.photoURL,
+                    roles: targetProfileIdOrPayload.authorAccentRole ? [targetProfileIdOrPayload.authorAccentRole] : (authorSnap?.roles || ["user"])
+                  };
+                }
+              } else {
+                targetProfileId = Number(targetProfileIdOrPayload);
+                messageText = typeof maybeMessage === "string" ? maybeMessage : "";
+                mediaObj = maybeMedia;
+              }
+
+              if (!targetProfileId || targetProfileId <= 0) {
+                throw new Error("Invalid profile ID");
+              }
+
+              const authorProfileId = authorSnap?.profileId ?? null;
+              const authorName = authorSnap?.login || authorSnap?.displayName || "User";
+              const authorPhotoURL = authorSnap?.photoURL || null;
+              const authorAccentRole = authorSnap?.roles?.[0] || "user";
+
+              let mediaUrl = null;
+              let mediaType = null;
+              let mediaPath = null;
+              let mediaSize = null;
+
+              if (mediaObj && typeof mediaObj === "object") {
+                mediaUrl = mediaObj.url || mediaObj.mediaURL || null;
+                mediaType = mediaObj.type || mediaObj.mediaType || null;
+                mediaPath = mediaObj.path || mediaObj.mediaPath || null;
+                mediaSize = mediaObj.size || mediaObj.mediaSize || null;
+              }
+
               const res = await callSupabaseRpc("add_profile_comment", {
-                p_profile_id: payload.profileId,
-                p_author_profile_id: payload.authorProfileId,
-                p_author_name: payload.authorName,
-                p_author_photo_url: payload.authorPhotoURL || null,
-                p_author_accent_role: payload.authorAccentRole || null,
-                p_message: payload.message || "",
-                p_media_url: payload.mediaURL || null,
-                p_media_type: payload.mediaType || null,
-                p_media_path: payload.mediaPath || null,
-                p_media_size: payload.mediaSize || null
+                p_profile_id: targetProfileId,
+                p_author_profile_id: authorProfileId,
+                p_author_name: authorName,
+                p_author_photo_url: authorPhotoURL,
+                p_author_accent_role: authorAccentRole,
+                p_message: messageText,
+                p_media_url: mediaUrl,
+                p_media_type: mediaType,
+                p_media_path: mediaPath,
+                p_media_size: mediaSize
               });
-              if (res && !res.ok) throw new Error(res.error || "Failed to add comment");
-              return res;
+
+              if (res && res.ok === false) {
+                throw new Error(res.error || "Failed to add comment");
+              }
+
+              const nowIso = new Date().toISOString();
+              return {
+                id: res?.id || (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
+                profileId: targetProfileId,
+                authorProfileId,
+                authorName,
+                authorPhotoURL,
+                authorAccentRole,
+                message: messageText,
+                mediaURL: mediaUrl,
+                mediaType,
+                mediaPath,
+                mediaSize,
+                createdAt: res?.createdAt || nowIso,
+                updatedAt: res?.updatedAt || nowIso
+              };
             },
 
             updateProfileComment: async () => {
@@ -871,8 +938,8 @@ const firebaseModuleScript = `
                 p_comment_id: commentId,
                 p_actor_profile_id: actorId
               });
-              if (res && !res.ok) throw new Error(res.error || "Failed to delete comment");
-              return true;
+              if (res && res.ok === false) throw new Error(res.error || "Failed to delete comment");
+              return commentId;
             },
 
             resendVerificationEmail: async () => {
