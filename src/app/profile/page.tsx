@@ -258,11 +258,8 @@ const PROFILE_THEME_BY_KEY = new Map<string, (typeof PROFILE_THEME_OPTIONS)[numb
   PROFILE_THEME_OPTIONS.map((track) => [track.key, track])
 );
 const PROFILE_THEME_DEFAULT_KEY_BY_PROFILE_ID = new Map<number, string>([
-  [1, "where-is-my-mind"],
   [2, "forever-young"],
   [3, "cyberpunk"],
-  [4, "where-is-my-mind"],
-  [5, "where-is-my-mind"],
 ]);
 const COMMENT_MENTION_PATTERN = /@([A-Za-z\u0400-\u04FF0-9._-]{3,24})/g;
 const COMMENT_MENTION_DRAFT_PATTERN = /(^|[\s([{"'`])@([A-Za-z\u0400-\u04FF0-9._-]{2,24})$/;
@@ -2749,19 +2746,23 @@ export default function ProfilePage() {
       : activeProfile?.presence ?? null;
   const profileThemeProfileId =
     typeof activeProfile?.profileId === "number" ? activeProfile.profileId : null;
+  const isMusicAllowedForProfile =
+    profileThemeProfileId === 2 || profileThemeProfileId === 3;
   const profileThemeStoredSelection =
-    typeof profileThemeProfileId === "number"
+    typeof profileThemeProfileId === "number" && isMusicAllowedForProfile
       ? resolveProfileThemeSongSelection(activeProfile?.themeSongKey)
       : null;
   const profileThemeDefaultSongKey =
-    typeof profileThemeProfileId === "number"
+    typeof profileThemeProfileId === "number" && isMusicAllowedForProfile
       ? PROFILE_THEME_DEFAULT_KEY_BY_PROFILE_ID.get(profileThemeProfileId) ?? null
       : null;
   const profileThemeDefaultSelection =
-    typeof profileThemeProfileId === "number" && profileThemeDefaultSongKey
+    typeof profileThemeProfileId === "number" && profileThemeDefaultSongKey && isMusicAllowedForProfile
       ? resolveProfileThemeSongSelection(profileThemeDefaultSongKey)
       : null;
-  const profileThemeSelection = profileThemeStoredSelection ?? profileThemeDefaultSelection;
+  const profileThemeSelection = isMusicAllowedForProfile
+    ? (profileThemeStoredSelection ?? profileThemeDefaultSelection)
+    : null;
   const profileThemeSongSrc = profileThemeSelection?.src ?? null;
   const profileThemeEmbedUrl = profileThemeSelection?.embedUrl ?? null;
   const profileThemeSourceUrl = profileThemeSelection?.sourceUrl ?? null;
