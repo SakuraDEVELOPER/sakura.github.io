@@ -528,6 +528,10 @@ const firebaseModuleScript = `
 
             deleteCurrentAccount: async () => {
               const snap = window.sakuraCurrentUserSnapshot;
+              const isAdmin = (snap?.roles || []).some((r) => ["root", "owner", "co-owner", "admin"].includes(r));
+              if (!isAdmin) {
+                throw new Error("Удаление аккаунтов доступно только через панель администратора.");
+              }
               if (snap?.profileId) {
                 try {
                   await callSupabaseRpc("delete_user_account", { p_profile_id: snap.profileId });
@@ -542,6 +546,16 @@ const firebaseModuleScript = `
               } catch (e) {}
               await supabase.auth.signOut();
               publishUserSnapshot(null);
+            },
+
+            adminDeleteProfile: async (targetProfileId) => {
+              const actorId = window.sakuraCurrentUserSnapshot?.profileId || 1;
+              const res = await callSupabaseRpc("admin_delete_profile", {
+                p_actor_profile_id: actorId,
+                p_target_profile_id: targetProfileId
+              });
+              if (res && res.ok === false) throw new Error(res.error || "Failed to delete profile");
+              return true;
             },
 
             updateDisplayName: async (displayName) => {
