@@ -751,6 +751,26 @@
     .btn-music-play:hover {
       background: #ff4887;
     }
+    .music-card-minimal.horizontal {
+      border-radius: 28px;
+      border: 1px solid #201517;
+      background: radial-gradient(circle at top left, rgba(255, 183, 197, 0.08), transparent 60%), #0d0a0d;
+      padding: 20px 26px;
+      box-shadow: 0 0 60px rgba(255, 183, 197, 0.04);
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+    @media (max-width: 768px) {
+      .music-card-minimal.horizontal {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
 
     /* Admin Action Button in Guest Profile */
     .btn-admin-panel {
@@ -1085,11 +1105,14 @@
       <button id="btn-owner-expired" class="view-tab-btn" onclick="switchViewState('owner-expired')">
         <span>Мой профиль (Без подписки)</span>
       </button>
+      <button id="btn-guest-subscriber" class="view-tab-btn" onclick="switchViewState('guest-subscriber')">
+        <span>Чужой: с подпиской (не Эгоист)</span>
+      </button>
       <button id="btn-guest-egoiste" class="view-tab-btn" onclick="switchViewState('guest-egoiste')">
-        <span>Чужой профиль: Egoiste (с музыкой)</span>
+        <span>Чужой: Egoiste (UID 2, музыка)</span>
       </button>
       <button id="btn-guest-regular" class="view-tab-btn" onclick="switchViewState('guest-regular')">
-        <span>Чужой профиль: Гость (без подписки)</span>
+        <span>Чужой: без подписки</span>
       </button>
     </div>
 
@@ -1428,7 +1451,94 @@
     </div>
 
     <!-- ========================================================
-         VIEW 3: GUEST VIEW — EGOISTE (UID 2, AUTHORIZED MUSIC)
+         VIEW 3: GUEST VIEW — SUBSCRIBER (NOT EGOISTE, NO MUSIC)
+         ======================================================== -->
+    <div id="view-guest-subscriber" class="profile-view-state" style="display:none;">
+      <!-- Hero Card: Phantom (UID 4, Has Subscription) -->
+      <section class="hero-banner-card">
+        <div class="hero-cover">
+          <div class="hero-cover-pattern"></div>
+        </div>
+
+        <div class="hero-content">
+          <div class="avatar-block">
+            <div class="avatar-box" style="background:#130b14; color:#ffb7c5; border-color:#361f2c;">PH</div>
+            <span class="status-badge online">Онлайн</span>
+          </div>
+
+          <div class="user-info">
+            <h1 class="user-name">Phantom</h1>
+            <p class="user-login">@phantom</p>
+
+            <div class="user-meta-lines">
+              <div class="meta-line-item">
+                <span class="meta-pink-dot"></span>
+                <span>UID: 4</span>
+              </div>
+              <div class="meta-line-item">
+                <span class="meta-pink-dot"></span>
+                <span>Аккаунт создан 12 ноября 2026, 06:15</span>
+              </div>
+            </div>
+
+            <!-- Top Roles: Proof of Active Subscription -->
+            <div class="roles-strip">
+              <span class="role-badge subscriber" title="Подписчик софта">
+                <span>ПОДПИСЧИК</span>
+              </span>
+              <span class="role-badge user" title="Пользователь">
+                <span>USER</span>
+              </span>
+            </div>
+          </div>
+
+          <!-- Hero Actions: No Edit button -->
+          <div class="hero-actions">
+            <button class="btn-admin-panel" onclick="alert('Открыта административная панель для профиля Phantom (UID 4)');">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/></svg>
+              <span>Панель админа</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Clean Transition: Directly to Comments Wall (No Dummy Cards) -->
+      <section class="comments-card" style="margin-top: 24px;">
+        <div class="comments-header-row">
+          <span class="comments-title">Комментарии в профиле Phantom</span>
+          <span class="comments-count-tag">1 сообщение</span>
+        </div>
+
+        <div class="comment-form">
+          <textarea class="comment-textarea" rows="2" placeholder="Напишите сообщение для Phantom..."></textarea>
+          <div class="comment-toolbar">
+            <button type="button" class="btn-media-attach">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+              <span>Медиа</span>
+            </button>
+            <div style="display:flex; align-items:center; gap:12px;">
+              <span style="font-size:11px; color:#66525b; font-family:monospace;">0 / 280</span>
+              <button type="button" class="btn-post">Отправить</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="comment-row">
+          <div class="comment-avatar-circle" style="color:#ffd5d2; border-color:#ff3b30;">LI</div>
+          <div class="comment-body">
+            <div class="comment-meta">
+              <span class="author-name-text" style="color:#ffd5d2;">lirreur</span>
+              <span class="role-badge root" style="height:20px; padding:0 8px; font-size:9px;">ROOT</span>
+              <span class="comment-time">Сегодня в 19:40</span>
+            </div>
+            <p class="comment-text-content">Хорошая игра на керри. Приватный билд настроен отлично.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ========================================================
+         VIEW 4: GUEST VIEW — EGOISTE (UID 2, AUTHORIZED MUSIC)
          ======================================================== -->
     <div id="view-guest-egoiste" class="profile-view-state" style="display:none;">
       <!-- Hero Card: Egoiste (UID 2) -->
@@ -1469,7 +1579,7 @@
             </div>
           </div>
 
-          <!-- Hero Actions: No Edit Profile button! Guest or Admin button -->
+          <!-- Hero Actions: Admin Panel -->
           <div class="hero-actions">
             <button class="btn-admin-panel" onclick="alert('Открыта административная панель для профиля Egoiste (UID 2)');">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/></svg>
@@ -1479,73 +1589,38 @@
         </div>
       </section>
 
-      <!-- Bento Row: Custom Audio Player (UID 2 Face - Forever Young) + Public Info -->
-      <div class="bento-single-row">
-        <!-- Card 1: Music Player Card (Permitted for UID 2) -->
-        <div class="music-card-minimal">
-          <div>
-            <div class="sub-header">
-              <span class="sub-title-mono">АУДИО-ТЕМА ПРОФИЛЯ</span>
-              <span class="sub-status-pill">ИГРАЕТ</span>
-            </div>
-
-            <div class="music-track-title">FACE — FOREVER YOUNG</div>
-            <div class="music-track-sub">Индивидуальный саундтрек профиля Egoiste</div>
-
-            <!-- Animated Equalizer Bars -->
-            <div class="music-eq-row">
-              <div class="eq-bars-container">
-                <div class="eq-bar"></div>
-                <div class="eq-bar"></div>
-                <div class="eq-bar"></div>
-                <div class="eq-bar"></div>
-                <div class="eq-bar"></div>
-                <div class="eq-bar"></div>
-              </div>
-              <div style="font-family: monospace; font-size: 11px; color: #ffb7c5; letter-spacing: 0.1em;">
-                <span id="musicTimerText">01:24</span> / 02:48
-              </div>
-            </div>
+      <!-- Sleek Horizontal Audio Bar (Authorized only for UID 2, no dummy status card) -->
+      <div class="music-card-minimal horizontal">
+        <div>
+          <div class="sub-header" style="margin-bottom: 8px;">
+            <span class="sub-title-mono">АУДИО-ТЕМА ПРОФИЛЯ</span>
+            <span class="sub-status-pill">ИГРАЕТ</span>
           </div>
 
-          <div class="music-controls-bar">
-            <button class="btn-music-play" id="btnToggleMusic" onclick="toggleAudioPreview()">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
-              <span id="btnMusicText">ПАУЗА</span>
-            </button>
-            <div style="font-size: 11px; color: #8f7a85;">Громкость: 80%</div>
-          </div>
+          <div class="music-track-title">FACE — FOREVER YOUNG</div>
+          <div class="music-track-sub">Индивидуальный саундтрек профиля Egoiste (UID 2)</div>
         </div>
 
-        <!-- Card 2: Public Status & Info Card (HWID Hidden for foreign users) -->
-        <div class="card-hwid-compact">
-          <div class="hwid-header">
-            <span class="hwid-title-mono">ИНФОРМАЦИЯ & СТАТУС</span>
-            <span class="hwid-badge-green">ПОДПИСЧИК</span>
-          </div>
-
-          <div class="specs-list">
-            <div class="spec-item">
-              <span class="spec-name">Статус подписки</span>
-              <span class="spec-value green">АКТИВНА</span>
+        <div style="display:flex; align-items:center; gap:20px; flex-wrap:wrap;">
+          <!-- Animated Equalizer Bars -->
+          <div class="music-eq-row" style="margin: 0;">
+            <div class="eq-bars-container">
+              <div class="eq-bar"></div>
+              <div class="eq-bar"></div>
+              <div class="eq-bar"></div>
+              <div class="eq-bar"></div>
+              <div class="eq-bar"></div>
+              <div class="eq-bar"></div>
             </div>
-            <div class="spec-item">
-              <span class="spec-name">Доступ к софту</span>
-              <span class="spec-value green">РАЗРЕШЁН</span>
-            </div>
-            <div class="spec-item">
-              <span class="spec-name">Приватность HWID</span>
-              <span class="spec-value">Скрыто</span>
-            </div>
-            <div class="spec-item">
-              <span class="spec-name">Клиент чита</span>
-              <span class="spec-value">v3.2.0 (Stable)</span>
+            <div style="font-family: monospace; font-size: 11px; color: #ffb7c5; letter-spacing: 0.1em;">
+              <span id="musicTimerText">01:24</span> / 02:48
             </div>
           </div>
 
-          <div class="hwid-footer-note">
-            Конфиденциальные данные HWID скрыты владельцем
-          </div>
+          <button class="btn-music-play" id="btnToggleMusic" onclick="toggleAudioPreview()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+            <span id="btnMusicText">ПАУЗА</span>
+          </button>
         </div>
       </div>
 
@@ -1585,7 +1660,7 @@
     </div>
 
     <!-- ========================================================
-         VIEW 4: GUEST VIEW — REGULAR USER (UID 7, NO SUBSCRIPTION)
+         VIEW 5: GUEST VIEW — REGULAR USER (UID 7, NO SUBSCRIPTION)
          ======================================================== -->
     <div id="view-guest-regular" class="profile-view-state" style="display:none;">
       <!-- Hero Card: Nikita (UID 7) -->
@@ -1615,7 +1690,7 @@
               </div>
             </div>
 
-            <!-- Only USER role -->
+            <!-- Only USER role (no subscriber badge) -->
             <div class="roles-strip">
               <span class="role-badge user" title="Пользователь">
                 <span>USER</span>
@@ -1628,65 +1703,8 @@
         </div>
       </section>
 
-      <!-- Bento Row: Public Subscription Status (Inactive) + Public Account Info -->
-      <div class="bento-single-row">
-        <!-- Card 1: Public Subscription Status -->
-        <div class="sub-card-minimal">
-          <div>
-            <div class="sub-header">
-              <span class="sub-title-mono">ПОДПИСКА</span>
-              <span class="sub-status-pill inactive">НЕАКТИВНА</span>
-            </div>
-
-            <div style="font-size: 22px; font-weight: 900; color: #ffffff; letter-spacing: -0.02em; text-transform: uppercase;">
-              НЕТ ПОДПИСКИ
-            </div>
-            <div class="sub-valid-date" style="margin-top: 6px;">Пользователь ещё не приобрёл подписку на Sakura</div>
-
-            <div style="margin: 20px 0; padding: 14px 16px; border-radius: 16px; border: 1px solid #23151b; background: #120b0e; font-size: 12px; color: #8f7a85; line-height: 1.5;">
-              Пользователь является зарегистрированным участником сообщества Sakura. Доступ к читу пока не оформлен.
-            </div>
-          </div>
-
-          <div style="font-size: 11px; color: #66525b; font-family: monospace;">
-            Приватные функции и загрузчик доступны только владельцу аккаунта
-          </div>
-        </div>
-
-        <!-- Card 2: Public Account Info -->
-        <div class="card-hwid-compact">
-          <div class="hwid-header">
-            <span class="hwid-title-mono">ИНФОРМАЦИЯ О ПРОФИЛЕ</span>
-            <span class="hwid-badge-gray">УЧАСТНИК</span>
-          </div>
-
-          <div class="specs-list">
-            <div class="spec-item">
-              <span class="spec-name">Статус профиля</span>
-              <span class="spec-value green">АКТИВЕН</span>
-            </div>
-            <div class="spec-item">
-              <span class="spec-name">UID пользователя</span>
-              <span class="spec-value">7</span>
-            </div>
-            <div class="spec-item">
-              <span class="spec-name">Сообщений на стене</span>
-              <span class="spec-value">0</span>
-            </div>
-            <div class="spec-item">
-              <span class="spec-name">Приватные данные</span>
-              <span class="spec-value">Скрыты</span>
-            </div>
-          </div>
-
-          <div class="hwid-footer-note">
-            Публичная карточка пользователя Sakura
-          </div>
-        </div>
-      </div>
-
-      <!-- Comments Wall for Nikita -->
-      <section class="comments-card">
+      <!-- Clean Transition: Directly to Comments Wall (No Dummy Cards) -->
+      <section class="comments-card" style="margin-top: 24px;">
         <div class="comments-header-row">
           <span class="comments-title">Комментарии в профиле Nikita</span>
           <span class="comments-count-tag">0 сообщений</span>
