@@ -67,6 +67,30 @@ const PAYLOAD_KEYS: Record<string, { key: string; cipher_sha256: string }> = {
     key: "2517da238a9358595ec4aed2ac6fde95c12f98158eacfb4467125b23cabd6f69",
     cipher_sha256: "e3e8275ba59383dd051b0022b2dcc7ac40fe650ba0aacfa3f54f31737df49cbc",
   },
+  "22fb0b1aff6a4877901eee8beeccef68": {
+    key: "896f5b95d60403829e74791ececd5c816554261dbd1af606cb43ce1da0ba2edf",
+    cipher_sha256: "d4f18146ae089d30e44e9bfdeda6b89ab20c72b527b1e15b419ac8e34af4b9e2",
+  },
+  "2b18cfc4fc93402baee7ac475c38688c": {
+    key: "789bf5b232d79f692a76265f0a505a2647584d643773af507657f064817252a6",
+    cipher_sha256: "63c01403a6fc85a6adb467f0b8095c029cd02d270bebb0a5bcf67a47a5cde8c0",
+  },
+  "85c83676ec9a467cb1c60fbb5a78f50d": {
+    key: "e6b0a0053deb2d10fa0cfbc86d7ff3248aeef984f99d78e1c8960da3dc8fbe7f",
+    cipher_sha256: "73be7aef7130fd2a3c7382957e59449db7728a35b18767f8d519c9465626139d",
+  },
+  "9b1f8ce69ab94644b15d3d734da57389": {
+    key: "f0ed3bbbb38b9a69d351c6bb5df1edf3efef9b1d0a00a2326cec17b23ccceae9",
+    cipher_sha256: "aa2b2bd1020ebcb2f2f13f4de61db80266793ab94d34df83a9cb6e3b8975d081",
+  },
+  "e3b413e7162b44fb9ad01a77bc3f2a34": {
+    key: "35ab906414e3e4fe45767c97c22c8a92b7c3fdfb4460978c74a2ba892f473157",
+    cipher_sha256: "d8aa4ee5a802cf893b9f423b3b2f23b121fe4f8bc93d9547b973c0c5e18cf661",
+  },
+  "d7b7d579af4141b2ba3996978eb02fab": {
+    key: "2c7cc6f679365e85e3af21e64fee08c0ac31389c2e128ae139aed72bf1635b30",
+    cipher_sha256: "3806174397d2137b7de8a1d0d5edcab5ffa4e5ea22c84af61faf5b0177ad44a6",
+  },
 };
 
 // ECDSA P-256 Private Key (PKCS#8 PEM)
@@ -815,8 +839,6 @@ Deno.serve(async (req) => {
         newUntil: newUntilIso,
         newUntilSec: Math.floor(newUntilTime / 1000),
         plan: isLifetime ? "lifetime" : "prem",
-        message: `Промокод успешно активирован! Добавлено +${durationDays} дн. подписки.`,
-      });
         message: `Промокод успешно активирован! Добавлено +${durationDays} дн. подписки.`,
       });
     }
