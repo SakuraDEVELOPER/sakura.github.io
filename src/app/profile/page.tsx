@@ -1924,9 +1924,11 @@ export default function ProfilePage() {
 
   // Promo code redemption state
   const [promoCodeInput, setPromoCodeInput] = useState("");
+  const [isPromoModalOpen, setIsPromoModalOpen] = useState(false);
   const [isRedeemingPromo, setIsRedeemingPromo] = useState(false);
   const [promoErrorMessage, setPromoErrorMessage] = useState<string | null>(null);
   const [promoSuccessMessage, setPromoSuccessMessage] = useState<string | null>(null);
+  const [hwidResetSent, setHwidResetSent] = useState(false);
 
   // Freeze state
   const [isFreezingSubscription, setIsFreezingSubscription] = useState(false);
@@ -3347,6 +3349,20 @@ export default function ProfilePage() {
       ? formatTime(profileSubscriptionUntil, locale)
       : t("Not set", "Не указан");
   const profileHwid = resolveProfileHwid(activeProfile);
+  const remainingDaysCount = (() => {
+    if (hasLifetimeRole) return 999;
+    if (isProfileFrozen && typeof activeProfile?.frozenRemainingMs === "number" && activeProfile.frozenRemainingMs > 0) {
+      return Math.max(0, Math.floor(activeProfile.frozenRemainingMs / 86400000));
+    }
+    if (!profileSubscriptionUntil) return 0;
+    const diffMs = new Date(profileSubscriptionUntil).getTime() - Date.now();
+    return Math.max(0, Math.floor(diffMs / 86400000));
+  })();
+  const subscriptionProgressPercent = (() => {
+    if (hasLifetimeRole) return 100;
+    if (!hasActiveSubscriptionRole || remainingDaysCount <= 0) return 0;
+    return Math.min(100, Math.max(10, Math.round((remainingDaysCount / 30) * 100)));
+  })();
   const isOwnProfileViewById = Boolean(
     visibleCurrentUser &&
       typeof visibleCurrentUser.profileId === "number" &&
@@ -7164,9 +7180,6 @@ export default function ProfilePage() {
                 <Link href="/changelog" className="inline-flex items-center justify-center rounded-full border border-[#2a2a2a] bg-[#101010] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-gray-300 transition hover:border-[#4a4a4a] hover:text-white">{t("Changelog", "Патчноуты")}</Link>
                 {visibleCurrentUser?.profileId && !isOwner ? <a href={profilePath(visibleCurrentUser.profileId)} className="inline-flex items-center justify-center rounded-full border border-[#2b1b1e] bg-[#1a1012] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/40 hover:text-white">My Profile</a> : null}
                 {visibleCurrentUser ? <button type="button" onClick={handleLogout} disabled={isLoggingOut} className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">{isLoggingOut ? t("Logging out...", "Выход...") : t("Logout", "Выход")}</button> : null}
-                <div className="lg:hidden">
-                  <SiteOnlineBadge count={siteOnlineCount} profileHrefBuilder={profilePath} />
-                </div>
               </div>
             </nav>
             <button
@@ -7306,13 +7319,6 @@ export default function ProfilePage() {
                 </div>
               </div>
             ) : null}
-
-            <div className="fixed right-8 top-[52px] z-40 hidden lg:flex">
-              <SiteOnlineBadge
-                count={siteOnlineCount}
-                profileHrefBuilder={profilePath}
-              />
-            </div>
           </div>
         </div>
 
@@ -7321,7 +7327,7 @@ export default function ProfilePage() {
         {hasHydrated && authReady && !authError && !isProfileLoading && !activeProfile && profileError ? <section className="rounded-[32px] border border-[#201517] bg-[#0d0d0d] px-8 py-12 shadow-[0_0_60px_rgba(255,183,197,0.06)]"><p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">{requestedProfileId ? "Profile Missing" : "Guest State"}</p><p className="mt-4 text-sm leading-relaxed text-gray-400">{profileError}</p></section> : null}
 
         {activeProfile ? (
-          <section className="relative grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,64fr)_minmax(0,36fr)] lg:items-start">
+          <section className="relative flex flex-col gap-6">
             {typeof activeProfile.profileId === "number" && activeProfile.profileId > 1 && previousProfileId !== null ? (
               typeof previousProfileId === "number" ? (
                 <a
@@ -7402,490 +7408,408 @@ export default function ProfilePage() {
                 </span>
               )
             ) : null}
-            <div className="relative z-10 w-full self-start overflow-hidden rounded-[34px] border border-[#201517] bg-[#0d0d0d] shadow-[0_0_80px_rgba(255,183,197,0.06)]">
-              <div className="border-b border-[#1b1b1b] bg-[radial-gradient(circle_at_top,rgba(255,183,197,0.16),transparent_55%)] px-8 py-8">
+            {/* Hero Banner Card */}
+            <div className="relative z-10 w-full overflow-hidden rounded-[34px] border border-[#201517] bg-[#0d0d0d] shadow-[0_0_80px_rgba(255,183,197,0.06)]">
+              <div className="bg-[radial-gradient(circle_at_top,rgba(255,183,197,0.16),transparent_55%)] px-8 py-8">
                 <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
                   <div className="flex shrink-0 flex-col items-center gap-3">
-                  {hasActiveProfileAvatar ? <AvatarMedia src={activeProfileAvatarUrl ?? ""} alt={primaryName} loading="eager" decoding="async" className="h-[104px] w-[104px] rounded-[30px] border border-[#2c2023] object-cover shadow-[0_0_30px_rgba(255,183,197,0.14)]" /> : <div className="flex h-[104px] w-[104px] items-center justify-center rounded-[30px] border border-[#2c2023] bg-[#1a1012] text-2xl font-black uppercase text-[#ffb7c5] shadow-[0_0_30px_rgba(255,183,197,0.14)]">{initials}</div>}
-                  <span style={{ minWidth: 104, height: 30 }} className={`inline-flex shrink-0 items-center justify-center rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${isActiveProfileOnline ? "border-[#1f3b2f] bg-[#0d1713] text-[#8ce5b2]" : "border-[#312228] bg-[#140d11] text-[#ffb7c5]"}`}>{isActiveProfileOnline ? t("Online", "Онлайн") : t("Offline", "Оффлайн")}</span>
+                    {hasActiveProfileAvatar ? (
+                      <AvatarMedia src={activeProfileAvatarUrl ?? ""} alt={primaryName} loading="eager" decoding="async" className="h-[104px] w-[104px] rounded-[30px] border border-[#2c2023] object-cover shadow-[0_0_30px_rgba(255,183,197,0.14)]" />
+                    ) : (
+                      <div className="flex h-[104px] w-[104px] items-center justify-center rounded-[30px] border border-[#2c2023] bg-[#1a1012] text-2xl font-black uppercase text-[#ffb7c5] shadow-[0_0_30px_rgba(255,183,197,0.14)]">
+                        {initials}
+                      </div>
+                    )}
+                    <span style={{ minWidth: 104, height: 30 }} className={`inline-flex shrink-0 items-center justify-center rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${isActiveProfileOnline ? "border-[#1f3b2f] bg-[#0d1713] text-[#8ce5b2]" : "border-[#312228] bg-[#140d11] text-[#ffb7c5]"}`}>
+                      {isActiveProfileOnline ? t("Online", "Онлайн") : t("Offline", "Оффлайн")}
+                    </span>
                   </div>
                   <div className="flex min-w-0 flex-1 flex-col sm:min-h-[146px]">
                     <div className="min-w-0">
-                      <h1 style={profileHeadlineStyle} className="min-w-0 truncate text-3xl font-black uppercase tracking-tighter">{primaryName}</h1>
-                      {hasUsername ? <p className="mt-1 text-sm font-medium text-[#c7d4cc]">@{activeProfile.login}</p> : isOwner ? <p className="mt-1 text-sm text-gray-500">{t("Login not set yet.", "Логин ещё не задан.")}</p> : null}
-                      {typeof activeProfile.profileId === "number" ? <p className="mt-1 flex max-w-full items-center gap-2 text-[11px] text-[#b78a95]">
-                        <span aria-hidden="true" className="inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-[#ff9fbd] shadow-[0_0_10px_rgba(255,159,189,0.7)]" />
-                        <span className="truncate">UID: {activeProfile.profileId}</span>
-                      </p> : null}
+                      <h1 style={profileHeadlineStyle} className="min-w-0 truncate text-3xl font-black uppercase tracking-tighter">
+                        {primaryName}
+                      </h1>
+                      {hasUsername ? (
+                        <p className="mt-1 text-sm font-medium text-[#c7d4cc]">@{activeProfile.login}</p>
+                      ) : isOwner ? (
+                        <p className="mt-1 text-sm text-gray-500">{t("Login not set yet.", "Логин ещё не задан.")}</p>
+                      ) : null}
+                      {typeof activeProfile.profileId === "number" ? (
+                        <p className="mt-1 flex max-w-full items-center gap-2 text-[11px] text-[#b78a95]">
+                          <span aria-hidden="true" className="inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-[#ff9fbd] shadow-[0_0_10px_rgba(255,159,189,0.7)]" />
+                          <span className="truncate">UID: {activeProfile.profileId}</span>
+                        </p>
+                      ) : null}
                       <p className={`${typeof activeProfile.profileId === "number" ? "mt-0.5" : "mt-1"} flex max-w-full items-center gap-2 text-[11px] text-[#b78a95]`}>
                         <span aria-hidden="true" className="inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-[#ff9fbd] shadow-[0_0_10px_rgba(255,159,189,0.7)]" />
                         <span className="truncate">{t("Account created", "Аккаунт создан")} {formatTime(activeProfile.creationTime, locale)}</span>
                       </p>
                     </div>
                     <div className="mt-3 flex flex-wrap items-center gap-3 sm:mt-auto">
-                      {profileRoles.map((role) => <span key={role} title={roleBadgeLabel(role)} style={{ ...roleBadgeStyle(role), ...roleBadgeTextStyle, height: 30 }} className="inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-full border px-3 py-1 text-[10px] font-bold"><span aria-hidden="true" className="inline-flex items-center">{renderRoleBadgeText(role)}</span></span>)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="px-8 pt-6 pb-7">
-                <div
-                  className={`rounded-[26px] border border-[#2f161d] bg-[radial-gradient(circle_at_top_left,rgba(255,183,197,0.1),transparent_58%),linear-gradient(180deg,#0c0a0b_0%,#090909_100%)] shadow-[0_0_26px_rgba(255,143,177,0.08)] ${
-                    shouldShowSubscriptionDetails ? "p-6" : "px-4 py-3"
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-4">
-                    <p className="font-mono text-[10px] uppercase leading-none tracking-[0.4em] text-[#ffb7c5]">
-                      {t("Subscription", "Подписка")}
-                    </p>
-                    <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-                      {hasLifetimeRole ? (
-                        <span className="inline-flex h-[24px] shrink-0 items-center rounded-full border border-[#facc15]/50 bg-[#1b1708] px-3 text-[10px] font-bold leading-none text-[#fff3c4] shadow-[0_0_16px_rgba(250,204,21,0.22)]">
-                          {t("Lifetime", "Навсегда")}
+                      {profileRoles.map((role) => (
+                        <span key={role} title={roleBadgeLabel(role)} style={{ ...roleBadgeStyle(role), ...roleBadgeTextStyle, height: 30 }} className="inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-full border px-3 py-1 text-[10px] font-bold">
+                          <span aria-hidden="true" className="inline-flex items-center">{renderRoleBadgeText(role)}</span>
                         </span>
-                      ) : activeProfile?.isFrozen ? (
-                        <span className="inline-flex h-[24px] shrink-0 items-center rounded-full border border-[#38bdf8]/50 bg-[#082f49] px-3 text-[10px] font-bold leading-none text-[#7dd3fc] shadow-[0_0_16px_rgba(56,189,248,0.22)]">
-                          {t("Frozen", "Заморожена")}
-                        </span>
-                      ) : hasActiveSubscriptionRole ? (
-                        <span className="inline-flex h-[24px] shrink-0 items-center rounded-full border border-[#1f7a4d] bg-[#0d1713] px-3 text-[10px] font-bold leading-none text-[#8ce5b2] shadow-[0_0_18px_rgba(31,122,77,0.24)]">
-                          {t("Active", "Активна")}
-                        </span>
-                      ) : (
-                        <span className="inline-flex h-[24px] shrink-0 items-center rounded-full border border-[#3a3a3a] bg-[#111111] px-3 text-[10px] font-bold leading-none text-[#a3a3a3]">
-                          {t("Inactive", "Неактивна")}
-                        </span>
-                      )}
+                      ))}
                     </div>
                   </div>
 
-                  {shouldShowSubscriptionDetails ? (
-                    <div className="mt-5 rounded-[22px] border border-[#24171b] bg-[radial-gradient(circle_at_top_left,rgba(255,183,197,0.08),transparent_62%),#090909] p-5">
-                      {hasLifetimeRole ? (
-                        /* Lifetime Profile View */
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                          <div className="flex items-center gap-3.5">
-                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-amber-500/40 bg-amber-500/10 shadow-[0_0_20px_rgba(245,158,11,0.15)]">
-                              <SakuraIcon
-                                className="h-6 w-6 text-amber-400"
-                                stroke="#fbbf24"
-                                fill="#f59e0b"
-                              />
-                            </div>
-                            <div>
-                              <p className="text-base font-black uppercase tracking-tight text-white">
-                                {t("Sakura Lifetime", "Sakura Lifetime")}
-                              </p>
-                              <p className="text-xs text-amber-200/70 font-mono mt-0.5">
-                                {t(
-                                  "Permanent access",
-                                  "Бессрочный доступ"
-                                )}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="shrink-0">
-                            <button
-                              type="button"
-                              disabled
-                              className="inline-flex items-center justify-center rounded-xl border border-[#ffb7c5]/30 bg-[#ffb7c5] px-5 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-black opacity-60 cursor-not-allowed"
-                            >
-                              {t("Download SakuraLoader.exe", "Скачать SakuraLoader.exe")}
-                            </button>
-                          </div>
-                        </div>
-                      ) : activeProfile?.isFrozen ? (
-                        /* Frozen Subscription View */
-                        <div>
-                          <div>
-                            <p className="text-base font-bold text-[#7dd3fc]">
-                              {t("Subscription Frozen", "Подписка заморожена")}
-                            </p>
-                            <p className="mt-1 text-xs leading-relaxed text-gray-400">
-                              {t(
-                                "Timer is paused. Launcher login is locked until you unfreeze.",
-                                "Таймер времени приостановлен. Вход в лоадер заблокирован до разморозки."
-                              )}
-                            </p>
-                          </div>
-                          {remainingTimePretty && (
-                            <div className="mt-3.5 inline-flex items-center gap-2 rounded-xl border border-[#38bdf8]/30 bg-[#082f49]/40 px-3.5 py-1.5 text-xs">
-                              <span className="text-gray-400">{t("Saved Remaining Time", "Сохранённое время")}:</span>
-                              <span className="font-bold text-[#7dd3fc]">{remainingTimePretty}</span>
-                            </div>
-                          )}
-                          {isOwner && (
-                            <div className="mt-4 flex flex-wrap items-center gap-3">
-                              <button
-                                type="button"
-                                onClick={handleUnfreezeSubscription}
-                                disabled={isFreezingSubscription}
-                                className="inline-flex items-center justify-center rounded-full border border-[#f97316]/60 bg-gradient-to-r from-[#ea580c] to-[#f97316] px-5 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-white shadow-[0_0_20px_rgba(249,115,22,0.35)] transition hover:scale-105 disabled:opacity-60"
-                              >
-                                <span>{isFreezingSubscription ? t("Unfreezing...", "Размораживаем...") : t("Unfreeze Subscription", "Разморозить подписку")}</span>
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      ) : hasActiveSubscriptionRole ? (
-                        /* Active Timed Subscription View */
-                        <div>
-                          <div>
-                            <p className="text-base font-bold text-white">
-                              {t("Sakura Subscription", "Подписка Sakura")}
-                            </p>
-                            <p className="mt-0.5 text-xs text-gray-400">
-                              {isTrialSubscription ? t("Test Period (7 Days)", "Пробный период (7 Дней)") : t("Active Full Access", "Активный полный доступ")}
-                            </p>
-                          </div>
-                          <div className="mt-3.5 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                            <div className="rounded-xl border border-[#3a2a31] bg-[#140d11] px-3.5 py-2.5">
-                              <p className="text-[10px] font-mono uppercase text-[#b78a95] tracking-[0.18em]">
-                                {t("Valid Until", "Действует до")}
-                              </p>
-                              <p className="mt-0.5 text-sm font-semibold text-white">
-                                {profileSubscriptionUntilLabel}
-                              </p>
-                            </div>
-                            {remainingTimePretty && (
-                              <div className="rounded-xl border border-[#1f7a4d]/40 bg-[#0d1713] px-3.5 py-2.5">
-                                <p className="text-[10px] font-mono uppercase text-[#8ce5b2] tracking-[0.18em]">
-                                  {t("Time Remaining", "Осталось времени")}
-                                </p>
-                                <p className="mt-0.5 text-sm font-semibold text-[#8ce5b2]">
-                                  {remainingTimePretty}
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                          <div className="mt-4 flex flex-wrap items-center gap-3">
-                            <button
-                              type="button"
-                              disabled
-                              className="inline-flex items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-black opacity-60 cursor-not-allowed"
-                            >
-                              {t("Download Loader", "Скачать лоадер")}
-                            </button>
-                            {isOwner && !isTrialSubscription && !hasLifetimeRole && (
-                              isFreezeOnCooldown ? (
-                                <button
-                                  type="button"
-                                  disabled
-                                  title={t(
-                                    `Freeze cooldown active. Available only once every 30 days. Next freeze in ${freezeCooldownDays} days.`,
-                                    `Заморозка доступна только 1 раз в 30 дней. Следующая заморозка через ${freezeCooldownDays} дн.`
-                                  )}
-                                  className="inline-flex items-center justify-center rounded-full border border-gray-800 bg-[#141012] px-4 py-2 text-xs font-bold text-gray-500 opacity-60 cursor-not-allowed"
-                                >
-                                  <span>{t(`Freeze (${freezeCooldownDays}d)`, `Заморозка (${freezeCooldownDays} дн.)`)}</span>
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={handleFreezeSubscription}
-                                  disabled={isFreezingSubscription}
-                                  className="inline-flex items-center justify-center rounded-full border border-[#38bdf8]/40 bg-[#082f49]/50 px-4 py-2 text-xs font-bold text-[#7dd3fc] transition hover:border-[#38bdf8] hover:text-white disabled:opacity-60"
-                                >
-                                  <span>{isFreezingSubscription ? t("Freezing...", "Заморозка...") : t("Freeze Subscription", "Заморозить")}</span>
-                                </button>
-                              )
-                            )}
-                            {isOwner && !hasAlreadyClaimedTrial && !hasLifetimeRole && (
-                              <button
-                                type="button"
-                                onClick={handleClaimTrial}
-                                disabled={isClaimingTrial}
-                                className="inline-flex items-center gap-2 rounded-full border border-[#ffb7c5]/40 bg-[#160d11] px-4 py-2 text-xs font-bold text-[#ffb7c5] transition hover:border-[#ffb7c5] hover:bg-[#ffb7c5] hover:text-black disabled:opacity-50"
-                              >
-                                <span>{isClaimingTrial ? t("Activating...", "Активация...") : t("+7 Days Trial", "+7 дней теста")}</span>
-                              </button>
-                            )}
-                            <a
-                              href={FUNPAY_SUBSCRIPTION_URL}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={handleFunPayLinkClick}
-                              className="inline-flex items-center gap-2 rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-xs font-bold text-[#ffb7c5] transition hover:border-[#ffb7c5]/45 hover:text-white"
-                            >
-                              <img src={FUNPAY_ICON_URL} alt="FunPay" loading="lazy" decoding="async" className="h-3.5 w-3.5 rounded-sm" />
-                              <span>{t("Extend", "Продлить")}</span>
-                            </a>
-                          </div>
-                        </div>
-                      ) : (
-                        /* Inactive Subscription View */
-                        <div>
-                          <p className="text-base font-bold text-white">
-                            {t("No Active Subscription", "Нет активной подписки")}
-                          </p>
-                          <p className="mt-1 text-xs text-gray-400">
-                            {t(
-                              "Choose a tariff plan below or activate a promo code to get access to Sakura.",
-                              "Выберите тарифный план ниже или активируйте промокод для доступа к читу."
-                            )}
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Freeze status messages */}
-                      {freezeSuccessMessage && (
-                        <p className="mt-3 text-xs text-[#8ce5b2] flex items-center gap-1.5 font-medium">
-                          <span>✓</span> {freezeSuccessMessage}
-                        </p>
-                      )}
-                      {freezeErrorMessage && (
-                        <p className="mt-3 text-xs text-[#ff9aa9] flex items-center gap-1.5 font-medium">
-                          <span>⚠</span> {freezeErrorMessage}
-                        </p>
-                      )}
-
-
-
-                      {/* Compact Tariffs Section */}
-                      {isOwner && (
-                        <div className="mt-5 border-t border-[#23171b] pt-4">
-                          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#ffb7c5] mb-2.5">
-                            {t("Tariff Plans", "Тарифные планы")}
-                          </p>
-                          <TariffsBento
-                            variant="compact"
-                            currentUser={activeProfile}
-                            onClaimSuccess={() => {
-                              window.location.reload();
-                            }}
-                          />
-                        </div>
-                      )}
-
-                      {/* Promo Code Activation Box (for own profile) */}
-                      {isOwner && (
-                        <div className="mt-5 border-t border-[#23171b] pt-4">
-                          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#ffb7c5]">
-                            {t("Activate Promo Code", "Активация промокода")}
-                          </p>
-                          <form onSubmit={handleRedeemPromo} className="mt-2.5 flex items-center gap-2">
-                            <input
-                              type="text"
-                              placeholder={t("Enter promo code (e.g. SAKURA-VIP)", "Введите промокод (например, SAKURA-VIP)")}
-                              value={promoCodeInput}
-                              onChange={(e) => setPromoCodeInput(e.target.value.toUpperCase())}
-                              disabled={isRedeemingPromo}
-                              className="flex-1 rounded-xl border border-[#3a2a31] bg-[#120b0e] px-4 py-2 text-xs font-mono uppercase tracking-[0.12em] text-white placeholder:text-gray-600 focus:border-[#ffb7c5] focus:outline-none transition"
-                            />
-                            <button
-                              type="submit"
-                              disabled={isRedeemingPromo || !promoCodeInput.trim()}
-                              className="shrink-0 rounded-xl border border-[#ffb7c5]/40 bg-[#ffb7c5] px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-black transition hover:bg-white disabled:opacity-50"
-                            >
-                              {isRedeemingPromo ? t("Applying...", "Применяем...") : t("Apply", "Применить")}
-                            </button>
-                          </form>
-                          {promoSuccessMessage && (
-                            <p className="mt-2 text-xs text-[#8ce5b2] font-medium flex items-center gap-1.5">
-                              <span>✓</span> {promoSuccessMessage}
-                            </p>
-                          )}
-                          {promoErrorMessage && (
-                            <p className="mt-2 text-xs text-[#ff9aa9] font-medium flex items-center gap-1.5">
-                              <span>⚠</span> {promoErrorMessage}
-                            </p>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Referral Program Section (hidden from site UI per user request, code preserved) */}
-                      {SHOW_REFERRAL_PROGRAM && isOwner && (
-                        <div className="mt-5 border-t border-[#23171b] pt-4">
-                          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#ffb7c5]">
-                            {t("Referral Program", "Реферальная программа")}
-                          </p>
-                          <p className="mt-1 text-xs text-gray-400 leading-relaxed">
-                            {t(
-                              "Share your personal link: get +3 days of subscription for every referred friend.",
-                              "Поделитесь ссылкой с другом: получите +3 дня к подписке за каждого приглашённого!"
-                            )}
-                          </p>
-                          <div className="mt-2.5 flex items-center gap-2">
-                            <input
-                              type="text"
-                              readOnly
-                              value={typeof window !== "undefined" ? `${window.location.origin}/sakura.github.io/?ref=${activeProfile.login || activeProfile.profileId}` : ""}
-                              className="flex-1 rounded-xl border border-[#3a2a31] bg-[#120b0e] px-4 py-2 text-xs font-mono text-gray-300 outline-none select-all"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (typeof window === "undefined") return;
-                                const link = `${window.location.origin}/sakura.github.io/?ref=${activeProfile.login || activeProfile.profileId}`;
-                                navigator.clipboard.writeText(link);
-                                setCopiedReferral(true);
-                                setTimeout(() => setCopiedReferral(false), 2500);
-                              }}
-                              className="shrink-0 rounded-xl border border-[#ffb7c5]/40 bg-[#ffb7c5] px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-black transition hover:bg-white"
-                            >
-                              {copiedReferral ? t("Copied!", "Скопировано!") : t("Copy Link", "Копировать")}
-                            </button>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Activation & Subscription History */}
-                      {isOwner && (
-                        <div className="mt-5 border-t border-[#23171b] pt-4">
-                          <div className="flex items-center justify-between">
-                            <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-gray-400">
-                              {t("Activation History", "История активаций")}
-                            </p>
-                            {activeProfile?.activationHistory && activeProfile.activationHistory.length > 0 && (
-                              <span className="text-[10px] font-mono text-gray-500">
-                                ({activeProfile.activationHistory.length})
-                              </span>
-                            )}
-                          </div>
-
-                          {(!activeProfile?.activationHistory || activeProfile.activationHistory.length === 0) ? (
-                            <p className="mt-2 text-xs text-gray-600">
-                              {t("No activations yet.", "История активаций пуста.")}
-                            </p>
-                          ) : (
-                            <div className="mt-2.5 max-h-48 overflow-y-auto space-y-2 pr-1">
-                              {activeProfile.activationHistory.map((item) => (
-                                <div
-                                  key={item.id}
-                                  className="flex items-center justify-between rounded-xl border border-[#23171b] bg-[#120b0e] px-3 py-2 text-xs"
-                                >
-                                  <div>
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-mono font-bold text-white text-[11px]">
-                                        {item.type === "promo"
-                                          ? item.code
-                                          : item.type === "admin_grant"
-                                          ? t("Admin Grant", "Выдано админом")
-                                          : item.type === "freeze"
-                                          ? t("Frozen", "Заморожено")
-                                          : item.type === "unfreeze"
-                                          ? t("Unfrozen", "Разморожено")
-                                          : item.type === "referral_bonus"
-                                          ? t("Referral Bonus", "Реферальный бонус")
-                                          : item.type === "trial"
-                                          ? t("7-Day Trial", "Тест 7 дней")
-                                          : t("Subscription", "Подписка")}
-                                      </span>
-                                      {item.isLifetime ? (
-                                        <span className="rounded-full bg-[#facc15]/10 border border-[#facc15]/30 px-1.5 py-0.5 text-[9px] font-bold text-[#fde047]">
-                                          Lifetime
-                                        </span>
-                                      ) : item.durationDays ? (
-                                        <span className="rounded-full bg-[#8ce5b2]/10 border border-[#8ce5b2]/30 px-1.5 py-0.5 text-[9px] font-bold text-[#8ce5b2]">
-                                          +{item.durationDays} {t("d", "дн")}
-                                        </span>
-                                      ) : null}
-                                    </div>
-                                    <p className="mt-0.5 text-[10px] text-gray-500">
-                                      {new Date(item.activatedAt).toLocaleString(locale === "ru" ? "ru-RU" : "en-US", {
-                                        day: "2-digit",
-                                        month: "2-digit",
-                                        year: "numeric",
-                                        hour: "2-digit",
-                                        minute: "2-digit"
-                                      })}
-                                    </p>
-                                  </div>
-                                  {item.subscriptionUntil && !item.isLifetime && (
-                                    <div className="text-right">
-                                      <span className="text-[10px] text-gray-500 block">
-                                        {t("Until", "До")}
-                                      </span>
-                                      <span className="text-[11px] font-medium text-gray-300">
-                                        {new Date(item.subscriptionUntil).toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US")}
-                                      </span>
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-
-
-            </div>
-
-            <div className="relative z-10 flex w-full flex-col gap-6 self-start">
-              {/*
-              <div className="rounded-[32px] border border-[#201517] bg-[radial-gradient(circle_at_top,rgba(255,183,197,0.12),transparent_70%),linear-gradient(180deg,#0d0d0d_0%,#090909_100%)] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
-                <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">Profile Navigator</p>
-                <div className="mt-4 flex flex-wrap items-center gap-3">
-                  {previousProfileId ? <a href={profilePath(previousProfileId)} className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/45 hover:text-white">
-                    ← Previous
-                  </a> : null}
-                  {nextProfileId ? <a href={profilePath(nextProfileId)} className="inline-flex items-center justify-center rounded-full border border-[#3a2a31] bg-[#140d11] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/45 hover:text-white">
-                    Next →
-                  </a> : null}
-                  {!previousProfileId && !nextProfileId ? <p className="text-xs leading-relaxed text-gray-500">No adjacent accounts found nearby.</p> : null}
-                </div>
-                <form onSubmit={handleProfileSearchSubmit} className="mt-5">
-                  <label className="block">
-                    <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.28em] text-gray-500">Find Account</span>
-                    <div className="flex items-center gap-2">
-                      <input type="text" value={profileSearchQuery} onChange={(event) => {
-                        setProfileSearchQuery(event.target.value);
-                        setProfileSearchError(null);
-                      }} className="w-full rounded-2xl border border-[#232323] bg-[#090909] px-4 py-2.5 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#ffb7c5]/55" placeholder="UID, login, or username" />
-                      <button type="submit" disabled={isProfileSearchLoading} className="inline-flex shrink-0 items-center justify-center rounded-full border border-[#ffb7c5]/30 bg-[#ffb7c5] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-black transition hover:bg-[#ffc8d3] disabled:cursor-not-allowed disabled:opacity-60">
-                        {isProfileSearchLoading ? "..." : "Search"}
-                      </button>
-                    </div>
-                  </label>
-                </form>
-                {profileSearchError ? <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">{profileSearchError}</p> : null}
-                {!profileSearchError && profileSearchFeedback ? <p className="mt-3 text-xs leading-relaxed text-gray-500">{profileSearchFeedback}</p> : null}
-                {profileSearchResults.length ? <div className="mt-4 space-y-2">
-                  {profileSearchResults.slice(0, 8).map((candidateProfile) => (
-                    <a key={candidateProfile.uid || `profile-${candidateProfile.profileId}`} href={typeof candidateProfile.profileId === "number" ? profilePath(candidateProfile.profileId) : "#"} className="flex items-center justify-between gap-3 rounded-2xl border border-[#222] bg-[#0b0b0b] px-3 py-2.5 transition hover:border-[#ffb7c5]/35">
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-semibold text-white">{profileNameOf(candidateProfile)}</span>
-                        <span className="block truncate text-xs text-gray-500">{candidateProfile.login ? `@${candidateProfile.login}` : "No login"}</span>
-                      </span>
-                      <span className="inline-flex shrink-0 items-center gap-1.5 text-[10px] text-[#b78a95]">
-                        <span aria-hidden="true" className="inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-[#ff9fbd] shadow-[0_0_10px_rgba(255,159,189,0.7)]" />
-                        <span className="whitespace-nowrap">UID: {candidateProfile.profileId}</span>
-                      </span>
-                    </a>
-                  ))}
-                </div> : null}
-              </div>
-              */}
-              {isOwner && activeProfile ? (
-                <div className="rounded-[32px] border border-[#201517] bg-[radial-gradient(circle_at_top,rgba(255,183,197,0.14),transparent_72%),linear-gradient(180deg,#0d0d0d_0%,#090909_100%)] px-7 py-5 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div>
-                      <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">
-                        {t("Profile Settings", "Настройки профиля")}
-                      </p>
-                    </div>
-                    {!activeProfile.isBanned ? (
+                  {/* Hero Actions on the right */}
+                  <div className="flex shrink-0 items-center gap-3 self-start sm:self-center sm:ml-auto">
+                    {isOwner && activeProfile && !activeProfile.isBanned ? (
                       <button
                         type="button"
                         onClick={() => setIsEditProfileModalOpen(true)}
-                        className="inline-flex shrink-0 items-center justify-center rounded-full border border-[#ffb7c5]/40 bg-[#ffb7c5] px-5 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-black shadow-[0_0_20px_rgba(255,183,197,0.25)] transition hover:bg-white hover:scale-105"
+                        className="inline-flex items-center gap-2 rounded-full border border-[#ffb7c5]/45 bg-[#ffb7c5] px-4 py-2 text-xs font-extrabold uppercase tracking-[0.12em] text-[#0a0a0a] shadow-[0_0_20px_rgba(255,183,197,0.24)] transition hover:bg-white hover:scale-102 cursor-pointer"
                       >
-                        {t("Edit Profile", "Редактировать профиль")}
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        <span>{t("Edit Profile", "Редактировать профиль")}</span>
+                      </button>
+                    ) : null}
+                    {!isOwner && canOpenAdminPanel ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsAdminPanelOpen(true);
+                          loadAdminPromoCodes();
+                        }}
+                        className="inline-flex items-center gap-2 rounded-full border border-[#3a222c] bg-[#140d11] px-4 py-2 text-xs font-bold uppercase tracking-[0.1em] text-[#ffb7c5] transition hover:border-[#ffb7c5] hover:text-white cursor-pointer"
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/></svg>
+                        <span>{t("Admin Panel", "Панель админа")}</span>
                       </button>
                     ) : null}
                   </div>
-                  {activeProfile.isBanned ? (
-                    <p className="mt-3 text-xs leading-relaxed text-[#ff9aa9]">
-                      {t("This account is banned. Profile editing is locked.", "Аккаунт заблокирован. Редактирование профиля недоступно.")}
-                    </p>
-                  ) : null}
                 </div>
-              ) : null}
+              </div>
+            </div>
+            {/* Bento Row: Minimalist Subscription + Compact HWID (For Owner) */}
+            {isOwner ? (
+              <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1.1fr)]">
+                {/* Card 1: Minimalist Subscription Card */}
+                <div className="flex flex-col justify-between rounded-[30px] border border-[#201517] bg-[#0d0a0d] p-6 sm:p-7 shadow-[0_0_60px_rgba(255,183,197,0.04)]">
+                  <div>
+                    <div className="flex items-center justify-between gap-4 mb-4">
+                      <span className="font-mono text-[11px] font-extrabold uppercase tracking-[0.28em] text-[#ffc2cf]">
+                        {t("Subscription", "ПОДПИСКА")}
+                      </span>
+                      {hasLifetimeRole ? (
+                        <span className="inline-flex h-7 items-center justify-center rounded-full border border-[#facc15]/50 bg-[#1b1708] px-4 text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#fff3c4] shadow-[0_0_18px_rgba(250,204,21,0.24)]">
+                          {t("Lifetime", "НАВСЕГДА")}
+                        </span>
+                      ) : activeProfile?.isFrozen ? (
+                        <span className="inline-flex h-7 items-center justify-center rounded-full border border-[#38bdf8]/50 bg-[#082f49] px-4 text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#7dd3fc] shadow-[0_0_18px_rgba(56,189,248,0.24)]">
+                          {t("Frozen", "ЗАМОРОЖЕНА")}
+                        </span>
+                      ) : hasActiveSubscriptionRole ? (
+                        <span className="inline-flex h-7 items-center justify-center rounded-full border border-[#1f5038] bg-[#0c1812] px-4 text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#8ce5b2] shadow-[0_0_18px_rgba(31,122,77,0.22)]">
+                          {t("Active", "АКТИВНА")}
+                        </span>
+                      ) : (
+                        <span className="inline-flex h-7 items-center justify-center rounded-full border border-[#38232b] bg-[#140d10] px-4 text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#9d858f]">
+                          {t("Inactive", "НЕАКТИВНА")}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-baseline gap-2 leading-none">
+                      {hasLifetimeRole ? (
+                        <>
+                          <span className="text-[42px] font-black tracking-[-0.03em] text-white">∞</span>
+                          <span className="text-base font-bold tracking-[0.02em] text-[#8ce5b2]">{t("Days", "дней")}</span>
+                        </>
+                      ) : hasActiveSubscriptionRole ? (
+                        <>
+                          <span className="text-[42px] font-black tracking-[-0.03em] text-white">{remainingDaysCount}</span>
+                          <span className="text-base font-bold tracking-[0.02em] text-[#8ce5b2]">{t("Days", "дней")}</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-[42px] font-black tracking-[-0.03em] text-[#8a7882]">0</span>
+                          <span className="text-base font-bold tracking-[0.02em] text-[#6d5b65]">{t("Days", "дней")}</span>
+                        </>
+                      )}
+                    </div>
+
+                    <div className="mt-1.5 text-xs text-[#8f7a85]">
+                      {hasLifetimeRole
+                        ? t("Valid until: Permanent access", "Действует до: Бессрочный доступ")
+                        : hasActiveSubscriptionRole
+                        ? `${t("Valid until:", "Действует до:")} ${profileSubscriptionUntilLabel}`
+                        : t("Valid until: No active subscription", "Действует до: Нет активной подписки")}
+                    </div>
+
+                    {/* Glowing Progress Bar */}
+                    <div className="my-5">
+                      {hasActiveSubscriptionRole || hasLifetimeRole ? (
+                        <div className="h-[7px] w-full overflow-hidden rounded-full bg-white/[0.06]">
+                          <div
+                            className="h-full rounded-full bg-gradient-to-r from-[#ff2d75] via-[#ff8fa5] to-[#8ce5b2] shadow-[0_0_14px_rgba(255,45,117,0.45)]"
+                            style={{ width: `${subscriptionProgressPercent}%` }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="h-[7px] w-full overflow-hidden rounded-full border border-dashed border-[#ffb7c5]/15 bg-white/[0.03]">
+                          <div className="h-full w-0" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Action Buttons Row */}
+                  <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                    {hasActiveSubscriptionRole || hasLifetimeRole ? (
+                      activeProfile?.isFrozen ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={handleUnfreezeSubscription}
+                            disabled={isFreezingSubscription}
+                            className="inline-flex items-center justify-center rounded-[18px] bg-[#ff2d75] px-5 py-3 text-[11px] font-black uppercase tracking-[0.12em] text-white shadow-[0_0_26px_rgba(255,45,117,0.4)] transition hover:bg-[#ff4887] hover:scale-102 disabled:opacity-50 cursor-pointer"
+                          >
+                            {isFreezingSubscription ? t("Unfreezing...", "Размораживаем...") : t("Unfreeze Subscription", "Разморозить")}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIsPromoModalOpen(true)}
+                            className="inline-flex items-center gap-1.5 rounded-[18px] border border-[#3a222c] bg-[#140d11] px-4 py-3 text-[11px] font-extrabold uppercase tracking-[0.1em] text-[#ffb7c5] transition hover:border-[#ffb7c5] hover:text-white cursor-pointer"
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><rect x="3" y="4" width="18" height="16" rx="3"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="7" y1="8" x2="11" y2="8"/></svg>
+                            <span>{t("Promo Code", "ПРОМОКОД")}</span>
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              window.open("https://github.com", "_blank");
+                            }}
+                            className="inline-flex items-center justify-center rounded-[18px] bg-[#ff2d75] px-5 py-3 text-[11px] font-black uppercase tracking-[0.12em] text-white shadow-[0_0_26px_rgba(255,45,117,0.4)] transition hover:bg-[#ff4887] hover:scale-102 cursor-pointer"
+                          >
+                            {t("Download Cheat", "СКАЧАТЬ ЧИТ")}
+                          </button>
+                          {!hasLifetimeRole && !isTrialSubscription && (
+                            isFreezeOnCooldown ? (
+                              <button
+                                type="button"
+                                disabled
+                                title={t(
+                                  `Freeze cooldown active. Next freeze in ${freezeCooldownDays} days.`,
+                                  `Заморозка доступна через ${freezeCooldownDays} дн.`
+                                )}
+                                className="inline-flex items-center justify-center rounded-[18px] border border-[#281920] bg-[#140d11] px-4 py-3 text-[11px] font-extrabold uppercase tracking-[0.1em] text-gray-500 opacity-60 cursor-not-allowed"
+                              >
+                                {t(`Freeze (${freezeCooldownDays}d)`, `ЗАМОРОЗКА (${freezeCooldownDays}Д)`)}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={handleFreezeSubscription}
+                                disabled={isFreezingSubscription}
+                                className="inline-flex items-center justify-center rounded-[18px] border border-[#281920] bg-[#140d11] px-4 py-3 text-[11px] font-extrabold uppercase tracking-[0.1em] text-white transition hover:border-[#ffb7c5]/40 hover:text-[#ffb7c5] cursor-pointer disabled:opacity-50"
+                              >
+                                {isFreezingSubscription ? t("Freezing...", "ЗАМОРОЗКА...") : t("Freeze", "ЗАМОРОЗИТЬ")}
+                              </button>
+                            )
+                          )}
+                          <a
+                            href={FUNPAY_SUBSCRIPTION_URL}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={handleFunPayLinkClick}
+                            className="inline-flex items-center justify-center rounded-[18px] border border-[#281920] bg-[#140d11] px-4 py-3 text-[11px] font-extrabold uppercase tracking-[0.1em] text-white transition hover:border-[#ffb7c5]/40 hover:text-[#ffb7c5] cursor-pointer"
+                          >
+                            {t("Extend", "ПРОДЛИТЬ")}
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => setIsPromoModalOpen(true)}
+                            className="inline-flex items-center gap-1.5 rounded-[18px] border border-[#3a222c] bg-[#140d11] px-4 py-3 text-[11px] font-extrabold uppercase tracking-[0.1em] text-[#ffb7c5] transition hover:border-[#ffb7c5] hover:text-white cursor-pointer"
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><rect x="3" y="4" width="18" height="16" rx="3"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="7" y1="8" x2="11" y2="8"/></svg>
+                            <span>{t("Promo Code", "ПРОМОКОД")}</span>
+                          </button>
+                        </>
+                      )
+                    ) : (
+                      <>
+                        <a
+                          href={FUNPAY_SUBSCRIPTION_URL}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={handleFunPayLinkClick}
+                          className="inline-flex items-center justify-center rounded-[18px] bg-[#ff2d75] px-5 py-3 text-[11px] font-black uppercase tracking-[0.12em] text-white shadow-[0_0_26px_rgba(255,45,117,0.4)] transition hover:bg-[#ff4887] hover:scale-102 cursor-pointer"
+                        >
+                          {t("Buy Subscription", "КУПИТЬ ПОДПИСКУ")}
+                        </a>
+                        {!hasAlreadyClaimedTrial && (
+                          <button
+                            type="button"
+                            onClick={handleClaimTrial}
+                            disabled={isClaimingTrial}
+                            className="inline-flex items-center justify-center rounded-[18px] border border-[#281920] bg-[#140d11] px-4 py-3 text-[11px] font-extrabold uppercase tracking-[0.1em] text-white transition hover:border-[#ffb7c5]/40 hover:text-[#ffb7c5] cursor-pointer disabled:opacity-50"
+                          >
+                            {isClaimingTrial ? t("Activating...", "АКТИВАЦИЯ...") : t("7 Days Trial", "ТЕСТ НА 7 ДНЕЙ")}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setIsPromoModalOpen(true)}
+                          className="inline-flex items-center gap-1.5 rounded-[18px] border border-[#3a222c] bg-[#140d11] px-4 py-3 text-[11px] font-extrabold uppercase tracking-[0.1em] text-[#ffb7c5] transition hover:border-[#ffb7c5] hover:text-white cursor-pointer"
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><rect x="3" y="4" width="18" height="16" rx="3"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="7" y1="8" x2="11" y2="8"/></svg>
+                          <span>{t("Promo Code", "ПРОМОКОД")}</span>
+                        </button>
+                      </>
+                    )}
+                  </div>
+
+                  {freezeSuccessMessage && (
+                    <p className="mt-3 text-xs text-[#8ce5b2] flex items-center gap-1.5 font-medium">
+                      <span>✓</span> {freezeSuccessMessage}
+                    </p>
+                  )}
+                  {freezeErrorMessage && (
+                    <p className="mt-3 text-xs text-[#ff9aa9] flex items-center gap-1.5 font-medium">
+                      <span>⚠</span> {freezeErrorMessage}
+                    </p>
+                  )}
+                </div>
+
+                {/* Card 2: Compact System & HWID Specs */}
+                <div className="flex flex-col justify-between rounded-[30px] border border-[#201517] bg-[#0d0a0d] p-5 sm:p-6 shadow-[0_0_60px_rgba(255,183,197,0.04)]">
+                  <div>
+                    <div className="flex items-center justify-between mb-3.5">
+                      <span className="font-mono text-[10px] font-extrabold uppercase tracking-[0.28em] text-[#ffc2cf]">
+                        {t("System & HWID", "СИСТЕМА & HWID")}
+                      </span>
+                      {hasActiveSubscriptionRole || hasLifetimeRole ? (
+                        <span className="font-mono text-[10px] font-bold text-[#8ce5b2] tracking-[0.1em]">
+                          UNDETECTED
+                        </span>
+                      ) : (
+                        <span className="font-mono text-[10px] font-bold text-[#8a7882] tracking-[0.1em]">
+                          {t("Awaiting", "ОЖИДАНИЕ")}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center justify-between rounded-xl border border-[#22141a] bg-[#120b0e] px-3 py-2 text-xs">
+                        <span className="text-[#8c7a84]">{t("HWID Binding", "HWID привязка")}</span>
+                        {hasActiveSubscriptionRole || hasLifetimeRole ? (
+                          <span className="font-mono text-[11px] font-bold text-[#8ce5b2]">
+                            {profileHwid ? t("Active", "АКТИВНА") : t("Active", "АКТИВНА")}
+                          </span>
+                        ) : (
+                          <span className="font-mono text-[11px] font-bold text-[#6d5b65]">
+                            {t("Inactive", "НЕАКТИВНА")}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between rounded-xl border border-[#22141a] bg-[#120b0e] px-3 py-2 text-xs">
+                        <span className="text-[#8c7a84]">{t("Anticheat Status", "Статус античита")}</span>
+                        <span className="font-mono text-[11px] font-bold text-[#8ce5b2]">
+                          VAC SAFE
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between rounded-xl border border-[#22141a] bg-[#120b0e] px-3 py-2 text-xs">
+                        <span className="text-[#8c7a84]">{t("HWID Reset", "Сброс HWID")}</span>
+                        {hasActiveSubscriptionRole || hasLifetimeRole ? (
+                          <button
+                            type="button"
+                            onClick={() => setHwidResetSent(true)}
+                            className="font-mono text-[11px] font-bold text-[#ffb7c5] underline cursor-pointer hover:text-white transition"
+                          >
+                            {hwidResetSent ? t("Request Sent", "Запрос отправлен") : t("Request Reset", "Запросить сброс")}
+                          </button>
+                        ) : (
+                          <span className="font-mono text-[11px] font-bold text-[#6d5b65]">
+                            {t("Unavailable", "Недоступно")}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between rounded-xl border border-[#22141a] bg-[#120b0e] px-3 py-2 text-xs">
+                        <span className="text-[#8c7a84]">{t("Client Version", "Версия клиента")}</span>
+                        <span className="font-mono text-[11px] font-bold text-white">
+                          v3.2.0 (Stable)
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-3.5 text-center text-[10px] text-[#6d5b65] leading-snug">
+                    {hasActiveSubscriptionRole || hasLifetimeRole
+                      ? t("All server components operational", "Все серверные компоненты работают штатно")
+                      : t("Subscribe to activate HWID and download client", "Для активации HWID и загрузки чита оформите подписку")}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {/* Horizontal Music Card: Only for Authorized Profiles (UID 2 Egoiste & UID 3 Absolute) */}
+            {!isOwner && isMusicAllowedForProfile ? (
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-[28px] border border-[#201517] bg-[radial-gradient(circle_at_top_left,rgba(255,183,197,0.08),transparent_60%),#0d0a0d] p-5 sm:px-7 sm:py-5 shadow-[0_0_60px_rgba(255,183,197,0.04)]">
+                <div>
+                  <div className="flex items-center gap-3 mb-1.5">
+                    <span className="font-mono text-[10px] font-extrabold uppercase tracking-[0.28em] text-[#ffc2cf]">
+                      {t("Profile Audio Theme", "АУДИО-ТЕМА ПРОФИЛЯ")}
+                    </span>
+                    <span className={`inline-flex items-center justify-center h-5 rounded-full px-2.5 text-[9px] font-extrabold uppercase tracking-[0.14em] ${
+                      profileThemeIsPlaying
+                        ? "border border-[#1f5038] bg-[#0c1812] text-[#8ce5b2]"
+                        : "border border-[#38232b] bg-[#140d11] text-[#9d858f]"
+                    }`}>
+                      {profileThemeIsPlaying ? t("Playing", "ИГРАЕТ") : t("Paused", "ПАУЗА")}
+                    </span>
+                  </div>
+                  <div className="text-base sm:text-lg font-black uppercase tracking-tight text-white">
+                    {profileThemeTitle || (profileThemeProfileId === 2 ? "FACE — FOREVER YOUNG" : "Cyberpunk Track")}
+                  </div>
+                  <div className="text-xs text-[#8f7a85] mt-0.5">
+                    {t(`Custom soundtrack for ${primaryName} (UID ${profileThemeProfileId})`, `Индивидуальный саундтрек профиля ${primaryName} (UID ${profileThemeProfileId})`)}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4 flex-wrap self-end sm:self-center">
+                  <div className="flex items-center gap-3">
+                    {/* Animated Equalizer Bars */}
+                    <div className="flex items-end gap-[3px] h-6 py-0.5">
+                      <span className={`w-[3px] rounded-full bg-[#ffb7c5] transition-all duration-300 ${profileThemeIsPlaying ? "h-3 animate-pulse" : "h-1.5 opacity-50"}`} />
+                      <span className={`w-[3px] rounded-full bg-[#ffb7c5] transition-all duration-300 ${profileThemeIsPlaying ? "h-5 animate-pulse" : "h-1.5 opacity-50"}`} />
+                      <span className={`w-[3px] rounded-full bg-[#ffb7c5] transition-all duration-300 ${profileThemeIsPlaying ? "h-2.5 animate-pulse" : "h-1.5 opacity-50"}`} />
+                      <span className={`w-[3px] rounded-full bg-[#ffb7c5] transition-all duration-300 ${profileThemeIsPlaying ? "h-6 animate-pulse" : "h-1.5 opacity-50"}`} />
+                      <span className={`w-[3px] rounded-full bg-[#ffb7c5] transition-all duration-300 ${profileThemeIsPlaying ? "h-4 animate-pulse" : "h-1.5 opacity-50"}`} />
+                    </div>
+                    <div className="font-mono text-[11px] text-[#ffb7c5] tracking-[0.1em]">
+                      <span>{formatAudioClock(profileThemeDisplayedCurrentTime)}</span> / <span>{formatAudioClock(profileThemeDisplayedDuration)}</span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleProfileThemeToggle}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-[#ff2d75] px-4 py-2.5 text-[11px] font-extrabold uppercase tracking-[0.1em] text-white shadow-[0_0_20px_rgba(255,45,117,0.4)] transition hover:bg-[#ff4887] cursor-pointer"
+                  >
+                    {profileThemeIsPlaying ? (
+                      <>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                        <span>{t("Pause", "ПАУЗА")}</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        <span>{t("Play", "ИГРАТЬ")}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            ) : null}
 
               <div className="rounded-[32px] border border-[#201517] bg-[#0d0d0d] px-7 py-7 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
                 <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">{t("Profile Comments", "Комментарии профиля")}</p>
@@ -8537,7 +8461,65 @@ export default function ProfilePage() {
               )
             : null}
 
-            </div>
+            {/* Promo Code Activation Modal */}
+            {isClientMounted && isPromoModalOpen && isOwner && typeof document !== "undefined"
+              ? createPortal(
+                  <div className="fixed inset-0 z-[140] flex items-center justify-center p-4">
+                    <div
+                      className="absolute inset-0 bg-black/80 backdrop-blur-md"
+                      onClick={() => setIsPromoModalOpen(false)}
+                    />
+                    <div className="relative w-full max-w-md overflow-hidden rounded-[28px] border border-[#24171b] bg-[radial-gradient(circle_at_top_left,rgba(255,183,197,0.12),transparent_60%),#090909] p-6 shadow-[0_0_70px_rgba(0,0,0,0.8)]">
+                      <div className="flex items-center justify-between mb-4">
+                        <span className="font-mono text-[11px] font-extrabold uppercase tracking-[0.25em] text-[#ffb7c5]">
+                          {t("Promo Code Activation", "АКТИВАЦИЯ ПРОМОКОДА")}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setIsPromoModalOpen(false)}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#2d1f24] bg-[#140d11] text-[#ffb7c5] hover:border-[#ffb7c5] hover:text-white transition cursor-pointer"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <p className="text-xs text-[#8a7882] leading-relaxed mb-3.5">
+                        {t(
+                          "Enter secret promo code or license extension key to instantly add subscription days:",
+                          "Введите секретный промокод или ключ продления лицензии для мгновенного начисления дней к вашей подписке:"
+                        )}
+                      </p>
+                      <form onSubmit={handleRedeemPromo} className="space-y-3">
+                        <input
+                          type="text"
+                          placeholder="SAKURA-VIP"
+                          value={promoCodeInput}
+                          onChange={(e) => setPromoCodeInput(e.target.value.toUpperCase())}
+                          disabled={isRedeemingPromo}
+                          className="w-full rounded-xl border border-[#3a2a31] bg-[#120b0e] px-4 py-3 text-xs font-mono uppercase tracking-[0.12em] text-white placeholder:text-gray-600 focus:border-[#ffb7c5] focus:outline-none transition"
+                        />
+                        <button
+                          type="submit"
+                          disabled={isRedeemingPromo || !promoCodeInput.trim()}
+                          className="w-full py-3 rounded-xl bg-[#ff2d75] border-none text-white text-xs font-black uppercase tracking-[0.14em] cursor-pointer shadow-[0_0_24px_rgba(255,45,117,0.4)] hover:bg-[#ff4887] transition disabled:opacity-50"
+                        >
+                          {isRedeemingPromo ? t("Applying...", "ПРИМЕНЯЕМ...") : t("Redeem Promo Code", "ВВЕСТИ ПРОМОКОД")}
+                        </button>
+                      </form>
+                      {promoSuccessMessage && (
+                        <p className="mt-3 text-xs text-[#8ce5b2] font-medium flex items-center gap-1.5">
+                          <span>✓</span> {promoSuccessMessage}
+                        </p>
+                      )}
+                      {promoErrorMessage && (
+                        <p className="mt-3 text-xs text-[#ff9aa9] font-medium flex items-center gap-1.5">
+                          <span>⚠</span> {promoErrorMessage}
+                        </p>
+                      )}
+                    </div>
+                  </div>,
+                  document.body
+                )
+              : null}
           </section>
         ) : null}
       </div>
@@ -8860,7 +8842,6 @@ export default function ProfilePage() {
                                 : "border-[#38bdf8]/40 bg-[#082f49]/60 text-[#7dd3fc] hover:border-[#38bdf8] hover:text-white"
                             }`}
                           >
-                            <span>{activeProfile?.isFrozen ? "❄️" : "⏸️"}</span>
                             <span>{activeProfile?.isFrozen ? t("Unfreeze Subscription", "Разморозить подписку") : t("Freeze Subscription", "Заморозить подписку")}</span>
                           </button>
                         </div>
@@ -9060,7 +9041,7 @@ export default function ProfilePage() {
                               onClick={generateRandomPromoCode}
                               className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[#3a2a31] bg-[#160c11] px-4 py-2 text-xs font-semibold text-[#ffb7c5] transition hover:bg-[#22131b]"
                             >
-                              🎲 <span>{t("Random", "Случайный")}</span>
+                              <span>{t("Random", "Случайный")}</span>
                             </button>
                           </div>
 
@@ -9482,7 +9463,7 @@ export default function ProfilePage() {
                               disabled={isAdminThemeSongSaving || isAdminThemeSongUploading || isAdminThemeSongDeleting}
                               className="rounded-xl border border-[#3a2029] bg-[#160c11] px-3.5 py-2 text-xs font-semibold text-[#ffb7c5] hover:border-[#ffb7c5] transition disabled:opacity-50"
                             >
-                              📁 {isAdminThemeSongUploading ? t("Uploading...", "Загрузка...") : t("Upload MP3", "Загрузить MP3")}
+                              {isAdminThemeSongUploading ? t("Uploading...", "Загрузка...") : t("Upload MP3", "Загрузить MP3")}
                             </button>
                             <button
                               type="button"
