@@ -69,3 +69,22 @@ export function clearCachedProfileSnapshot(profileId: number | null | undefined)
     window.localStorage.removeItem(getProfileCacheKey(profileId));
   } catch {}
 }
+
+export function clearAllCachedProfileSnapshots() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (key && key.startsWith(PROFILE_CACHE_KEY_PREFIX)) {
+        keysToRemove.push(key);
+      }
+    }
+    for (const key of keysToRemove) {
+      window.localStorage.removeItem(key);
+    }
+  } catch {}
+}

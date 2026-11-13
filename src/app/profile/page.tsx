@@ -24,7 +24,7 @@ import {
   isSupabaseConfigured,
 } from "@/lib/supabase";
 import { readCachedAuthSnapshot } from "@/lib/auth-snapshot-cache";
-import { readCachedProfileSnapshot, writeCachedProfileSnapshot, clearCachedProfileSnapshot } from "@/lib/profile-cache";
+import { readCachedProfileSnapshot, writeCachedProfileSnapshot, clearCachedProfileSnapshot, clearAllCachedProfileSnapshots } from "@/lib/profile-cache";
 import { readCachedProfileComments, writeCachedProfileComments } from "@/lib/profile-comments-cache";
 import { readCachedSiteOnlineCount, writeCachedSiteOnlineCount } from "@/lib/site-online-cache";
 import { type UiLocale, useLocaleText } from "@/lib/ui-locale";
@@ -6661,11 +6661,13 @@ export default function ProfilePage() {
 
     try {
       if (isAdminSelfTarget) {
+        clearAllCachedProfileSnapshots();
         await bridge.deleteCurrentAccount();
         setIsAdminPanelOpen(false);
         setIsEditProfileModalOpen(false);
         router.replace("/");
       } else if (activeProfile?.profileId && bridge.adminDeleteProfile) {
+        clearAllCachedProfileSnapshots();
         await bridge.adminDeleteProfile(activeProfile.profileId);
         setIsAdminPanelOpen(false);
         router.replace("/profile");

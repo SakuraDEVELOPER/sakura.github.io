@@ -183,6 +183,8 @@ const firebaseModuleScript = `
         avatarPath: row.avatar_path || null,
         avatarType: row.avatar_type || null,
         avatarSize: row.avatar_size || null,
+        bannerUrl: row.banner_url || null,
+        bannerPath: row.banner_path || null,
         roles: Array.isArray(row.roles) ? row.roles : [],
         isBanned: row.is_banned === true,
         bannedAt: row.banned_at || null,
@@ -784,6 +786,40 @@ const firebaseModuleScript = `
               const updated = {
                 ...window.sakuraCurrentUserSnapshot,
                 photoURL: null
+              };
+              return publishUserSnapshot(updated);
+            },
+
+            updateBanner: async (payload) => {
+              const profileId = window.sakuraCurrentUserSnapshot?.profileId;
+              if (!profileId) throw createFirebaseError("auth/no-current-user", "Sign in first.");
+              const bannerUrl = typeof payload === "string" ? payload : payload?.photoURL ?? payload?.publicUrl ?? null;
+              const bannerPath = typeof payload === "object" ? (payload?.avatarPath ?? payload?.path ?? null) : null;
+              await callSupabaseRpc("update_profile_info", {
+                p_profile_id: profileId,
+                p_banner_url: bannerUrl,
+                p_banner_path: bannerPath
+              });
+              const updated = {
+                ...window.sakuraCurrentUserSnapshot,
+                bannerUrl,
+                bannerPath
+              };
+              return publishUserSnapshot(updated);
+            },
+
+            deleteBanner: async () => {
+              const profileId = window.sakuraCurrentUserSnapshot?.profileId;
+              if (!profileId) throw createFirebaseError("auth/no-current-user", "Sign in first.");
+              await callSupabaseRpc("update_profile_info", {
+                p_profile_id: profileId,
+                p_banner_url: "",
+                p_banner_path: ""
+              });
+              const updated = {
+                ...window.sakuraCurrentUserSnapshot,
+                bannerUrl: null,
+                bannerPath: null
               };
               return publishUserSnapshot(updated);
             },
