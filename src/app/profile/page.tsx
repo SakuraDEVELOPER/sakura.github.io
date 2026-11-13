@@ -7584,7 +7584,7 @@ export default function ProfilePage() {
             {/* Hero Banner Card */}
             <div className="relative z-10 w-full overflow-hidden rounded-[34px] border border-[#201517] bg-[#0d0d0d] shadow-[0_0_80px_rgba(255,183,197,0.06)]">
               {/* Cover Banner */}
-              <div className="relative h-[140px] w-full overflow-hidden border-b border-[#1f1418]">
+              <div className="relative aspect-[4/1] min-h-[140px] w-full overflow-hidden border-b border-[#1f1418]">
                 {hasActiveProfileBanner ? (
                   <img
                     src={activeProfileBannerUrl ?? ""}
@@ -8633,7 +8633,6 @@ export default function ProfilePage() {
                                 />
                               </div>
                             )}
-                            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#0c070a]/80 via-transparent to-transparent" />
                             <div className="absolute bottom-2.5 left-3.5 flex items-center gap-2">
                               <span className="rounded-md border border-white/10 bg-black/60 px-2 py-0.5 text-[10px] font-mono text-[#ffb7c5] backdrop-blur-sm">
                                 {hasActiveProfileBanner ? t("Custom Banner", "Кастомный") : t("Sakura Pattern", "Узор Sakura")}
