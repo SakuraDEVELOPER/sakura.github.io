@@ -56,6 +56,8 @@ type UserProfile = {
   avatarPath?: string | null;
   avatarType?: string | null;
   avatarSize?: number | null;
+  bannerUrl?: string | null;
+  bannerPath?: string | null;
   themeSongKey?: string | null;
   roles: string[];
   isBanned?: boolean;
@@ -193,6 +195,8 @@ type Bridge = {
   }>;
   updateAvatar: (file: File | AvatarUploadPayload) => Promise<UserProfile | null>;
   deleteAvatar: () => Promise<UserProfile | null>;
+  updateBanner?: (payload: any) => Promise<UserProfile | null>;
+  deleteBanner?: () => Promise<UserProfile | null>;
   adminUpdateProfileAvatar: (
     profileId: number,
     file: File | AvatarUploadPayload
@@ -875,6 +879,45 @@ const resolveProfileAvatarUrl = (profile: UserProfile | null | undefined) => {
           : "";
       if (cachedPhotoUrl) {
         return cachedPhotoUrl;
+      }
+    }
+  }
+
+  return null;
+};
+const resolveProfileBannerUrl = (profile: UserProfile | null | undefined) => {
+  if (!profile) {
+    return null;
+  }
+
+  const profileBannerPath = typeof profile.bannerPath === "string" ? profile.bannerPath.trim() : "";
+  if (profileBannerPath) {
+    return getSupabasePublicObjectUrl(profileBannerPath);
+  }
+
+  const profileBannerUrl = typeof profile.bannerUrl === "string" ? profile.bannerUrl.trim() : "";
+  if (profileBannerUrl) {
+    return profileBannerUrl;
+  }
+
+  if (typeof profile.profileId === "number" && profile.profileId > 0) {
+    const cachedProfileSnapshot = readCachedProfileSnapshot<UserProfile>(profile.profileId);
+
+    if (cachedProfileSnapshot) {
+      const cachedBannerPath =
+        typeof cachedProfileSnapshot.bannerPath === "string"
+          ? cachedProfileSnapshot.bannerPath.trim()
+          : "";
+      if (cachedBannerPath) {
+        return getSupabasePublicObjectUrl(cachedBannerPath);
+      }
+
+      const cachedBannerUrl =
+        typeof cachedProfileSnapshot.bannerUrl === "string"
+          ? cachedProfileSnapshot.bannerUrl.trim()
+          : "";
+      if (cachedBannerUrl) {
+        return cachedBannerUrl;
       }
     }
   }
@@ -1838,6 +1881,7 @@ export default function ProfilePage() {
   const { locale, t } = useLocaleText();
   const router = useRouter();
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
+  const bannerInputRef = useRef<HTMLInputElement | null>(null);
   const adminAvatarInputRef = useRef<HTMLInputElement | null>(null);
   const adminThemeSongFileInputRef = useRef<HTMLInputElement | null>(null);
   const [bootstrap] = useState(() => EMPTY_BOOTSTRAP);
@@ -1854,9 +1898,13 @@ export default function ProfilePage() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isAvatarUploading, setIsAvatarUploading] = useState(false);
   const [isAvatarDeleting, setIsAvatarDeleting] = useState(false);
+  const [isBannerUploading, setIsBannerUploading] = useState(false);
+  const [isBannerDeleting, setIsBannerDeleting] = useState(false);
   const [isVerificationSending, setIsVerificationSending] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [avatarSuccess, setAvatarSuccess] = useState<string | null>(null);
+  const [bannerError, setBannerError] = useState<string | null>(null);
+  const [bannerSuccess, setBannerSuccess] = useState<string | null>(null);
   const [verificationError, setVerificationError] = useState<string | null>(null);
   const [verificationSuccess, setVerificationSuccess] = useState<string | null>(null);
   const [displayNameInput, setDisplayNameInput] = useState("");
@@ -1887,7 +1935,7 @@ export default function ProfilePage() {
   }, []);
   const [adminPanelActiveTab, setAdminPanelActiveTab] = useState<"sub" | "roles" | "promos" | "security" | "edit">("sub");
   const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
-  const [editProfileActiveTab, setEditProfileActiveTab] = useState<"general" | "avatar" | "security">("general");
+  const [editProfileActiveTab, setEditProfileActiveTab] = useState<"general" | "avatar" | "banner" | "security">("general");
   const [isRecoveryModalOpen, setIsRecoveryModalOpen] = useState(false);
   const [recoveryPassword, setRecoveryPassword] = useState("");
   const [recoveryConfirmPassword, setRecoveryConfirmPassword] = useState("");
@@ -3484,6 +3532,8 @@ export default function ProfilePage() {
   const initials = activeProfile ? initialsOf(activeProfile) : "SA";
   const activeProfileAvatarUrl = resolveProfileAvatarUrl(activeProfile);
   const hasActiveProfileAvatar = Boolean(activeProfileAvatarUrl);
+  const activeProfileBannerUrl = resolveProfileBannerUrl(activeProfile);
+  const hasActiveProfileBanner = Boolean(activeProfileBannerUrl);
   const activeProfileRoleSignature = activeProfile?.roles?.join("|") ?? "";
 
   useEffect(() => {
@@ -5459,6 +5509,86 @@ export default function ProfilePage() {
     }
   };
 
+  const handleBannerChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    event.target.value = "";
+    const bridge = getWindowState().sakuraFirebaseAuth;
+    if (!file || !bridge || !bridge.updateBanner) return;
+    if (!isSupabaseConfigured) {
+      setBannerError(getSupabaseAvatarUnavailableMessage());
+      return;
+    }
+    setBannerError(null);
+    setBannerSuccess(null);
+    setIsBannerUploading(true);
+
+    let uploadedBanner: SupabaseCommentMediaUploadResult | null = null;
+
+    try {
+      let snapshot: UserProfile | null = null;
+      const targetUid =
+        isOwner ? visibleCurrentUser?.uid ?? activeProfile?.uid : activeProfile?.uid;
+
+      if (!targetUid) {
+        throw new Error("Could not resolve target account for banner upload.");
+      }
+
+      uploadedBanner = await uploadSupabaseAvatarMedia(file, targetUid);
+      const bannerPayload = toAvatarUploadPayload(uploadedBanner);
+
+      if (isOwner && bridge.updateBanner) {
+        snapshot = await withAvatarActionTimeout(bridge.updateBanner(bannerPayload));
+      }
+
+      if (activeProfile?.bannerPath && activeProfile.bannerPath !== uploadedBanner.path) {
+        void deleteSupabaseStorageObject(activeProfile.bannerPath).catch((cleanupError) => {
+          console.error("Failed to remove replaced banner media:", cleanupError);
+        });
+      }
+
+      applyUpdatedProfileSnapshot(snapshot);
+      setBannerSuccess(t("Banner saved.", "Баннер сохранён."));
+    } catch (error) {
+      if (uploadedBanner && shouldCleanupUploadedMedia(uploadedBanner)) {
+        void deleteSupabaseStorageObject(uploadedBanner.path).catch((cleanupError) => {
+          console.error("Failed to cleanup uploaded banner media:", cleanupError);
+        });
+      }
+
+      setBannerError(avatarErrorMessage(error));
+    } finally {
+      setIsBannerUploading(false);
+    }
+  };
+
+  const handleBannerDelete = async () => {
+    const bridge = getWindowState().sakuraFirebaseAuth;
+    if (!bridge || !bridge.deleteBanner) return;
+    setBannerError(null);
+    setBannerSuccess(null);
+    setIsBannerDeleting(true);
+    try {
+      let snapshot: UserProfile | null = null;
+
+      if (isOwner) {
+        snapshot = await withAvatarActionTimeout(bridge.deleteBanner());
+      }
+
+      applyUpdatedProfileSnapshot(snapshot);
+      setBannerSuccess(t("Banner removed.", "Баннер удалён."));
+
+      if (activeProfile?.bannerPath) {
+        void deleteSupabaseStorageObject(activeProfile.bannerPath).catch((cleanupError) => {
+          console.error("Failed to remove deleted banner media:", cleanupError);
+        });
+      }
+    } catch (error) {
+      setBannerError(avatarErrorMessage(error));
+    } finally {
+      setIsBannerDeleting(false);
+    }
+  };
+
   const addRole = (role: string) => {
     setRolesError(null);
     setRolesSuccess(null);
@@ -7410,59 +7540,138 @@ export default function ProfilePage() {
             ) : null}
             {/* Hero Banner Card */}
             <div className="relative z-10 w-full overflow-hidden rounded-[34px] border border-[#201517] bg-[#0d0d0d] shadow-[0_0_80px_rgba(255,183,197,0.06)]">
-              <div className="bg-[radial-gradient(circle_at_top,rgba(255,183,197,0.16),transparent_55%)] px-8 py-8">
-                <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
-                  <div className="flex shrink-0 flex-col items-center gap-3">
+              {/* Cover Banner */}
+              <div className="relative h-36 w-full overflow-hidden border-b border-[#ffb7c5]/[0.08] sm:h-44">
+                {hasActiveProfileBanner ? (
+                  <img
+                    src={activeProfileBannerUrl ?? ""}
+                    alt="Profile Banner"
+                    className="h-full w-full object-cover object-center"
+                  />
+                ) : (
+                  <div
+                    className="relative h-full w-full"
+                    style={{
+                      background:
+                        "radial-gradient(circle at 20% 50%, rgba(255, 183, 197, 0.16), transparent 50%), radial-gradient(circle at 80% 30%, rgba(255, 51, 119, 0.12), transparent 50%), linear-gradient(180deg, #170d13 0%, #0d0d0d 100%)",
+                    }}
+                  >
+                    <div
+                      className="absolute inset-0"
+                      style={{
+                        backgroundImage:
+                          "radial-gradient(rgba(255, 183, 197, 0.28) 0.8px, transparent 0.8px)",
+                        backgroundSize: "16px 16px",
+                        opacity: 0.35,
+                      }}
+                    />
+                  </div>
+                )}
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#0d0d0d] via-transparent to-black/20" />
+              </div>
+
+              {/* Card Body */}
+              <div className="px-8 pb-8 pt-0">
+                <div className="flex flex-col gap-6 sm:flex-row sm:items-end">
+                  <div className="-mt-14 flex shrink-0 flex-col items-center gap-3">
                     {hasActiveProfileAvatar ? (
-                      <AvatarMedia src={activeProfileAvatarUrl ?? ""} alt={primaryName} loading="eager" decoding="async" className="h-[104px] w-[104px] rounded-[30px] border border-[#2c2023] object-cover shadow-[0_0_30px_rgba(255,183,197,0.14)]" />
+                      <AvatarMedia
+                        src={activeProfileAvatarUrl ?? ""}
+                        alt={primaryName}
+                        loading="eager"
+                        decoding="async"
+                        className="h-[104px] w-[104px] rounded-[30px] border-4 border-[#0d0d0d] object-cover shadow-[0_0_30px_rgba(255,183,197,0.18)]"
+                      />
                     ) : (
-                      <div className="flex h-[104px] w-[104px] items-center justify-center rounded-[30px] border border-[#2c2023] bg-[#1a1012] text-2xl font-black uppercase text-[#ffb7c5] shadow-[0_0_30px_rgba(255,183,197,0.14)]">
+                      <div className="flex h-[104px] w-[104px] items-center justify-center rounded-[30px] border-4 border-[#0d0d0d] bg-[#1a1012] text-2xl font-black uppercase text-[#ffb7c5] shadow-[0_0_30px_rgba(255,183,197,0.18)]">
                         {initials}
                       </div>
                     )}
-                    <span style={{ minWidth: 104, height: 30 }} className={`inline-flex shrink-0 items-center justify-center rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${isActiveProfileOnline ? "border-[#1f3b2f] bg-[#0d1713] text-[#8ce5b2]" : "border-[#312228] bg-[#140d11] text-[#ffb7c5]"}`}>
+                    <span
+                      style={{ minWidth: 104, height: 30 }}
+                      className={`inline-flex shrink-0 items-center justify-center rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${
+                        isActiveProfileOnline
+                          ? "border-[#1f3b2f] bg-[#0d1713] text-[#8ce5b2]"
+                          : "border-[#312228] bg-[#140d11] text-[#ffb7c5]"
+                      }`}
+                    >
                       {isActiveProfileOnline ? t("Online", "Онлайн") : t("Offline", "Оффлайн")}
                     </span>
                   </div>
-                  <div className="flex min-w-0 flex-1 flex-col sm:min-h-[146px]">
+                  <div className="flex min-w-0 flex-1 flex-col pt-3 sm:pt-0">
                     <div className="min-w-0">
-                      <h1 style={profileHeadlineStyle} className="min-w-0 truncate text-3xl font-black uppercase tracking-tighter">
+                      <h1
+                        style={profileHeadlineStyle}
+                        className="min-w-0 truncate text-3xl font-black uppercase tracking-tighter"
+                      >
                         {primaryName}
                       </h1>
                       {hasUsername ? (
                         <p className="mt-1 text-sm font-medium text-[#c7d4cc]">@{activeProfile.login}</p>
                       ) : isOwner ? (
-                        <p className="mt-1 text-sm text-gray-500">{t("Login not set yet.", "Логин ещё не задан.")}</p>
+                        <p className="mt-1 text-sm text-gray-500">
+                          {t("Login not set yet.", "Логин ещё не задан.")}
+                        </p>
                       ) : null}
                       {typeof activeProfile.profileId === "number" ? (
                         <p className="mt-1 flex max-w-full items-center gap-2 text-[11px] text-[#b78a95]">
-                          <span aria-hidden="true" className="inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-[#ff9fbd] shadow-[0_0_10px_rgba(255,159,189,0.7)]" />
+                          <span
+                            aria-hidden="true"
+                            className="inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-[#ff9fbd] shadow-[0_0_10px_rgba(255,159,189,0.7)]"
+                          />
                           <span className="truncate">UID: {activeProfile.profileId}</span>
                         </p>
                       ) : null}
-                      <p className={`${typeof activeProfile.profileId === "number" ? "mt-0.5" : "mt-1"} flex max-w-full items-center gap-2 text-[11px] text-[#b78a95]`}>
-                        <span aria-hidden="true" className="inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-[#ff9fbd] shadow-[0_0_10px_rgba(255,159,189,0.7)]" />
-                        <span className="truncate">{t("Account created", "Аккаунт создан")} {formatTime(activeProfile.creationTime, locale)}</span>
+                      <p
+                        className={`${
+                          typeof activeProfile.profileId === "number" ? "mt-0.5" : "mt-1"
+                        } flex max-w-full items-center gap-2 text-[11px] text-[#b78a95]`}
+                      >
+                        <span
+                          aria-hidden="true"
+                          className="inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-[#ff9fbd] shadow-[0_0_10px_rgba(255,159,189,0.7)]"
+                        />
+                        <span className="truncate">
+                          {t("Account created", "Аккаунт создан")}{" "}
+                          {formatTime(activeProfile.creationTime, locale)}
+                        </span>
                       </p>
                     </div>
-                    <div className="mt-3 flex flex-wrap items-center gap-3 sm:mt-auto">
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
                       {profileRoles.map((role) => (
-                        <span key={role} title={roleBadgeLabel(role)} style={{ ...roleBadgeStyle(role), ...roleBadgeTextStyle, height: 30 }} className="inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-full border px-3 py-1 text-[10px] font-bold">
-                          <span aria-hidden="true" className="inline-flex items-center">{renderRoleBadgeText(role)}</span>
+                        <span
+                          key={role}
+                          title={roleBadgeLabel(role)}
+                          style={{ ...roleBadgeStyle(role), ...roleBadgeTextStyle, height: 30 }}
+                          className="inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-full border px-3 py-1 text-[10px] font-bold"
+                        >
+                          <span aria-hidden="true" className="inline-flex items-center">
+                            {renderRoleBadgeText(role)}
+                          </span>
                         </span>
                       ))}
                     </div>
                   </div>
 
                   {/* Hero Actions on the right */}
-                  <div className="flex shrink-0 items-center gap-3 self-start sm:self-center sm:ml-auto">
+                  <div className="flex shrink-0 items-center gap-3 self-start pb-1 sm:self-end sm:ml-auto">
                     {isOwner && activeProfile && !activeProfile.isBanned ? (
                       <button
                         type="button"
                         onClick={() => setIsEditProfileModalOpen(true)}
                         className="inline-flex items-center gap-2 rounded-full border border-[#ffb7c5]/45 bg-[#ffb7c5] px-4 py-2 text-xs font-extrabold uppercase tracking-[0.12em] text-[#0a0a0a] shadow-[0_0_20px_rgba(255,183,197,0.24)] transition hover:bg-white hover:scale-102 cursor-pointer"
                       >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        <svg
+                          width="13"
+                          height="13"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.2"
+                        >
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                        </svg>
                         <span>{t("Edit Profile", "Редактировать профиль")}</span>
                       </button>
                     ) : null}
@@ -7475,7 +7684,18 @@ export default function ProfilePage() {
                         }}
                         className="inline-flex items-center gap-2 rounded-full border border-[#3a222c] bg-[#140d11] px-4 py-2 text-xs font-bold uppercase tracking-[0.1em] text-[#ffb7c5] transition hover:border-[#ffb7c5] hover:text-white cursor-pointer"
                       >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/></svg>
+                        <svg
+                          width="13"
+                          height="13"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
+                          <rect x="3" y="3" width="18" height="18" rx="2" />
+                          <path d="M9 3v18" />
+                          <path d="M15 3v18" />
+                        </svg>
                         <span>{t("Admin Panel", "Панель админа")}</span>
                       </button>
                     ) : null}
@@ -7613,23 +7833,27 @@ export default function ProfilePage() {
                               </button>
                             )
                           )}
-                          <a
-                            href={FUNPAY_SUBSCRIPTION_URL}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={handleFunPayLinkClick}
-                            className="inline-flex items-center justify-center rounded-[18px] border border-[#281920] bg-[#140d11] px-4 py-3 text-[11px] font-extrabold uppercase tracking-[0.1em] text-white transition hover:border-[#ffb7c5]/40 hover:text-[#ffb7c5] cursor-pointer"
-                          >
-                            {t("Extend", "ПРОДЛИТЬ")}
-                          </a>
-                          <button
-                            type="button"
-                            onClick={() => setIsPromoModalOpen(true)}
-                            className="inline-flex items-center gap-1.5 rounded-[18px] border border-[#3a222c] bg-[#140d11] px-4 py-3 text-[11px] font-extrabold uppercase tracking-[0.1em] text-[#ffb7c5] transition hover:border-[#ffb7c5] hover:text-white cursor-pointer"
-                          >
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><rect x="3" y="4" width="18" height="16" rx="3"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="7" y1="8" x2="11" y2="8"/></svg>
-                            <span>{t("Promo Code", "ПРОМОКОД")}</span>
-                          </button>
+                          {!hasLifetimeRole && (
+                            <>
+                              <a
+                                href={FUNPAY_SUBSCRIPTION_URL}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={handleFunPayLinkClick}
+                                className="inline-flex items-center justify-center rounded-[18px] border border-[#281920] bg-[#140d11] px-4 py-3 text-[11px] font-extrabold uppercase tracking-[0.1em] text-white transition hover:border-[#ffb7c5]/40 hover:text-[#ffb7c5] cursor-pointer"
+                              >
+                                {t("Extend", "ПРОДЛИТЬ")}
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => setIsPromoModalOpen(true)}
+                                className="inline-flex items-center gap-1.5 rounded-[18px] border border-[#3a222c] bg-[#140d11] px-4 py-3 text-[11px] font-extrabold uppercase tracking-[0.1em] text-[#ffb7c5] transition hover:border-[#ffb7c5] hover:text-white cursor-pointer"
+                              >
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><rect x="3" y="4" width="18" height="16" rx="3"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="7" y1="8" x2="11" y2="8"/></svg>
+                                <span>{t("Promo Code", "ПРОМОКОД")}</span>
+                              </button>
+                            </>
+                          )}
                         </>
                       )
                     ) : (
@@ -8064,6 +8288,7 @@ export default function ProfilePage() {
                             {[
                               { id: "general", label: t("General", "Основное") },
                               { id: "avatar", label: t("Avatar", "Аватар") },
+                              { id: "banner", label: t("Banner", "Баннер") },
                               { id: "security", label: t("Security", "Безопасность") },
                             ].map((tab) => (
                               <button
@@ -8103,7 +8328,7 @@ export default function ProfilePage() {
                                   </span>
                                   {displayNameCooldown.isLocked && (
                                     <span className="text-[11px] font-mono text-[#f97316]">
-                                      ⏳ {t(`in ${displayNameCooldown.daysLeft} d.`, `через ${displayNameCooldown.daysLeft} дн.`)}
+                                      {t(`in ${displayNameCooldown.daysLeft} d.`, `через ${displayNameCooldown.daysLeft} дн.`)}
                                     </span>
                                   )}
                                 </div>
@@ -8177,7 +8402,7 @@ export default function ProfilePage() {
                                   </span>
                                   {loginCooldown.isLocked && (
                                     <span className="text-[11px] font-mono text-[#f97316]">
-                                      ⏳ {t(`in ${loginCooldown.daysLeft} d.`, `через ${loginCooldown.daysLeft} дн.`)}
+                                      {t(`in ${loginCooldown.daysLeft} d.`, `через ${loginCooldown.daysLeft} дн.`)}
                                     </span>
                                   )}
                                 </div>
@@ -8322,7 +8547,99 @@ export default function ProfilePage() {
                         </div>
                       )}
 
-                      {/* Tab 3: Security */}
+                      {/* Tab 3: Banner */}
+                      {editProfileActiveTab === "banner" && (
+                        <div className="rounded-2xl border border-[#23141a] bg-[#10090c] p-5 space-y-4">
+                          <div>
+                            <p className="text-sm font-bold text-white">
+                              {hasActiveProfileBanner
+                                ? t("Custom Profile Banner", "Пользовательский баннер")
+                                : t("Default Pattern Banner", "Стандартный баннер")}
+                            </p>
+                            <p className="mt-1 text-xs text-gray-400">
+                              {t(
+                                "Recommended resolution: 1200 × 300 px (4:1 ratio). Supported formats: PNG, JPG, WEBP, GIF (up to 5 MB).",
+                                "Рекомендуемый размер: 1200 × 300 px (соотношение 4:1). Поддерживаемые форматы: PNG, JPG, WEBP, GIF (до 5 МБ)."
+                              )}
+                            </p>
+                          </div>
+
+                          {/* Live Banner Preview */}
+                          <div className="relative aspect-[4/1] w-full overflow-hidden rounded-2xl border border-[#2c1c24] bg-[#080507]">
+                            {hasActiveProfileBanner ? (
+                              <img
+                                src={activeProfileBannerUrl ?? ""}
+                                alt="Banner Preview"
+                                className="h-full w-full object-cover object-center"
+                              />
+                            ) : (
+                              <div
+                                className="relative h-full w-full"
+                                style={{
+                                  background:
+                                    "radial-gradient(circle at 20% 50%, rgba(255, 183, 197, 0.16), transparent 50%), radial-gradient(circle at 80% 30%, rgba(255, 51, 119, 0.12), transparent 50%), linear-gradient(180deg, #170d13 0%, #0d0d0d 100%)",
+                                }}
+                              >
+                                <div
+                                  className="absolute inset-0"
+                                  style={{
+                                    backgroundImage:
+                                      "radial-gradient(rgba(255, 183, 197, 0.28) 0.8px, transparent 0.8px)",
+                                    backgroundSize: "16px 16px",
+                                    opacity: 0.35,
+                                  }}
+                                />
+                              </div>
+                            )}
+                            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#0c070a]/80 via-transparent to-transparent" />
+                            <div className="absolute bottom-2.5 left-3.5 flex items-center gap-2">
+                              <span className="rounded-md border border-white/10 bg-black/60 px-2 py-0.5 text-[10px] font-mono text-[#ffb7c5] backdrop-blur-sm">
+                                {hasActiveProfileBanner ? t("Custom Banner", "Кастомный") : t("Sakura Pattern", "Узор Sakura")}
+                              </span>
+                              <span className="text-[10px] font-mono text-gray-400">1200 × 300</span>
+                            </div>
+                          </div>
+
+                          {/* Controls */}
+                          <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => bannerInputRef.current?.click()}
+                              disabled={isBannerUploading || isBannerDeleting}
+                              className="rounded-full border border-[#ffb7c5]/40 bg-[#ffb7c5] px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-black transition hover:bg-white disabled:opacity-50 cursor-pointer"
+                            >
+                              {isBannerUploading
+                                ? t("Uploading...", "Загрузка...")
+                                : hasActiveProfileBanner
+                                ? t("Replace Banner", "Заменить баннер")
+                                : t("Upload Banner", "Загрузить баннер")}
+                            </button>
+                            {hasActiveProfileBanner && (
+                              <button
+                                type="button"
+                                onClick={handleBannerDelete}
+                                disabled={isBannerUploading || isBannerDeleting}
+                                className="rounded-full border border-[#ff5a54]/30 bg-[#16080b] px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-[#ff9aa9] hover:bg-[#ff5a54] hover:text-black transition disabled:opacity-50 cursor-pointer"
+                              >
+                                {isBannerDeleting
+                                  ? t("Deleting...", "Удаление...")
+                                  : t("Reset to Default", "Сбросить по умолчанию")}
+                              </button>
+                            )}
+                            <input
+                              ref={bannerInputRef}
+                              type="file"
+                              accept={AVATAR_FILE_ACCEPT}
+                              onChange={handleBannerChange}
+                              className="hidden"
+                            />
+                          </div>
+                          {bannerSuccess && <p className="mt-2 text-xs text-[#8ce5b2]">✓ {bannerSuccess}</p>}
+                          {bannerError && <p className="mt-2 text-xs text-[#ff9aa9]">⚠ {bannerError}</p>}
+                        </div>
+                      )}
+
+                      {/* Tab 4: Security */}
                       {editProfileActiveTab === "security" && (
                         <div className="space-y-4">
                           {requiresUsernamePasswordConfirmation ? (

@@ -1141,6 +1141,8 @@ const firebaseModuleScript = `
       avatarPath: primaryProfile.avatarPath ?? fallbackProfile.avatarPath ?? null,
       avatarType: primaryProfile.avatarType ?? fallbackProfile.avatarType ?? null,
       avatarSize: primaryProfile.avatarSize ?? fallbackProfile.avatarSize ?? null,
+      bannerUrl: primaryProfile.bannerUrl ?? fallbackProfile.bannerUrl ?? null,
+      bannerPath: primaryProfile.bannerPath ?? fallbackProfile.bannerPath ?? null,
     };
   };
   const mergeProfileCommentsWithFallback = (primaryComments, fallbackComments) => {
@@ -1360,6 +1362,8 @@ const firebaseModuleScript = `
     avatarType: resolveAvatarType(details, null),
     avatarSize: resolveAvatarSize(details, null),
     themeSongKey: resolveThemeSongKey(details, null),
+    bannerUrl: typeof details.bannerUrl === "string" ? details.bannerUrl : null,
+    bannerPath: typeof details.bannerPath === "string" ? details.bannerPath : null,
     providerIds: Array.isArray(details.providerIds) ? details.providerIds : getProviderIds(user),
     roles: normalizeRoles(details.roles),
     isBanned: details.isBanned === true,
@@ -1391,6 +1395,8 @@ const firebaseModuleScript = `
           avatarType: resolveAvatarType(details, null),
           avatarSize: resolveAvatarSize(details, null),
           themeSongKey: resolveThemeSongKey(details, null),
+          bannerUrl: typeof details.bannerUrl === "string" ? details.bannerUrl : null,
+          bannerPath: typeof details.bannerPath === "string" ? details.bannerPath : null,
           roles: normalizeRoles(details.roles),
           isBanned: details.isBanned === true,
           bannedAt: resolveBannedAt(details),
@@ -1428,6 +1434,8 @@ const firebaseModuleScript = `
     avatarType: resolveAvatarType(details, null),
     avatarSize: resolveAvatarSize(details, null),
     themeSongKey: resolveThemeSongKey(details, null),
+    bannerUrl: typeof details.bannerUrl === "string" ? details.bannerUrl : null,
+    bannerPath: typeof details.bannerPath === "string" ? details.bannerPath : null,
     roles: normalizeRoles(details.roles),
     isBanned: details.isBanned === true,
     bannedAt: resolveBannedAt(details),
@@ -1695,6 +1703,8 @@ const firebaseModuleScript = `
             ? row.avatar_type
             : null,
         avatarSize: normalizeSupabaseInteger(row?.avatar_size),
+        bannerUrl: typeof row?.banner_url === "string" && row.banner_url ? row.banner_url : null,
+        bannerPath: typeof row?.banner_path === "string" && row.banner_path ? row.banner_path : null,
         roles: Array.isArray(row?.roles) ? row.roles : [],
         isBanned: row?.is_banned === true,
         bannedAt:
@@ -4054,6 +4064,97 @@ const firebaseModuleScript = `
         })
       );
     };
+
+    const updateBanner = async (payload) => {
+      const user = auth.currentUser;
+
+      if (!user) {
+        throw createFirebaseError("auth/no-current-user", "Sign in again to update your banner.");
+      }
+
+      await ensureVerifiedSessionAccess(user, "Verify your email before updating the banner.");
+
+      const bannerUrl = typeof payload === "string" ? payload : payload?.photoURL ?? payload?.publicUrl ?? null;
+      const bannerPath = payload?.avatarPath ?? payload?.path ?? null;
+
+      if (!bannerUrl) {
+        throw createFirebaseError("storage/invalid-file", "Choose an image before uploading.");
+      }
+
+      const userRef = userRefFor(user.uid);
+      const existingSnapshot = await getDoc(userRef);
+      const existingData = existingSnapshot.exists() ? existingSnapshot.data() : {};
+      const hasStoredProfileRecord =
+        existingSnapshot.exists() && typeof existingData?.profileId === "number";
+
+      if (!hasStoredProfileRecord) {
+        await resolveUserSnapshot(user);
+      }
+
+      await setDoc(
+        userRef,
+        {
+          bannerUrl,
+          bannerPath,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+
+      const currentDetails = window.sakuraCurrentUserSnapshot
+        ? buildUserDetailsFromSnapshot(user, window.sakuraCurrentUserSnapshot)
+        : buildFallbackUserDetails(user);
+
+      return publishUserSnapshot(
+        toUserSnapshot(user, {
+          ...currentDetails,
+          bannerUrl,
+          bannerPath,
+        })
+      );
+    };
+
+    const deleteBanner = async () => {
+      const user = auth.currentUser;
+
+      if (!user) {
+        throw createFirebaseError("auth/no-current-user", "Sign in again to update your banner.");
+      }
+
+      await ensureVerifiedSessionAccess(user, "Verify your email before updating the banner.");
+
+      const userRef = userRefFor(user.uid);
+      const existingSnapshot = await getDoc(userRef);
+      const existingData = existingSnapshot.exists() ? existingSnapshot.data() : {};
+      const hasStoredProfileRecord =
+        existingSnapshot.exists() && typeof existingData?.profileId === "number";
+
+      if (!hasStoredProfileRecord) {
+        await resolveUserSnapshot(user);
+      }
+
+      await setDoc(
+        userRef,
+        {
+          bannerUrl: null,
+          bannerPath: null,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+
+      const currentDetails = window.sakuraCurrentUserSnapshot
+        ? buildUserDetailsFromSnapshot(user, window.sakuraCurrentUserSnapshot)
+        : buildFallbackUserDetails(user);
+
+      return publishUserSnapshot(
+        toUserSnapshot(user, {
+          ...currentDetails,
+          bannerUrl: null,
+          bannerPath: null,
+        })
+      );
+    };
     const adminUpdateProfileDisplayName = async (profileId, nextDisplayName) => {
       const { user, actorSnapshot } = await ensureRootActorSnapshot();
 
@@ -4770,6 +4871,8 @@ const firebaseModuleScript = `
       updateProfileRoles,
       updateAvatar,
       deleteAvatar,
+      updateBanner,
+      deleteBanner,
       adminUpdateProfileAvatar,
       adminDeleteProfileAvatar,
       syncPresence: async (options = {}) => {
