@@ -24,7 +24,7 @@ import {
   isSupabaseConfigured,
 } from "@/lib/supabase";
 import { readCachedAuthSnapshot } from "@/lib/auth-snapshot-cache";
-import { readCachedProfileSnapshot, writeCachedProfileSnapshot } from "@/lib/profile-cache";
+import { readCachedProfileSnapshot, writeCachedProfileSnapshot, clearCachedProfileSnapshot } from "@/lib/profile-cache";
 import { readCachedProfileComments, writeCachedProfileComments } from "@/lib/profile-comments-cache";
 import { readCachedSiteOnlineCount, writeCachedSiteOnlineCount } from "@/lib/site-online-cache";
 import { type UiLocale, useLocaleText } from "@/lib/ui-locale";
@@ -2417,8 +2417,13 @@ export default function ProfilePage() {
       .then((user) => {
         setProfile(user);
         if (!user) {
-          if (redirectToLocalProfile(requestedId, visibleCurrentUser?.profileId ?? null)) return;
-          setProfileError(`Profile #${requestedId} was not found.`);
+          clearCachedProfileSnapshot(requestedId);
+          setProfile(null);
+          setProfileError(
+            locale === "ru"
+              ? `Профиль #${requestedId} не найден или был удалён.`
+              : `Profile #${requestedId} was not found or has been deleted.`
+          );
           return;
         }
         if (window.location.pathname !== profilePath(requestedId)) window.history.replaceState(null, "", profilePath(requestedId));
@@ -2558,23 +2563,18 @@ export default function ProfilePage() {
         scanIndex < PROFILE_NAV_SCAN_LIMIT && candidateProfileId > 0;
         scanIndex += 1, candidateProfileId += step
       ) {
-        const cachedCandidateProfile =
-          readCachedProfileSnapshot<UserProfile>(candidateProfileId);
-
-        if (
-          cachedCandidateProfile &&
-          typeof cachedCandidateProfile.profileId === "number"
-        ) {
-          return cachedCandidateProfile.profileId;
-        }
-
         try {
           const candidateProfile = await bridge.getProfileById(candidateProfileId);
 
           if (candidateProfile && typeof candidateProfile.profileId === "number") {
+            writeCachedProfileSnapshot(candidateProfile);
             return candidateProfile.profileId;
+          } else {
+            clearCachedProfileSnapshot(candidateProfileId);
           }
-        } catch (error) {}
+        } catch {
+          clearCachedProfileSnapshot(candidateProfileId);
+        }
       }
 
       return null;
@@ -7454,7 +7454,24 @@ export default function ProfilePage() {
 
         {authError ? <section className="rounded-[32px] border border-red-400/20 bg-red-500/10 px-8 py-12"><p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">Auth Error</p><p className="mt-4 text-sm leading-relaxed text-red-100/85">{authError}</p></section> : null}
         {hasHydrated && showPendingState ? <section className="rounded-[32px] border border-[#181818] bg-[#090909]/85 px-6 py-5 shadow-[0_0_40px_rgba(255,183,197,0.04)]"><div className="flex items-center justify-between gap-4"><div><p className="font-mono text-[10px] uppercase tracking-[0.34em] text-[#ffb7c5]">Loading</p><p className="mt-2 text-sm text-gray-400">{requestedProfileId ? `Preparing profile #${requestedProfileId}...` : "Preparing profile..."}</p></div><div className="h-2 w-2 rounded-full bg-[#ffb7c5] animate-pulse"></div></div></section> : null}
-        {hasHydrated && authReady && !authError && !isProfileLoading && !activeProfile && profileError ? <section className="rounded-[32px] border border-[#201517] bg-[#0d0d0d] px-8 py-12 shadow-[0_0_60px_rgba(255,183,197,0.06)]"><p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">{requestedProfileId ? "Profile Missing" : "Guest State"}</p><p className="mt-4 text-sm leading-relaxed text-gray-400">{profileError}</p></section> : null}
+        {hasHydrated && authReady && !authError && !isProfileLoading && !activeProfile && profileError ? (
+          <section className="rounded-[32px] border border-[#201517] bg-[#0d0d0d] px-8 py-12 shadow-[0_0_60px_rgba(255,183,197,0.06)]">
+            <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#ffb7c5]">
+              {requestedProfileId ? t("Profile Missing", "Профиль не найден") : t("Guest State", "Гостевой режим")}
+            </p>
+            <p className="mt-4 text-sm leading-relaxed text-gray-400">{profileError}</p>
+            {visibleCurrentUser?.profileId && (
+              <div className="mt-6">
+                <a
+                  href={profilePath(visibleCurrentUser.profileId)}
+                  className="inline-flex items-center gap-2 rounded-full border border-[#ffb7c5]/40 bg-[#ffb7c5] px-5 py-2.5 text-xs font-bold uppercase tracking-[0.12em] text-black transition hover:bg-white"
+                >
+                  {t("Back to my profile", "Вернуться в свой профиль")}
+                </a>
+              </div>
+            )}
+          </section>
+        ) : null}
 
         {activeProfile ? (
           <section className="relative flex flex-col gap-6">

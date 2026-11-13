@@ -55,3 +55,17 @@ export function writeCachedProfileSnapshot<T extends CachedProfileShape>(profile
     window.localStorage.setItem(getProfileCacheKey(profile.profileId), JSON.stringify(profile));
   } catch {}
 }
+
+export function clearCachedProfileSnapshot(profileId: number | null | undefined) {
+  if (
+    typeof window === "undefined" ||
+    typeof profileId !== "number" ||
+    profileId <= 0
+  ) {
+    return;
+  }
+
+  try {
+    window.localStorage.removeItem(getProfileCacheKey(profileId));
+  } catch {}
+}
