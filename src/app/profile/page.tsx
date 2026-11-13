@@ -7584,7 +7584,7 @@ export default function ProfilePage() {
             {/* Hero Banner Card */}
             <div className="relative z-10 w-full overflow-hidden rounded-[34px] border border-[#201517] bg-[#0d0d0d] shadow-[0_0_80px_rgba(255,183,197,0.06)]">
               {/* Cover Banner */}
-              <div className="relative aspect-[4/1] min-h-[140px] w-full overflow-hidden border-b border-[#1f1418]">
+              <div className="relative h-[145px] sm:h-[160px] w-full overflow-hidden border-b border-[#1f1418]">
                 {hasActiveProfileBanner ? (
                   <img
                     src={activeProfileBannerUrl ?? ""}
@@ -8600,14 +8600,14 @@ export default function ProfilePage() {
                             </p>
                             <p className="mt-1 text-xs text-gray-400">
                               {t(
-                                "Recommended size: 1200 × 300 px (1 to 4). Supported formats: PNG, JPG, WEBP, GIF (up to 5 MB).",
-                                "Рекомендуемый размер: 1200 × 300 px (1 на 4). Поддерживаемые форматы: PNG, JPG, WEBP, GIF (до 5 МБ)."
+                                "Recommended size: 1200 × 160 px (or 1400 × 200 px). Supported formats: PNG, JPG, WEBP, GIF (up to 5 MB).",
+                                "Рекомендуемый размер: 1200 × 160 px (или 1400 × 200 px). Поддерживаемые форматы: PNG, JPG, WEBP, GIF (до 5 МБ)."
                               )}
                             </p>
                           </div>
 
                           {/* Live Banner Preview */}
-                          <div className="relative aspect-[4/1] w-full overflow-hidden rounded-2xl border border-[#2c1c24] bg-[#080507]">
+                          <div className="relative aspect-[7.2/1] w-full overflow-hidden rounded-2xl border border-[#2c1c24] bg-[#080507]">
                             {hasActiveProfileBanner ? (
                               <img
                                 src={activeProfileBannerUrl ?? ""}
@@ -8633,11 +8633,11 @@ export default function ProfilePage() {
                                 />
                               </div>
                             )}
-                            <div className="absolute bottom-2.5 left-3.5 flex items-center gap-2">
+                            <div className="absolute bottom-2 left-3 flex items-center gap-2">
                               <span className="rounded-md border border-white/10 bg-black/60 px-2 py-0.5 text-[10px] font-mono text-[#ffb7c5] backdrop-blur-sm">
                                 {hasActiveProfileBanner ? t("Custom Banner", "Кастомный") : t("Sakura Pattern", "Узор Sakura")}
                               </span>
-                              <span className="text-[10px] font-mono text-gray-400">1 на 4 (1200 × 300 px)</span>
+                              <span className="text-[10px] font-mono text-gray-400">1200 × 160 px</span>
                             </div>
                           </div>
 
