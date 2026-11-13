@@ -7558,7 +7558,7 @@ export default function ProfilePage() {
             {/* Hero Banner Card */}
             <div className="relative z-10 w-full overflow-hidden rounded-[34px] border border-[#201517] bg-[#0d0d0d] shadow-[0_0_80px_rgba(255,183,197,0.06)]">
               {/* Cover Banner */}
-              <div className="relative h-36 w-full overflow-hidden border-b border-[#ffb7c5]/[0.08] sm:h-44">
+              <div className="relative h-[140px] w-full overflow-hidden border-b border-[#1f1418]">
                 {hasActiveProfileBanner ? (
                   <img
                     src={activeProfileBannerUrl ?? ""}
@@ -7576,147 +7576,146 @@ export default function ProfilePage() {
                     <div
                       className="absolute inset-0"
                       style={{
+                        opacity: 0.18,
                         backgroundImage:
-                          "radial-gradient(rgba(255, 183, 197, 0.28) 0.8px, transparent 0.8px)",
+                          "radial-gradient(#ffb7c5 0.75px, transparent 0.75px)",
                         backgroundSize: "16px 16px",
-                        opacity: 0.35,
                       }}
                     />
                   </div>
                 )}
-                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#0d0d0d] via-transparent to-black/20" />
               </div>
 
-              {/* Card Body */}
-              <div className="px-8 pb-8 pt-0">
-                <div className="flex flex-col gap-6 sm:flex-row sm:items-end">
-                  <div className="-mt-14 flex shrink-0 flex-col items-center gap-3">
-                    {hasActiveProfileAvatar ? (
-                      <AvatarMedia
-                        src={activeProfileAvatarUrl ?? ""}
-                        alt={primaryName}
-                        loading="eager"
-                        decoding="async"
-                        className="h-[104px] w-[104px] rounded-[30px] border-4 border-[#0d0d0d] object-cover shadow-[0_0_30px_rgba(255,183,197,0.18)]"
-                      />
-                    ) : (
-                      <div className="flex h-[104px] w-[104px] items-center justify-center rounded-[30px] border-4 border-[#0d0d0d] bg-[#1a1012] text-2xl font-black uppercase text-[#ffb7c5] shadow-[0_0_30px_rgba(255,183,197,0.18)]">
-                        {initials}
-                      </div>
-                    )}
-                    <span
-                      style={{ minWidth: 104, height: 30 }}
-                      className={`inline-flex shrink-0 items-center justify-center rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${
-                        isActiveProfileOnline
-                          ? "border-[#1f3b2f] bg-[#0d1713] text-[#8ce5b2]"
-                          : "border-[#312228] bg-[#140d11] text-[#ffb7c5]"
-                      }`}
-                    >
-                      {isActiveProfileOnline ? t("Online", "Онлайн") : t("Offline", "Оффлайн")}
-                    </span>
-                  </div>
-                  <div className="flex min-w-0 flex-1 flex-col pt-3 sm:pt-0">
-                    <div className="min-w-0">
-                      <h1
-                        style={profileHeadlineStyle}
-                        className="min-w-0 truncate text-3xl font-black uppercase tracking-tighter"
-                      >
-                        {primaryName}
-                      </h1>
-                      {hasUsername ? (
-                        <p className="mt-1 text-sm font-medium text-[#c7d4cc]">@{activeProfile.login}</p>
-                      ) : isOwner ? (
-                        <p className="mt-1 text-sm text-gray-500">
-                          {t("Login not set yet.", "Логин ещё не задан.")}
-                        </p>
-                      ) : null}
-                      {typeof activeProfile.profileId === "number" ? (
-                        <p className="mt-1 flex max-w-full items-center gap-2 text-[11px] text-[#b78a95]">
-                          <span
-                            aria-hidden="true"
-                            className="inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-[#ff9fbd] shadow-[0_0_10px_rgba(255,159,189,0.7)]"
-                          />
-                          <span className="truncate">UID: {activeProfile.profileId}</span>
-                        </p>
-                      ) : null}
-                      <p
-                        className={`${
-                          typeof activeProfile.profileId === "number" ? "mt-0.5" : "mt-1"
-                        } flex max-w-full items-center gap-2 text-[11px] text-[#b78a95]`}
-                      >
+              {/* Card Body / Hero Content */}
+              <div className="relative -mt-[50px] flex flex-wrap items-end justify-between gap-5 px-6 pb-7 sm:px-[34px]">
+                {/* Left: Avatar Block */}
+                <div className="flex shrink-0 flex-col items-center gap-2.5">
+                  {hasActiveProfileAvatar ? (
+                    <AvatarMedia
+                      src={activeProfileAvatarUrl ?? ""}
+                      alt={primaryName}
+                      loading="eager"
+                      decoding="async"
+                      className="h-[104px] w-[104px] rounded-[30px] border border-[#2c2023] bg-[#1a1012] object-cover shadow-[0_0_30px_rgba(255,183,197,0.14)]"
+                    />
+                  ) : (
+                    <div className="flex h-[104px] w-[104px] items-center justify-center rounded-[30px] border border-[#2c2023] bg-[#1a1012] text-[26px] font-black uppercase tracking-[-0.02em] text-[#ffb7c5] shadow-[0_0_30px_rgba(255,183,197,0.14)]">
+                      {initials}
+                    </div>
+                  )}
+                  <span
+                    style={{ minWidth: 104, height: 28 }}
+                    className={`inline-flex shrink-0 items-center justify-center rounded-full border px-3.5 text-[10px] font-extrabold uppercase tracking-[0.18em] ${
+                      isActiveProfileOnline
+                        ? "border-[#1f3b2f] bg-[#0d1713] text-[#8ce5b2]"
+                        : "border-[#312228] bg-[#140d11] text-[#ffb7c5]"
+                    }`}
+                  >
+                    {isActiveProfileOnline ? t("Online", "Онлайн") : t("Offline", "Оффлайн")}
+                  </span>
+                </div>
+
+                {/* Middle: User Info */}
+                <div className="min-w-[240px] flex-1 pb-0.5">
+                  <h1
+                    style={profileHeadlineStyle}
+                    className="truncate text-[32px] font-black uppercase tracking-[-0.03em] leading-none text-white"
+                  >
+                    {primaryName}
+                  </h1>
+                  {hasUsername ? (
+                    <p className="mt-1 text-[13px] font-semibold text-[#c7d4cc]">@{activeProfile.login}</p>
+                  ) : isOwner ? (
+                    <p className="mt-1 text-xs text-gray-500">
+                      {t("Login not set yet.", "Логин ещё не задан.")}
+                    </p>
+                  ) : null}
+
+                  <div className="mt-2 flex flex-col gap-1 text-[11px] text-[#b78a95]">
+                    {typeof activeProfile.profileId === "number" ? (
+                      <div className="flex items-center gap-1.5">
                         <span
                           aria-hidden="true"
-                          className="inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-[#ff9fbd] shadow-[0_0_10px_rgba(255,159,189,0.7)]"
+                          className="inline-flex h-[5px] w-[5px] shrink-0 rounded-full bg-[#ff9fbd] shadow-[0_0_8px_rgba(255,159,189,0.7)]"
                         />
-                        <span className="truncate">
-                          {t("Account created", "Аккаунт создан")}{" "}
-                          {formatTime(activeProfile.creationTime, locale)}
-                        </span>
-                      </p>
-                    </div>
-                    <div className="mt-3 flex flex-wrap items-center gap-3">
-                      {profileRoles.map((role) => (
-                        <span
-                          key={role}
-                          title={roleBadgeLabel(role)}
-                          style={{ ...roleBadgeStyle(role), ...roleBadgeTextStyle, height: 30 }}
-                          className="inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-full border px-3 py-1 text-[10px] font-bold"
-                        >
-                          <span aria-hidden="true" className="inline-flex items-center">
-                            {renderRoleBadgeText(role)}
-                          </span>
-                        </span>
-                      ))}
+                        <span>UID: {activeProfile.profileId}</span>
+                      </div>
+                    ) : null}
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        aria-hidden="true"
+                        className="inline-flex h-[5px] w-[5px] shrink-0 rounded-full bg-[#ff9fbd] shadow-[0_0_8px_rgba(255,159,189,0.7)]"
+                      />
+                      <span>
+                        {t("Account created", "Аккаунт создан")}{" "}
+                        {formatTime(activeProfile.creationTime, locale)}
+                      </span>
                     </div>
                   </div>
 
-                  {/* Hero Actions on the right */}
-                  <div className="flex shrink-0 items-center gap-3 self-start pb-1 sm:self-end sm:ml-auto">
-                    {isOwner && activeProfile && !activeProfile.isBanned ? (
-                      <button
-                        type="button"
-                        onClick={() => setIsEditProfileModalOpen(true)}
-                        className="inline-flex items-center gap-2 rounded-full border border-[#ffb7c5]/45 bg-[#ffb7c5] px-4 py-2 text-xs font-extrabold uppercase tracking-[0.12em] text-[#0a0a0a] shadow-[0_0_20px_rgba(255,183,197,0.24)] transition hover:bg-white hover:scale-102 cursor-pointer"
+                  {/* Roles Strip */}
+                  <div className="mt-3.5 flex flex-wrap items-center gap-2">
+                    {profileRoles.map((role) => (
+                      <span
+                        key={role}
+                        title={roleBadgeLabel(role)}
+                        style={{ ...roleBadgeStyle(role), ...roleBadgeTextStyle, height: 28 }}
+                        className="inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-full border px-3 text-[10px] font-extrabold tracking-[0.08em]"
                       >
-                        <svg
-                          width="13"
-                          height="13"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2.2"
-                        >
-                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                        </svg>
-                        <span>{t("Edit Profile", "Редактировать профиль")}</span>
-                      </button>
-                    ) : null}
-                    {!isOwner && canOpenAdminPanel ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsAdminPanelOpen(true);
-                          loadAdminPromoCodes();
-                        }}
-                        className="inline-flex items-center gap-2 rounded-full border border-[#3a222c] bg-[#140d11] px-4 py-2 text-xs font-bold uppercase tracking-[0.1em] text-[#ffb7c5] transition hover:border-[#ffb7c5] hover:text-white cursor-pointer"
-                      >
-                        <svg
-                          width="13"
-                          height="13"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                        >
-                          <rect x="3" y="3" width="18" height="18" rx="2" />
-                          <path d="M9 3v18" />
-                          <path d="M15 3v18" />
-                        </svg>
-                        <span>{t("Admin Panel", "Панель админа")}</span>
-                      </button>
-                    ) : null}
+                        <span aria-hidden="true" className="inline-flex items-center">
+                          {renderRoleBadgeText(role)}
+                        </span>
+                      </span>
+                    ))}
                   </div>
+                </div>
+
+                {/* Right: Hero Actions */}
+                <div className="flex shrink-0 items-center gap-3 self-end pb-1">
+                  {isOwner && activeProfile && !activeProfile.isBanned ? (
+                    <button
+                      type="button"
+                      onClick={() => setIsEditProfileModalOpen(true)}
+                      className="inline-flex items-center gap-2 rounded-full border border-[#ffb7c5]/45 bg-[#ffb7c5] px-5 py-2.5 text-[11px] font-black uppercase tracking-[0.12em] text-[#0a0a0a] shadow-[0_0_24px_rgba(255,183,197,0.28)] transition hover:bg-white hover:scale-102 cursor-pointer"
+                    >
+                      <svg
+                        width="13"
+                        height="13"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.2"
+                      >
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                      </svg>
+                      <span>{t("Edit Profile", "Редактировать профиль")}</span>
+                    </button>
+                  ) : null}
+                  {!isOwner && canOpenAdminPanel ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAdminPanelOpen(true);
+                        loadAdminPromoCodes();
+                      }}
+                      className="inline-flex items-center gap-2 rounded-full border border-[#3a222c] bg-[#140d11] px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.1em] text-[#ffb7c5] transition hover:border-[#ffb7c5] hover:text-white cursor-pointer"
+                    >
+                      <svg
+                        width="13"
+                        height="13"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <rect x="3" y="3" width="18" height="18" rx="2" />
+                        <path d="M9 3v18" />
+                        <path d="M15 3v18" />
+                      </svg>
+                      <span>{t("Admin Panel", "Панель админа")}</span>
+                    </button>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -8575,8 +8574,8 @@ export default function ProfilePage() {
                             </p>
                             <p className="mt-1 text-xs text-gray-400">
                               {t(
-                                "Recommended resolution: 1200 × 300 px (4:1 ratio). Supported formats: PNG, JPG, WEBP, GIF (up to 5 MB).",
-                                "Рекомендуемый размер: 1200 × 300 px (соотношение 4:1). Поддерживаемые форматы: PNG, JPG, WEBP, GIF (до 5 МБ)."
+                                "Recommended size: 1200 × 300 px (1 to 4). Supported formats: PNG, JPG, WEBP, GIF (up to 5 MB).",
+                                "Рекомендуемый размер: 1200 × 300 px (1 на 4). Поддерживаемые форматы: PNG, JPG, WEBP, GIF (до 5 МБ)."
                               )}
                             </p>
                           </div>
@@ -8613,7 +8612,7 @@ export default function ProfilePage() {
                               <span className="rounded-md border border-white/10 bg-black/60 px-2 py-0.5 text-[10px] font-mono text-[#ffb7c5] backdrop-blur-sm">
                                 {hasActiveProfileBanner ? t("Custom Banner", "Кастомный") : t("Sakura Pattern", "Узор Sakura")}
                               </span>
-                              <span className="text-[10px] font-mono text-gray-400">1200 × 300</span>
+                              <span className="text-[10px] font-mono text-gray-400">1 на 4 (1200 × 300 px)</span>
                             </div>
                           </div>
 
