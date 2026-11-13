@@ -197,6 +197,11 @@ type Bridge = {
   deleteAvatar: () => Promise<UserProfile | null>;
   updateBanner?: (payload: any) => Promise<UserProfile | null>;
   deleteBanner?: () => Promise<UserProfile | null>;
+  adminUpdateProfileBanner?: (
+    profileId: number,
+    payload: any
+  ) => Promise<UserProfile | null>;
+  adminDeleteProfileBanner?: (profileId: number) => Promise<UserProfile | null>;
   adminUpdateProfileAvatar: (
     profileId: number,
     file: File | AvatarUploadPayload
@@ -1883,6 +1888,7 @@ export default function ProfilePage() {
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const bannerInputRef = useRef<HTMLInputElement | null>(null);
   const adminAvatarInputRef = useRef<HTMLInputElement | null>(null);
+  const adminBannerInputRef = useRef<HTMLInputElement | null>(null);
   const adminThemeSongFileInputRef = useRef<HTMLInputElement | null>(null);
   const [bootstrap] = useState(() => EMPTY_BOOTSTRAP);
   const [authReady, setAuthReady] = useState(bootstrap.authReady);
@@ -2788,7 +2794,17 @@ export default function ProfilePage() {
 
   const visibleCurrentUser = currentUser && !currentUser.isAnonymous ? currentUser : null;
   const isCurrentAccountVerificationLocked = isEmailVerificationLockedForProfile(visibleCurrentUser);
-  const isOwner = Boolean(visibleCurrentUser && profile && visibleCurrentUser.uid === profile.uid);
+  const isOwner = Boolean(
+    visibleCurrentUser &&
+      profile &&
+      (visibleCurrentUser.uid === profile.uid ||
+        (typeof visibleCurrentUser.profileId === "number" &&
+          visibleCurrentUser.profileId > 0 &&
+          visibleCurrentUser.profileId === profile.profileId) ||
+        (visibleCurrentUser.email &&
+          profile.email &&
+          visibleCurrentUser.email.trim().toLowerCase() === profile.email.trim().toLowerCase()))
+  );
   const activeProfile = profile;
   const activePresence =
     isOwner && visibleCurrentUser?.uid === activeProfile?.uid
@@ -5538,6 +5554,10 @@ export default function ProfilePage() {
 
       if (isOwner && bridge.updateBanner) {
         snapshot = await withAvatarActionTimeout(bridge.updateBanner(bannerPayload));
+      } else if (canOpenAdminPanel && activeProfile?.profileId && bridge.adminUpdateProfileBanner) {
+        snapshot = await withAvatarActionTimeout(
+          bridge.adminUpdateProfileBanner(activeProfile.profileId, bannerPayload)
+        );
       }
 
       if (activeProfile?.bannerPath && activeProfile.bannerPath !== uploadedBanner.path) {
@@ -5570,8 +5590,12 @@ export default function ProfilePage() {
     try {
       let snapshot: UserProfile | null = null;
 
-      if (isOwner) {
+      if (isOwner && bridge.deleteBanner) {
         snapshot = await withAvatarActionTimeout(bridge.deleteBanner());
+      } else if (canOpenAdminPanel && activeProfile?.profileId && bridge.adminDeleteProfileBanner) {
+        snapshot = await withAvatarActionTimeout(
+          bridge.adminDeleteProfileBanner(activeProfile.profileId)
+        );
       }
 
       applyUpdatedProfileSnapshot(snapshot);
@@ -9768,6 +9792,45 @@ export default function ProfilePage() {
                         </div>
                         {avatarError && <p className="mt-2 text-xs text-[#ff9aa9]">⚠ {avatarError}</p>}
                         {avatarSuccess && <p className="mt-2 text-xs text-[#8ce5b2]">✓ {avatarSuccess}</p>}
+                      </section>
+
+                      {/* Banner Moderation */}
+                      <section className="rounded-[24px] border border-[#23151b] bg-[#10090d] p-5">
+                        <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-400">
+                          {t("Profile Banner", "Баннер профиля")}
+                        </p>
+                        <p className="mt-1 text-xs text-gray-400">
+                          {hasActiveProfileBanner ? t("Custom banner uploaded.", "Установлен кастомный баннер.") : t("Default Sakura pattern.", "Стандартный узор Sakura.")}
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => adminBannerInputRef.current?.click()}
+                            disabled={isBannerUploading || isBannerDeleting}
+                            className="rounded-xl border border-[#ffb7c5]/40 bg-[#ffb7c5] px-4 py-2 text-xs font-bold uppercase tracking-[0.1em] text-black hover:bg-white transition disabled:opacity-50"
+                          >
+                            {isBannerUploading ? t("Uploading...", "Загрузка...") : hasActiveProfileBanner ? t("Replace Banner", "Заменить баннер") : t("Upload Banner", "Загрузить баннер")}
+                          </button>
+                          {hasActiveProfileBanner && (
+                            <button
+                              type="button"
+                              onClick={handleBannerDelete}
+                              disabled={isBannerUploading || isBannerDeleting}
+                              className="rounded-xl border border-[#3a2029] bg-[#160c11] px-4 py-2 text-xs font-bold uppercase tracking-[0.1em] text-[#ff9aa9] hover:border-[#ff9aa9] transition disabled:opacity-50"
+                            >
+                              {isBannerDeleting ? t("Deleting...", "Удаление...") : t("Reset Banner", "Сбросить баннер")}
+                            </button>
+                          )}
+                          <input
+                            ref={adminBannerInputRef}
+                            type="file"
+                            accept={AVATAR_FILE_ACCEPT}
+                            onChange={handleBannerChange}
+                            className="hidden"
+                          />
+                        </div>
+                        {bannerError && <p className="mt-2 text-xs text-[#ff9aa9]">⚠ {bannerError}</p>}
+                        {bannerSuccess && <p className="mt-2 text-xs text-[#8ce5b2]">✓ {bannerSuccess}</p>}
                       </section>
 
                       {/* Theme Song Moderation */}

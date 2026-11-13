@@ -805,7 +805,8 @@ const firebaseModuleScript = `
                 bannerUrl,
                 bannerPath
               };
-              return publishUserSnapshot(updated);
+              publishUserSnapshot(updated);
+              return (await bridge.getProfileById(profileId)) || updated;
             },
 
             deleteBanner: async () => {
@@ -821,7 +822,28 @@ const firebaseModuleScript = `
                 bannerUrl: null,
                 bannerPath: null
               };
-              return publishUserSnapshot(updated);
+              publishUserSnapshot(updated);
+              return (await bridge.getProfileById(profileId)) || updated;
+            },
+
+            adminUpdateProfileBanner: async (profileId, payload) => {
+              const bannerUrl = typeof payload === "string" ? payload : payload?.photoURL ?? payload?.publicUrl ?? null;
+              const bannerPath = typeof payload === "object" ? (payload?.avatarPath ?? payload?.path ?? null) : null;
+              await callSupabaseRpc("update_profile_info", {
+                p_profile_id: profileId,
+                p_banner_url: bannerUrl,
+                p_banner_path: bannerPath
+              });
+              return await bridge.getProfileById(profileId);
+            },
+
+            adminDeleteProfileBanner: async (profileId) => {
+              await callSupabaseRpc("update_profile_info", {
+                p_profile_id: profileId,
+                p_banner_url: "",
+                p_banner_path: ""
+              });
+              return await bridge.getProfileById(profileId);
             },
 
             adminUpdateProfileAvatar: async (profileId, file) => {
