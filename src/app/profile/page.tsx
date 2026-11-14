@@ -8937,44 +8937,8 @@ export default function ProfilePage() {
                                 className="h-1.5 w-full appearance-none rounded-lg bg-[#26141d] accent-[#ffb7c5] cursor-pointer"
                               />
 
-                              {/* Preset buttons + Save button */}
-                              <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
-                                <div className="flex items-center gap-1.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => setBannerDraftPositionY(0)}
-                                    className={`rounded-lg border px-2.5 py-1 text-[11px] font-mono transition cursor-pointer ${
-                                      bannerDraftPositionY === 0
-                                        ? "border-[#ffb7c5] bg-[#ffb7c5]/20 text-[#ffb7c5]"
-                                        : "border-[#2c1c24] bg-[#160d12] text-gray-400 hover:text-white"
-                                    }`}
-                                  >
-                                    {t("Top (0%)", "Сверху (0%)")}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setBannerDraftPositionY(50)}
-                                    className={`rounded-lg border px-2.5 py-1 text-[11px] font-mono transition cursor-pointer ${
-                                      bannerDraftPositionY === 50
-                                        ? "border-[#ffb7c5] bg-[#ffb7c5]/20 text-[#ffb7c5]"
-                                        : "border-[#2c1c24] bg-[#160d12] text-gray-400 hover:text-white"
-                                    }`}
-                                  >
-                                    {t("Center (50%)", "Центр (50%)")}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setBannerDraftPositionY(100)}
-                                    className={`rounded-lg border px-2.5 py-1 text-[11px] font-mono transition cursor-pointer ${
-                                      bannerDraftPositionY === 100
-                                        ? "border-[#ffb7c5] bg-[#ffb7c5]/20 text-[#ffb7c5]"
-                                        : "border-[#2c1c24] bg-[#160d12] text-gray-400 hover:text-white"
-                                    }`}
-                                  >
-                                    {t("Bottom (100%)", "Снизу (100%)")}
-                                  </button>
-                                </div>
-
+                              {/* Save button */}
+                              <div className="flex items-center justify-end pt-0.5">
                                 <button
                                   type="button"
                                   onClick={handleSaveBannerPosition}
@@ -8994,8 +8958,8 @@ export default function ProfilePage() {
 
                               <p className="text-[11px] text-gray-500 leading-relaxed">
                                 {t(
-                                  "Drag the banner image up/down directly or use presets to focus on any detail of your image.",
-                                  "Потяните изображение баннера вверх или вниз или используйте быстрые кнопки, чтобы отцентрировать любую деталь большого баннера."
+                                  "Drag the banner image up/down directly or use the slider to adjust the vertical position.",
+                                  "Потяните изображение баннера вверх или вниз или используйте ползунок, чтобы настроить положение баннера."
                                 )}
                               </p>
                             </div>
@@ -10057,30 +10021,7 @@ export default function ProfilePage() {
                               onChange={(e) => setBannerDraftPositionY(Number(e.target.value))}
                               className="h-1.5 w-full appearance-none rounded-lg bg-[#26141d] accent-[#ffb7c5] cursor-pointer"
                             />
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => setBannerDraftPositionY(0)}
-                                  className="rounded border border-[#2c1c24] bg-[#160d12] px-2 py-0.5 text-[10px] font-mono text-gray-400 hover:text-white cursor-pointer"
-                                >
-                                  0%
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setBannerDraftPositionY(50)}
-                                  className="rounded border border-[#2c1c24] bg-[#160d12] px-2 py-0.5 text-[10px] font-mono text-gray-400 hover:text-white cursor-pointer"
-                                >
-                                  50%
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setBannerDraftPositionY(100)}
-                                  className="rounded border border-[#2c1c24] bg-[#160d12] px-2 py-0.5 text-[10px] font-mono text-gray-400 hover:text-white cursor-pointer"
-                                >
-                                  100%
-                                </button>
-                              </div>
+                            <div className="flex items-center justify-end">
                               <button
                                 type="button"
                                 onClick={handleSaveBannerPosition}
