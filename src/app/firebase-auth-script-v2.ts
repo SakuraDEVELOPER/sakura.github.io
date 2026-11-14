@@ -93,6 +93,15 @@ const firebaseModuleScript = `
 
     const sendPresenceTouch = (profileId, isOnline = true) => {
       if (!profileId) return;
+      if (window.sakuraCurrentUserSnapshot && window.sakuraCurrentUserSnapshot.profileId === profileId) {
+        window.sakuraCurrentUserSnapshot.presence = {
+          lastSeenAt: new Date().toISOString(),
+          isOnline: isOnline,
+          status: isOnline ? "online" : "offline",
+          currentPath: typeof window !== "undefined" ? window.location.pathname : "/"
+        };
+        window.dispatchEvent(new CustomEvent("sakura-presence-dirty"));
+      }
       void callSupabaseRpc("touch_presence", {
         p_profile_id: profileId,
         p_path: typeof window !== "undefined" ? window.location.pathname : "/",
@@ -168,9 +177,34 @@ const firebaseModuleScript = `
       window.dispatchEvent(new CustomEvent(AUTH_STATE_SETTLED_EVENT));
     };
 
-    const mapSupabaseProfileRowToSnapshot = (row) => {
+    const mapSupabaseProfileRowToSnapshot = (row, presenceRow = null) => {
       if (!row) return null;
       const uid = row.firebase_uid || row.auth_user_id || (row.profile_id ? String(row.profile_id) : "user");
+      const isCurrentSessionUser = window.sakuraCurrentUserSnapshot?.profileId === row.profile_id;
+
+      let presenceObj;
+      if (isCurrentSessionUser) {
+        presenceObj = {
+          lastSeenAt: new Date().toISOString(),
+          isOnline: true,
+          status: "online",
+          currentPath: typeof window !== "undefined" ? window.location.pathname : "/"
+        };
+      } else if (presenceRow) {
+        presenceObj = {
+          lastSeenAt: presenceRow.last_seen_at || null,
+          isOnline: presenceRow.is_online === true,
+          status: presenceRow.status || (presenceRow.is_online ? "online" : "offline"),
+          currentPath: presenceRow.current_path || "/"
+        };
+      } else {
+        presenceObj = {
+          lastSeenAt: row.last_sign_in_at || null,
+          isOnline: false,
+          status: "offline"
+        };
+      }
+
       return {
         uid,
         isAnonymous: false,
@@ -208,11 +242,7 @@ const firebaseModuleScript = `
         hwidResetAt: row.hwid_reset_at || null,
         loginHistory: Array.isArray(row.login_history) ? row.login_history : [],
         visitHistory: Array.isArray(row.visit_history) ? row.visit_history : [],
-        presence: {
-          lastSeenAt: row.last_sign_in_at || null,
-          isOnline: true,
-          status: "online"
-        }
+        presence: presenceObj
       };
     };
 
@@ -251,6 +281,12 @@ const firebaseModuleScript = `
 
       if (profileRow) {
         const snap = mapSupabaseProfileRowToSnapshot(profileRow);
+        snap.presence = {
+          lastSeenAt: new Date().toISOString(),
+          isOnline: true,
+          status: "online",
+          currentPath: typeof window !== "undefined" ? window.location.pathname : "/"
+        };
         snap.emailVerified = Boolean(user.email_confirmed_at || profileRow.email_verified);
         if (snap.emailVerified) {
           snap.verificationRequired = false;
@@ -906,10 +942,20 @@ const firebaseModuleScript = `
             },
 
             getProfileById: async (profileId) => {
-              const rows = await fetchSupabaseRows("public_profiles", { profile_id: "eq." + profileId, limit: 1 });
-              if (rows && rows[0]) {
-                const snap = mapSupabaseProfileRowToSnapshot(rows[0]);
+              const [profileRows, presenceRows] = await Promise.all([
+                fetchSupabaseRows("public_profiles", { profile_id: "eq." + profileId, limit: 1 }),
+                fetchSupabaseRows("public_profile_presence", { profile_id: "eq." + profileId, limit: 1 })
+              ]);
+              if (profileRows && profileRows[0]) {
+                const presenceRow = (presenceRows && presenceRows[0]) || null;
+                const snap = mapSupabaseProfileRowToSnapshot(profileRows[0], presenceRow);
                 if (window.sakuraCurrentUserSnapshot?.profileId === profileId) {
+                  snap.presence = {
+                    lastSeenAt: new Date().toISOString(),
+                    isOnline: true,
+                    status: "online",
+                    currentPath: typeof window !== "undefined" ? window.location.pathname : "/"
+                  };
                   publishUserSnapshot(snap);
                 }
                 return snap;
@@ -922,7 +968,13 @@ const firebaseModuleScript = `
                 login: "ilike." + name,
                 limit: 1
               });
-              if (rows && rows[0]) return mapSupabaseProfileRowToSnapshot(rows[0]);
+              if (rows && rows[0]) {
+                const presenceRows = await fetchSupabaseRows("public_profile_presence", {
+                  profile_id: "eq." + rows[0].profile_id,
+                  limit: 1
+                });
+                return mapSupabaseProfileRowToSnapshot(rows[0], (presenceRows && presenceRows[0]) || null);
+              }
               return null;
             },
 
@@ -1251,6 +1303,15 @@ const firebaseModuleScript = `
             syncPresence: async (options = {}) => {
               const profileId = window.sakuraCurrentUserSnapshot?.profileId;
               if (profileId) {
+                if (window.sakuraCurrentUserSnapshot) {
+                  window.sakuraCurrentUserSnapshot.presence = {
+                    lastSeenAt: new Date().toISOString(),
+                    isOnline: true,
+                    status: "online",
+                    currentPath: typeof window !== "undefined" ? window.location.pathname : "/"
+                  };
+                  window.dispatchEvent(new CustomEvent("sakura-presence-dirty"));
+                }
                 startPresenceHeartbeat(profileId);
                 sendPresenceTouch(profileId, true);
               }

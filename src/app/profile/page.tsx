@@ -2836,7 +2836,7 @@ export default function ProfilePage() {
   );
   const activeProfile = profile;
   const activePresence =
-    isOwner && visibleCurrentUser?.uid === activeProfile?.uid
+    isOwner
       ? visibleCurrentUser?.presence ?? activeProfile?.presence ?? null
       : activeProfile?.presence ?? null;
   const profileThemeProfileId =
@@ -3332,7 +3332,7 @@ export default function ProfilePage() {
     profileThemeUsesEmbeddedPlayer,
   ]);
 
-  const isActiveProfileOnline = isPresenceOnlineNow(activePresence);
+  const isActiveProfileOnline = isOwner || isPresenceOnlineNow(activePresence);
   const hasUsername = Boolean(activeProfile?.login?.trim());
   const requiresUsernamePasswordConfirmation = Boolean(
     isOwner && visibleCurrentUser?.providerIds?.includes("password")
