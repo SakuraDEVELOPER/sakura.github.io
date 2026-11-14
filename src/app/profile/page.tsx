@@ -8231,7 +8231,7 @@ export default function ProfilePage() {
                       <div className="flex items-center justify-between rounded-xl border border-[#22141a] bg-[#120b0e] px-3 py-2 text-xs">
                         <span className="text-[#8c7a84]">{t("Client Version", "Версия клиента")}</span>
                         <span className="font-mono text-[11px] font-bold text-white">
-                          v3.2.0 (Stable)
+                          1.0.0
                         </span>
                       </div>
                     </div>
