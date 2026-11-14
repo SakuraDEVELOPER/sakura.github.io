@@ -2067,7 +2067,6 @@ export default function ProfilePage() {
   const [profileThemeCurrentTime, setProfileThemeCurrentTime] = useState(0);
   const [profileThemeDuration, setProfileThemeDuration] = useState(0);
   const [profileThemeVolume, setProfileThemeVolume] = useState(0.34);
-  const [isProfileThemePanelOpen, setIsProfileThemePanelOpen] = useState(false);
   const [previousProfileId, setPreviousProfileId] = useState<number | null | undefined>(undefined);
   const [nextProfileId, setNextProfileId] = useState<number | null | undefined>(undefined);
   const [isHeaderProfileSearchOpen, setIsHeaderProfileSearchOpen] = useState(false);
@@ -2903,7 +2902,6 @@ export default function ProfilePage() {
       setProfileThemeIsPlaying(false);
       setProfileThemeCurrentTime(0);
       setProfileThemeDuration(0);
-      setIsProfileThemePanelOpen(false);
       profileThemeAutoplayAttemptedRef.current = null;
       return;
     }
@@ -8246,10 +8244,10 @@ export default function ProfilePage() {
               </div>
             ) : null}
 
-            {/* Horizontal Music Card: Only for Authorized Profiles (UID 2 Egoiste & UID 3 Absolute) */}
-            {!isOwner && isMusicAllowedForProfile ? (
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-[28px] border border-[#201517] bg-[radial-gradient(circle_at_top_left,rgba(255,183,197,0.08),transparent_60%),#0d0a0d] p-5 sm:px-7 sm:py-5 shadow-[0_0_60px_rgba(255,183,197,0.04)]">
-                <div>
+            {/* Horizontal Music Card: Embedded in Profile */}
+            {shouldPlayProfileThemeSong ? (
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 rounded-[28px] border border-[#201517] bg-[radial-gradient(circle_at_top_left,rgba(255,183,197,0.08),transparent_60%),#0d0a0d] p-5 sm:px-7 sm:py-5 shadow-[0_0_60px_rgba(255,183,197,0.04)]">
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-3 mb-1.5">
                     <span className="font-mono text-[10px] font-extrabold uppercase tracking-[0.28em] text-[#ffc2cf]">
                       {t("Profile Audio Theme", "АУДИО-ТЕМА ПРОФИЛЯ")}
@@ -8262,7 +8260,7 @@ export default function ProfilePage() {
                       {profileThemeIsPlaying ? t("Playing", "ИГРАЕТ") : t("Paused", "ПАУЗА")}
                     </span>
                   </div>
-                  <div className="text-base sm:text-lg font-black uppercase tracking-tight text-white">
+                  <div className="truncate text-base sm:text-lg font-black uppercase tracking-tight text-white">
                     {profileThemeTitle || (profileThemeProfileId === 2 ? "FACE — FOREVER YOUNG" : "Cyberpunk Track")}
                   </div>
                   <div className="text-xs text-[#8f7a85] mt-0.5">
@@ -8270,25 +8268,65 @@ export default function ProfilePage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-4 flex-wrap self-end sm:self-center">
-                  <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3.5 flex-wrap self-end md:self-center">
+                  {/* Timeline & Equalizer */}
+                  <div className="flex items-center gap-2.5 rounded-2xl border border-[#26151a] bg-[#120a0e] px-3 py-1.5">
                     {/* Animated Equalizer Bars */}
-                    <div className="flex items-end gap-[3px] h-6 py-0.5">
+                    <div className="flex items-end gap-[3px] h-5 py-0.5 shrink-0">
                       <span className={`w-[3px] rounded-full bg-[#ffb7c5] transition-all duration-300 ${profileThemeIsPlaying ? "h-3 animate-pulse" : "h-1.5 opacity-50"}`} />
                       <span className={`w-[3px] rounded-full bg-[#ffb7c5] transition-all duration-300 ${profileThemeIsPlaying ? "h-5 animate-pulse" : "h-1.5 opacity-50"}`} />
                       <span className={`w-[3px] rounded-full bg-[#ffb7c5] transition-all duration-300 ${profileThemeIsPlaying ? "h-2.5 animate-pulse" : "h-1.5 opacity-50"}`} />
-                      <span className={`w-[3px] rounded-full bg-[#ffb7c5] transition-all duration-300 ${profileThemeIsPlaying ? "h-6 animate-pulse" : "h-1.5 opacity-50"}`} />
-                      <span className={`w-[3px] rounded-full bg-[#ffb7c5] transition-all duration-300 ${profileThemeIsPlaying ? "h-4 animate-pulse" : "h-1.5 opacity-50"}`} />
+                      <span className={`w-[3px] rounded-full bg-[#ffb7c5] transition-all duration-300 ${profileThemeIsPlaying ? "h-5 animate-pulse" : "h-1.5 opacity-50"}`} />
+                      <span className={`w-[3px] rounded-full bg-[#ffb7c5] transition-all duration-300 ${profileThemeIsPlaying ? "h-3.5 animate-pulse" : "h-1.5 opacity-50"}`} />
                     </div>
-                    <div className="font-mono text-[11px] text-[#ffb7c5] tracking-[0.1em]">
+                    {/* Seek Slider */}
+                    <input
+                      type="range"
+                      min={0}
+                      max={profileThemeDisplayedDuration > 0 ? profileThemeDisplayedDuration : 0}
+                      step={0.1}
+                      value={profileThemeDisplayedCurrentTime}
+                      onChange={handleProfileThemeSeek}
+                      disabled={profileThemeDisplayedDuration <= 0}
+                      style={buildMusicSliderStyle(
+                        profileThemeDisplayedCurrentTime,
+                        profileThemeDisplayedDuration > 0 ? profileThemeDisplayedDuration : 1
+                      )}
+                      className={`w-16 sm:w-24 ${musicSliderClassName}`}
+                      title={t("Seek", "Перемотка")}
+                    />
+                    <div className="font-mono text-[10px] text-[#ffb7c5] tracking-[0.05em] shrink-0 whitespace-nowrap">
                       <span>{formatAudioClock(profileThemeDisplayedCurrentTime)}</span> / <span>{formatAudioClock(profileThemeDisplayedDuration)}</span>
                     </div>
+                  </div>
+
+                  {/* Volume Slider Control */}
+                  <div className="flex items-center gap-2 rounded-2xl border border-[#26151a] bg-[#120a0e] px-3 py-1.5">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ffb7c5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-80">
+                      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                      {profileThemeVolume > 0 && <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />}
+                      {profileThemeVolume > 0.5 && <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />}
+                    </svg>
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={profileThemeVolume}
+                      onChange={handleProfileThemeVolumeChange}
+                      style={buildMusicSliderStyle(profileThemeVolume, 1)}
+                      className={`w-14 sm:w-18 ${musicSliderClassName}`}
+                      title={t("Volume", "Громкость")}
+                    />
+                    <span className="font-mono text-[10px] text-gray-400 min-w-[26px] text-right">
+                      {Math.round(profileThemeVolume * 100)}%
+                    </span>
                   </div>
 
                   <button
                     type="button"
                     onClick={handleProfileThemeToggle}
-                    className="inline-flex items-center gap-2 rounded-2xl bg-[#ff2d75] px-4 py-2.5 text-[11px] font-extrabold uppercase tracking-[0.1em] text-white shadow-[0_0_20px_rgba(255,45,117,0.4)] transition hover:bg-[#ff4887] cursor-pointer"
+                    className="inline-flex items-center gap-2 rounded-2xl bg-[#ff2d75] px-4 py-2 text-[11px] font-extrabold uppercase tracking-[0.1em] text-white shadow-[0_0_20px_rgba(255,45,117,0.4)] transition hover:bg-[#ff4887] cursor-pointer shrink-0"
                   >
                     {profileThemeIsPlaying ? (
                       <>
@@ -9222,127 +9260,6 @@ export default function ProfilePage() {
       </div>
       {activeProfile ? (
         <>
-          {shouldPlayProfileThemeSong && !isAdminPanelOpen ? (
-            <div className="fixed top-6 left-6 z-40 flex flex-col items-start gap-3">
-              <button
-                type="button"
-                onClick={() => setIsProfileThemePanelOpen((currentValue) => !currentValue)}
-                aria-expanded={isProfileThemePanelOpen}
-                className={`inline-flex items-center gap-2 justify-center rounded-full border px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] shadow-[0_0_24px_rgba(255,183,197,0.12)] transition ${
-                  isProfileThemePanelOpen
-                    ? "border-[#ffb7c5]/45 bg-[#ffb7c5] text-black hover:bg-[#ffc8d3]"
-                    : "border-[#ffb7c5]/35 bg-[#140d11] text-[#ffb7c5] hover:border-[#ffb7c5]/60 hover:text-white"
-                }`}
-              >
-                <span
-                  className={`h-2 w-2 rounded-full ${
-                    profileThemeIsPlaying ? "bg-[#ff7da0] shadow-[0_0_14px_rgba(255,125,160,0.9)]" : "bg-current/60"
-                  }`}
-                />
-                {t("Music", "Музыка")}
-              </button>
-              {isProfileThemePanelOpen ? (
-                <div className="w-[min(88vw,272px)] rounded-[24px] border border-[#372028] bg-[radial-gradient(circle_at_top_left,rgba(255,183,197,0.18),transparent_54%),linear-gradient(180deg,rgba(22,13,17,0.98)_0%,rgba(8,8,9,0.98)_100%)] p-4 shadow-[0_0_38px_rgba(255,183,197,0.14)] backdrop-blur-md">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-mono text-[10px] uppercase tracking-[0.34em] text-[#ffb7c5]">
-                        Profile Theme
-                      </p>
-                      <p className="mt-2 truncate text-[15px] font-semibold tracking-[-0.02em] text-white">
-                        {profileThemeTitle ?? "Profile Theme"}
-                      </p>
-                    </div>
-                    <span
-                      className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${
-                        profileThemeIsPlaying
-                          ? "border-[#ffb7c5]/40 bg-[#1b1015] text-[#ffb7c5] shadow-[0_0_16px_rgba(255,183,197,0.16)]"
-                          : "border-[#2d2d2d] bg-[#111111] text-gray-400"
-                      }`}
-                    >
-                      {profileThemeIsPlaying ? "Playing" : "Paused"}
-                    </span>
-                  </div>
-                  {profileThemeUsesEmbeddedPlayer ? (
-                    <div className="mt-4 rounded-[20px] border border-[#2a181d] bg-[linear-gradient(180deg,rgba(18,11,14,0.96)_0%,rgba(11,11,12,0.96)_100%)] px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,183,197,0.04)]">
-                      <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-gray-400">
-                        Source: {profileThemeTitle ?? "External"}
-                      </p>
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
-                        {profileThemeSourceUrl ? (
-                          <a
-                            href={profileThemeSourceUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center rounded-full border border-[#3a2a31] bg-[#140d11] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#ffb7c5] transition hover:border-[#ffb7c5]/45 hover:text-white"
-                          >
-                            Open Source
-                          </a>
-                        ) : null}
-                      </div>
-                    </div>
-                  ) : null}
-                  <div className="mt-4 rounded-[20px] border border-[#2a181d] bg-[linear-gradient(180deg,rgba(18,11,14,0.96)_0%,rgba(11,11,12,0.96)_100%)] p-3 shadow-[inset_0_1px_0_rgba(255,183,197,0.04)]">
-                    <div className="flex items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void handleProfileThemeToggle();
-                        }}
-                        aria-label={profileThemeIsPlaying ? "Pause music" : "Play music"}
-                        className={`inline-flex h-10 min-w-10 shrink-0 items-center justify-center rounded-full border transition ${
-                          profileThemeIsPlaying
-                            ? "border-[#ffb7c5]/45 bg-[#ffb7c5] text-black shadow-[0_0_22px_rgba(255,183,197,0.22)] hover:bg-[#ffc8d3]"
-                            : "border-[#ffb7c5]/35 bg-[linear-gradient(180deg,#241118_0%,#140d11_100%)] text-[#ffb7c5] shadow-[0_0_18px_rgba(255,183,197,0.16)] hover:border-[#ffb7c5]/60 hover:text-white"
-                        }`}
-                      >
-                        <MusicGlyph playing={profileThemeIsPlaying} />
-                      </button>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-3 text-[10px] font-medium text-gray-400">
-                          <span>{formatAudioClock(profileThemeDisplayedCurrentTime)}</span>
-                          <span>{formatAudioClock(profileThemeDisplayedDuration)}</span>
-                        </div>
-                        <input
-                          type="range"
-                          min={0}
-                          max={profileThemeDisplayedDuration > 0 ? profileThemeDisplayedDuration : 0}
-                          step={0.1}
-                          value={profileThemeDisplayedCurrentTime}
-                          onChange={handleProfileThemeSeek}
-                          disabled={profileThemeDisplayedDuration <= 0}
-                          style={buildMusicSliderStyle(
-                            profileThemeDisplayedCurrentTime,
-                            profileThemeDisplayedDuration > 0 ? profileThemeDisplayedDuration : 1
-                          )}
-                          className={`mt-2 ${musicSliderClassName}`}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-3 rounded-[18px] border border-[#26151a] bg-[linear-gradient(180deg,rgba(16,10,13,0.94)_0%,rgba(10,10,11,0.94)_100%)] px-3 py-2.5">
-                    <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3">
-                      <span className="font-mono text-[10px] uppercase tracking-[0.26em] text-[#ffb7c5]">
-                        Volume
-                      </span>
-                      <input
-                        type="range"
-                        min={0}
-                        max={1}
-                        step={0.01}
-                        value={profileThemeVolume}
-                        onChange={handleProfileThemeVolumeChange}
-                        style={buildMusicSliderStyle(profileThemeVolume, 1)}
-                        className={musicSliderClassName}
-                      />
-                      <span className="w-10 shrink-0 text-right text-[10px] font-medium text-gray-400">
-                        {Math.round(profileThemeVolume * 100)}%
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
           {isClientMounted && !isAdminPanelOpen && canOpenAdminPanel ? (
             typeof document !== "undefined" && document.getElementById("sakura-admin-bar-slot") ? (
               createPortal(
