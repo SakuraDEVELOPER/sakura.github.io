@@ -6126,13 +6126,13 @@ export default function ProfilePage() {
     try {
       const SUPABASE_STORAGE_URL = "https://cwiljdpxgawxglgciily.supabase.co/storage/v1/object/public/downloads";
       const parts = [
-        "Sakura_Client.zip.part0",
-        "Sakura_Client.zip.part1",
-        "Sakura_Client.zip.part2",
-        "Sakura_Client.zip.part3",
-        "Sakura_Client.zip.part4",
-        "Sakura_Client.zip.part5",
-        "Sakura_Client.zip.part6",
+        "Sakura.zip.part0",
+        "Sakura.zip.part1",
+        "Sakura.zip.part2",
+        "Sakura.zip.part3",
+        "Sakura.zip.part4",
+        "Sakura.zip.part5",
+        "Sakura.zip.part6",
       ];
 
       const blobs: Blob[] = [];
@@ -6151,7 +6151,7 @@ export default function ProfilePage() {
       const blobUrl = URL.createObjectURL(fullZipBlob);
       const link = document.createElement("a");
       link.href = blobUrl;
-      link.download = "Sakura_Client.zip";
+      link.download = "Sakura.zip";
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);

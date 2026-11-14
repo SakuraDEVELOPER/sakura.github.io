@@ -898,17 +898,17 @@ Deno.serve(async (req) => {
 
       return jsonResponse(200, {
         status: "ok",
-        filename: "Sakura_Client.zip",
-        totalSize: 263421245,
+        filename: "Sakura.zip",
+        totalSize: 261136292,
         baseUrl: `${supabaseUrl}/storage/v1/object/public/downloads`,
         parts: [
-          "Sakura_Client.zip.part0",
-          "Sakura_Client.zip.part1",
-          "Sakura_Client.zip.part2",
-          "Sakura_Client.zip.part3",
-          "Sakura_Client.zip.part4",
-          "Sakura_Client.zip.part5",
-          "Sakura_Client.zip.part6",
+          "Sakura.zip.part0",
+          "Sakura.zip.part1",
+          "Sakura.zip.part2",
+          "Sakura.zip.part3",
+          "Sakura.zip.part4",
+          "Sakura.zip.part5",
+          "Sakura.zip.part6",
         ],
       });
     }
