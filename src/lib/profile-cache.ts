@@ -1,4 +1,4 @@
-export const PROFILE_CACHE_KEY_PREFIX = "sakura-profile-cache-v1:";
+export const PROFILE_CACHE_KEY_PREFIX = "sakura-profile-cache-v2:";
 
 type CachedProfileShape = {
   profileId: number | null;
@@ -14,12 +14,33 @@ const isCachedProfileShape = (value: unknown): value is CachedProfileShape =>
 
 const getProfileCacheKey = (profileId: number) => `${PROFILE_CACHE_KEY_PREFIX}${profileId}`;
 
+// Clean up legacy v1 cache entries once per session/load
+let legacyCleanupDone = false;
+function purgeLegacyCaches() {
+  if (legacyCleanupDone || typeof window === "undefined") return;
+  legacyCleanupDone = true;
+  try {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (key && (key.startsWith("sakura-profile-cache-v1:") || (key.startsWith("sakura-profile-cache-") && !key.startsWith(PROFILE_CACHE_KEY_PREFIX)))) {
+        keysToRemove.push(key);
+      }
+    }
+    for (const k of keysToRemove) {
+      window.localStorage.removeItem(k);
+    }
+  } catch {}
+}
+
 export function readCachedProfileSnapshot<T extends CachedProfileShape>(
   profileId: number | null | undefined
 ): T | null {
   if (typeof window === "undefined" || typeof profileId !== "number" || profileId <= 0) {
     return null;
   }
+
+  purgeLegacyCaches();
 
   try {
     const rawSnapshot = window.localStorage.getItem(getProfileCacheKey(profileId));
@@ -30,7 +51,10 @@ export function readCachedProfileSnapshot<T extends CachedProfileShape>(
 
     const parsedSnapshot = JSON.parse(rawSnapshot);
 
-    if (!isCachedProfileShape(parsedSnapshot)) {
+    if (
+      !isCachedProfileShape(parsedSnapshot) ||
+      parsedSnapshot.profileId !== profileId
+    ) {
       window.localStorage.removeItem(getProfileCacheKey(profileId));
       return null;
     }
@@ -79,7 +103,7 @@ export function clearAllCachedProfileSnapshots() {
     const keysToRemove: string[] = [];
     for (let i = 0; i < window.localStorage.length; i++) {
       const key = window.localStorage.key(i);
-      if (key && key.startsWith(PROFILE_CACHE_KEY_PREFIX)) {
+      if (key && key.startsWith("sakura-profile-cache-")) {
         keysToRemove.push(key);
       }
     }

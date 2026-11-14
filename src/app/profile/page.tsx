@@ -2439,7 +2439,7 @@ export default function ProfilePage() {
     if (!runtime.sakuraFirebaseAuth) return;
     const cachedRequestedProfile = readCachedProfileSnapshot<UserProfile>(requestedId);
 
-    if (cachedRequestedProfile) {
+    if (cachedRequestedProfile && cachedRequestedProfile.profileId === requestedId) {
       setProfile(cachedRequestedProfile);
       setProfileError(null);
     }
@@ -2460,6 +2460,7 @@ export default function ProfilePage() {
           );
           return;
         }
+        writeCachedProfileSnapshot(user);
         if (window.location.pathname !== profilePath(requestedId)) window.history.replaceState(null, "", profilePath(requestedId));
       })
       .catch((error) => {
@@ -2710,6 +2711,7 @@ export default function ProfilePage() {
         if (
           cachedCandidateProfile &&
           typeof cachedCandidateProfile.profileId === "number" &&
+          cachedCandidateProfile.profileId === candidateProfileId &&
           !resolvedProfileIds.includes(cachedCandidateProfile.profileId)
         ) {
           resolvedProfileIds.push(cachedCandidateProfile.profileId);
