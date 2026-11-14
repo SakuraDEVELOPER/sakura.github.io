@@ -859,6 +859,60 @@ Deno.serve(async (req) => {
       });
     }
 
+    // 12. CLIENT DOWNLOAD ROUTE (/download, /v1/download)
+    if (path.endsWith("/download") || path.endsWith("/v1/download")) {
+      const authHeader = req.headers.get("authorization") || "";
+      const urlObj = new URL(req.url);
+      const token = authHeader.replace(/^Bearer\s+/i, "").trim() || urlObj.searchParams.get("token") || "";
+
+      if (!token) {
+        return jsonResponse(401, { code: "UNAUTHORIZED", message: "Token required" });
+      }
+
+      const session = await verifyToken(token);
+      if (!session) {
+        return jsonResponse(401, { code: "SESSION_EXPIRED" });
+      }
+
+      const { data: currentProfile } = await supabase
+        .from("profiles")
+        .select("roles, is_banned, firebase_uid")
+        .eq("profile_id", session.profile_id)
+        .maybeSingle();
+
+      if (!currentProfile || currentProfile.is_banned) {
+        return jsonResponse(403, { code: "FORBIDDEN" });
+      }
+
+      const live = await getLiveProfileInfo(currentProfile.firebase_uid);
+      const combinedRoles = Array.from(new Set([...(currentProfile.roles || []), ...live.roles]))
+        .map((r: string) => r.toLowerCase().trim());
+
+      const isAllowed = combinedRoles.some((r: string) => r === "co-owner" || r === "coowner" || r === "root");
+      if (!isAllowed) {
+        return jsonResponse(403, {
+          code: "FORBIDDEN",
+          message: "Скачивание временно доступно только для пользователей с ролью co-owner.",
+        });
+      }
+
+      return jsonResponse(200, {
+        status: "ok",
+        filename: "Sakura_Client.zip",
+        totalSize: 263421245,
+        baseUrl: `${supabaseUrl}/storage/v1/object/public/downloads`,
+        parts: [
+          "Sakura_Client.zip.part0",
+          "Sakura_Client.zip.part1",
+          "Sakura_Client.zip.part2",
+          "Sakura_Client.zip.part3",
+          "Sakura_Client.zip.part4",
+          "Sakura_Client.zip.part5",
+          "Sakura_Client.zip.part6",
+        ],
+      });
+    }
+
     return jsonResponse(404, { code: "NOT_FOUND", path });
   } catch (error) {
     console.error("Auth Edge Function error:", error);
