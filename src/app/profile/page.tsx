@@ -8246,8 +8246,8 @@ export default function ProfilePage() {
 
             {/* Horizontal Music Card: Embedded in Profile */}
             {shouldPlayProfileThemeSong ? (
-              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 rounded-[28px] border border-[#201517] bg-[radial-gradient(circle_at_top_left,rgba(255,183,197,0.08),transparent_60%),#0d0a0d] p-5 sm:px-7 sm:py-5 shadow-[0_0_60px_rgba(255,183,197,0.04)]">
-                <div className="min-w-0 flex-1">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-5 rounded-[28px] border border-[#201517] bg-[radial-gradient(circle_at_top_left,rgba(255,183,197,0.08),transparent_60%),#0d0a0d] p-5 sm:px-7 sm:py-5 shadow-[0_0_60px_rgba(255,183,197,0.04)]">
+                <div className="min-w-0 flex-1 w-full">
                   <div className="flex items-center gap-3 mb-1.5">
                     <span className="font-mono text-[10px] font-extrabold uppercase tracking-[0.28em] text-[#ffc2cf]">
                       {t("Profile Audio Theme", "АУДИО-ТЕМА ПРОФИЛЯ")}
@@ -8263,23 +8263,23 @@ export default function ProfilePage() {
                   <div className="truncate text-base sm:text-lg font-black uppercase tracking-tight text-white">
                     {profileThemeTitle || (profileThemeProfileId === 2 ? "FACE — FOREVER YOUNG" : "Cyberpunk Track")}
                   </div>
-                  <div className="text-xs text-[#8f7a85] mt-0.5">
-                    {t(`Custom soundtrack for ${primaryName} (UID ${profileThemeProfileId})`, `Индивидуальный саундтрек профиля ${primaryName} (UID ${profileThemeProfileId})`)}
-                  </div>
-                </div>
 
-                <div className="flex items-center gap-3.5 flex-wrap self-end md:self-center">
-                  {/* Timeline & Equalizer */}
-                  <div className="flex items-center gap-2.5 rounded-2xl border border-[#26151a] bg-[#120a0e] px-3 py-1.5">
+                  {/* Scrubber / Duration & Timeline right here */}
+                  <div className="mt-3 flex items-center gap-3 w-full max-w-lg">
                     {/* Animated Equalizer Bars */}
-                    <div className="flex items-end gap-[3px] h-5 py-0.5 shrink-0">
-                      <span className={`w-[3px] rounded-full bg-[#ffb7c5] transition-all duration-300 ${profileThemeIsPlaying ? "h-3 animate-pulse" : "h-1.5 opacity-50"}`} />
-                      <span className={`w-[3px] rounded-full bg-[#ffb7c5] transition-all duration-300 ${profileThemeIsPlaying ? "h-5 animate-pulse" : "h-1.5 opacity-50"}`} />
+                    <div className="flex items-end gap-[3px] h-4 py-0.5 shrink-0">
+                      <span className={`w-[3px] rounded-full bg-[#ffb7c5] transition-all duration-300 ${profileThemeIsPlaying ? "h-3.5 animate-pulse" : "h-1.5 opacity-50"}`} />
+                      <span className={`w-[3px] rounded-full bg-[#ffb7c5] transition-all duration-300 ${profileThemeIsPlaying ? "h-4.5 animate-pulse" : "h-1.5 opacity-50"}`} />
                       <span className={`w-[3px] rounded-full bg-[#ffb7c5] transition-all duration-300 ${profileThemeIsPlaying ? "h-2.5 animate-pulse" : "h-1.5 opacity-50"}`} />
                       <span className={`w-[3px] rounded-full bg-[#ffb7c5] transition-all duration-300 ${profileThemeIsPlaying ? "h-5 animate-pulse" : "h-1.5 opacity-50"}`} />
-                      <span className={`w-[3px] rounded-full bg-[#ffb7c5] transition-all duration-300 ${profileThemeIsPlaying ? "h-3.5 animate-pulse" : "h-1.5 opacity-50"}`} />
+                      <span className={`w-[3px] rounded-full bg-[#ffb7c5] transition-all duration-300 ${profileThemeIsPlaying ? "h-3 animate-pulse" : "h-1.5 opacity-50"}`} />
                     </div>
-                    {/* Seek Slider */}
+
+                    <span className="font-mono text-xs font-semibold text-[#ffb7c5] shrink-0 min-w-[34px]">
+                      {formatAudioClock(profileThemeDisplayedCurrentTime)}
+                    </span>
+
+                    {/* Interactive Seek Slider */}
                     <input
                       type="range"
                       min={0}
@@ -8292,17 +8292,20 @@ export default function ProfilePage() {
                         profileThemeDisplayedCurrentTime,
                         profileThemeDisplayedDuration > 0 ? profileThemeDisplayedDuration : 1
                       )}
-                      className={`w-16 sm:w-24 ${musicSliderClassName}`}
+                      className={`flex-1 min-w-[120px] ${musicSliderClassName}`}
                       title={t("Seek", "Перемотка")}
                     />
-                    <div className="font-mono text-[10px] text-[#ffb7c5] tracking-[0.05em] shrink-0 whitespace-nowrap">
-                      <span>{formatAudioClock(profileThemeDisplayedCurrentTime)}</span> / <span>{formatAudioClock(profileThemeDisplayedDuration)}</span>
-                    </div>
-                  </div>
 
+                    <span className="font-mono text-xs font-semibold text-gray-400 shrink-0 min-w-[34px]">
+                      {formatAudioClock(profileThemeDisplayedDuration)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3.5 flex-wrap self-end md:self-center shrink-0">
                   {/* Volume Slider Control */}
-                  <div className="flex items-center gap-2 rounded-2xl border border-[#26151a] bg-[#120a0e] px-3 py-1.5">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ffb7c5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-80">
+                  <div className="flex items-center gap-2 rounded-2xl border border-[#26151a] bg-[#120a0e] px-3.5 py-2">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffb7c5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-80">
                       <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
                       {profileThemeVolume > 0 && <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />}
                       {profileThemeVolume > 0.5 && <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />}
@@ -8315,18 +8318,19 @@ export default function ProfilePage() {
                       value={profileThemeVolume}
                       onChange={handleProfileThemeVolumeChange}
                       style={buildMusicSliderStyle(profileThemeVolume, 1)}
-                      className={`w-14 sm:w-18 ${musicSliderClassName}`}
+                      className={`w-20 sm:w-24 ${musicSliderClassName}`}
                       title={t("Volume", "Громкость")}
                     />
-                    <span className="font-mono text-[10px] text-gray-400 min-w-[26px] text-right">
+                    <span className="font-mono text-[11px] text-gray-400 min-w-[28px] text-right">
                       {Math.round(profileThemeVolume * 100)}%
                     </span>
                   </div>
 
+                  {/* Play / Pause Button */}
                   <button
                     type="button"
                     onClick={handleProfileThemeToggle}
-                    className="inline-flex items-center gap-2 rounded-2xl bg-[#ff2d75] px-4 py-2 text-[11px] font-extrabold uppercase tracking-[0.1em] text-white shadow-[0_0_20px_rgba(255,45,117,0.4)] transition hover:bg-[#ff4887] cursor-pointer shrink-0"
+                    className="inline-flex items-center gap-2 rounded-2xl bg-[#ff2d75] px-5 py-2.5 text-[11px] font-extrabold uppercase tracking-[0.1em] text-white shadow-[0_0_20px_rgba(255,45,117,0.4)] transition hover:bg-[#ff4887] cursor-pointer shrink-0"
                   >
                     {profileThemeIsPlaying ? (
                       <>
