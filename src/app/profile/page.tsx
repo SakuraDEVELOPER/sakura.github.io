@@ -1989,6 +1989,11 @@ export default function ProfilePage() {
   const [freezeErrorMessage, setFreezeErrorMessage] = useState<string | null>(null);
   const [freezeSuccessMessage, setFreezeSuccessMessage] = useState<string | null>(null);
 
+  // Client download state
+  const [isClientDownloading, setIsClientDownloading] = useState(false);
+  const [clientDownloadProgress, setClientDownloadProgress] = useState(0);
+  const [clientDownloadError, setClientDownloadError] = useState<string | null>(null);
+
   const [copiedReferral, setCopiedReferral] = useState(false);
 
   // Admin promo code management state
@@ -3313,6 +3318,12 @@ export default function ProfilePage() {
   const hasSubscriberRole = normalizedProfileRoleSet.has("subscriber");
   const hasLifetimeRole = normalizedProfileRoleSet.has("lifetime");
   const hasTestPeriodRole = normalizedProfileRoleSet.has("test period");
+  const isCoOwnerForDownload = Boolean(
+    normalizedProfileRoleSet.has("co-owner") ||
+    normalizedProfileRoleSet.has("root") ||
+    hasRoleInSelection(visibleCurrentUser?.roles, "co-owner") ||
+    hasRoleInSelection(visibleCurrentUser?.roles, "root")
+  );
   const isTrialSubscription = Boolean(
     hasTestPeriodRole ||
     (activeProfile?.hasClaimedTrial &&
@@ -6097,6 +6108,68 @@ export default function ProfilePage() {
     }
   };
 
+  const handleDownloadClient = async () => {
+    if (!isCoOwnerForDownload) {
+      setClientDownloadError(
+        t(
+          "Download is currently available only for users with the co-owner role.",
+          "Скачивание временно доступно только для пользователей с ролью co-owner."
+        )
+      );
+      return;
+    }
+
+    setClientDownloadError(null);
+    setIsClientDownloading(true);
+    setClientDownloadProgress(0);
+
+    try {
+      const SUPABASE_STORAGE_URL = "https://cwiljdpxgawxglgciily.supabase.co/storage/v1/object/public/downloads";
+      const parts = [
+        "Sakura_Client.zip.part0",
+        "Sakura_Client.zip.part1",
+        "Sakura_Client.zip.part2",
+        "Sakura_Client.zip.part3",
+        "Sakura_Client.zip.part4",
+        "Sakura_Client.zip.part5",
+        "Sakura_Client.zip.part6",
+      ];
+
+      const blobs: Blob[] = [];
+      for (let i = 0; i < parts.length; i++) {
+        setClientDownloadProgress(Math.round(((i + 0.1) / parts.length) * 100));
+        const res = await fetch(`${SUPABASE_STORAGE_URL}/${parts[i]}`);
+        if (!res.ok) {
+          throw new Error(`Failed to load part ${i}`);
+        }
+        const b = await res.blob();
+        blobs.push(b);
+        setClientDownloadProgress(Math.round(((i + 1) / parts.length) * 100));
+      }
+
+      const fullZipBlob = new Blob(blobs, { type: "application/zip" });
+      const blobUrl = URL.createObjectURL(fullZipBlob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = "Sakura_Client.zip";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+    } catch (err) {
+      console.error("Client download failed:", err);
+      setClientDownloadError(
+        t(
+          "Failed to download client. Please check your network connection.",
+          "Ошибка при скачивании чита. Проверьте соединение с сетью."
+        )
+      );
+    } finally {
+      setIsClientDownloading(false);
+      setClientDownloadProgress(0);
+    }
+  };
+
   const handleAdminToggleFreeze = async () => {
     const bridge = getWindowState().sakuraFirebaseAuth;
     if (!bridge?.adminToggleUserFreeze || !activeProfile?.profileId) return;
@@ -7844,12 +7917,24 @@ export default function ProfilePage() {
                         <>
                           <button
                             type="button"
-                            onClick={() => {
-                              window.open("https://github.com", "_blank");
-                            }}
-                            className="inline-flex items-center justify-center rounded-[18px] bg-[#ff2d75] px-5 py-3 text-[11px] font-black uppercase tracking-[0.12em] text-white shadow-[0_0_26px_rgba(255,45,117,0.4)] transition hover:bg-[#ff4887] hover:scale-102 cursor-pointer"
+                            onClick={handleDownloadClient}
+                            disabled={isClientDownloading}
+                            className={`inline-flex items-center justify-center rounded-[18px] px-5 py-3 text-[11px] font-black uppercase tracking-[0.12em] transition cursor-pointer disabled:opacity-70 ${
+                              isCoOwnerForDownload
+                                ? "bg-[#ff2d75] text-white shadow-[0_0_26px_rgba(255,45,117,0.4)] hover:bg-[#ff4887] hover:scale-102"
+                                : "bg-[#1e1419] border border-[#ff2d75]/30 text-gray-300 hover:text-white hover:border-[#ff2d75]"
+                            }`}
+                            title={
+                              isCoOwnerForDownload
+                                ? t("Download Sakura Client (.zip)", "Скачать сборку Sakura (.zip)")
+                                : t("Download is currently restricted to co-owners", "Скачивание временно доступно только для co-owner")
+                            }
                           >
-                            {t("Download Cheat", "СКАЧАТЬ ЧИТ")}
+                            {isClientDownloading
+                              ? `${t("Downloading", "СКАЧИВАНИЕ")} ${clientDownloadProgress}%...`
+                              : isCoOwnerForDownload
+                              ? t("Download Cheat", "СКАЧАТЬ ЧИТ")
+                              : t("Download (co-owner)", "СКАЧАТЬ (CO-OWNER)")}
                           </button>
                           {!hasLifetimeRole && !isTrialSubscription && (
                             isFreezeOnCooldown ? (
@@ -7939,6 +8024,11 @@ export default function ProfilePage() {
                   {freezeErrorMessage && (
                     <p className="mt-3 text-xs text-[#ff9aa9] flex items-center gap-1.5 font-medium">
                       <span>⚠</span> {freezeErrorMessage}
+                    </p>
+                  )}
+                  {clientDownloadError && (
+                    <p className="mt-3 text-xs text-[#ff9aa9] flex items-center gap-1.5 font-medium">
+                      <span>⚠</span> {clientDownloadError}
                     </p>
                   )}
                 </div>
