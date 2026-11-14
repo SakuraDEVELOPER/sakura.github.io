@@ -58,6 +58,7 @@ type UserProfile = {
   avatarSize?: number | null;
   bannerUrl?: string | null;
   bannerPath?: string | null;
+  bannerPositionY?: number | null;
   themeSongKey?: string | null;
   roles: string[];
   isBanned?: boolean;
@@ -198,6 +199,7 @@ type Bridge = {
   deleteAvatar: () => Promise<UserProfile | null>;
   updateBanner?: (payload: any) => Promise<UserProfile | null>;
   deleteBanner?: () => Promise<UserProfile | null>;
+  updateBannerPosition?: (positionY: number) => Promise<UserProfile | null>;
   adminUpdateProfileBanner?: (
     profileId: number,
     payload: any
@@ -930,6 +932,19 @@ const resolveProfileBannerUrl = (profile: UserProfile | null | undefined) => {
   }
 
   return null;
+};
+const resolveProfileBannerPositionY = (profile: UserProfile | null | undefined): number => {
+  if (!profile) return 50;
+  if (typeof profile.bannerPositionY === "number" && !isNaN(profile.bannerPositionY)) {
+    return Math.max(0, Math.min(100, Math.round(profile.bannerPositionY)));
+  }
+  if (typeof profile.profileId === "number" && profile.profileId > 0) {
+    const cached = readCachedProfileSnapshot<UserProfile>(profile.profileId);
+    if (cached && typeof cached.bannerPositionY === "number" && !isNaN(cached.bannerPositionY)) {
+      return Math.max(0, Math.min(100, Math.round(cached.bannerPositionY)));
+    }
+  }
+  return 50;
 };
 const resolveCommentMediaUrl = (
   comment: Pick<ProfileComment, "mediaPath" | "mediaURL">
@@ -1913,6 +1928,11 @@ export default function ProfilePage() {
   const [avatarSuccess, setAvatarSuccess] = useState<string | null>(null);
   const [bannerError, setBannerError] = useState<string | null>(null);
   const [bannerSuccess, setBannerSuccess] = useState<string | null>(null);
+  const [bannerDraftPositionY, setBannerDraftPositionY] = useState(50);
+  const [isSavingBannerPosition, setIsSavingBannerPosition] = useState(false);
+  const isDraggingBannerRef = useRef(false);
+  const dragStartYRef = useRef(0);
+  const dragStartPercentRef = useRef(50);
   const [verificationError, setVerificationError] = useState<string | null>(null);
   const [verificationSuccess, setVerificationSuccess] = useState<string | null>(null);
   const [displayNameInput, setDisplayNameInput] = useState("");
@@ -3570,7 +3590,12 @@ export default function ProfilePage() {
   const hasActiveProfileAvatar = Boolean(activeProfileAvatarUrl);
   const activeProfileBannerUrl = resolveProfileBannerUrl(activeProfile);
   const hasActiveProfileBanner = Boolean(activeProfileBannerUrl);
+  const activeProfileBannerPositionY = resolveProfileBannerPositionY(activeProfile);
   const activeProfileRoleSignature = activeProfile?.roles?.join("|") ?? "";
+
+  useEffect(() => {
+    setBannerDraftPositionY(activeProfileBannerPositionY);
+  }, [activeProfileBannerPositionY, isEditProfileModalOpen]);
 
   useEffect(() => {
     if (!activeProfile?.profileId) {
@@ -5570,7 +5595,10 @@ export default function ProfilePage() {
       }
 
       uploadedBanner = await uploadSupabaseAvatarMedia(file, targetUid);
-      const bannerPayload = toAvatarUploadPayload(uploadedBanner);
+      const bannerPayload = {
+        ...toAvatarUploadPayload(uploadedBanner),
+        bannerPositionY: bannerDraftPositionY,
+      };
 
       if (isOwner && bridge.updateBanner) {
         snapshot = await withAvatarActionTimeout(bridge.updateBanner(bannerPayload));
@@ -5618,6 +5646,7 @@ export default function ProfilePage() {
         );
       }
 
+      setBannerDraftPositionY(50);
       applyUpdatedProfileSnapshot(snapshot);
       setBannerSuccess(t("Banner removed.", "Баннер удалён."));
 
@@ -5630,6 +5659,60 @@ export default function ProfilePage() {
       setBannerError(avatarErrorMessage(error));
     } finally {
       setIsBannerDeleting(false);
+    }
+  };
+
+  const handleSaveBannerPosition = async () => {
+    const bridge = getWindowState().sakuraFirebaseAuth;
+    if (!bridge) return;
+    setIsSavingBannerPosition(true);
+    setBannerError(null);
+    setBannerSuccess(null);
+    try {
+      let snapshot: UserProfile | null = null;
+      if (isOwner && bridge.updateBannerPosition) {
+        snapshot = await withAvatarActionTimeout(bridge.updateBannerPosition(bannerDraftPositionY));
+      } else if (canOpenAdminPanel && activeProfile?.profileId && bridge.adminUpdateProfileBanner) {
+        snapshot = await withAvatarActionTimeout(
+          bridge.adminUpdateProfileBanner(activeProfile.profileId, { bannerPositionY: bannerDraftPositionY })
+        );
+      }
+      applyUpdatedProfileSnapshot(snapshot);
+      setBannerSuccess(t("Banner position saved.", "Положение баннера сохранено."));
+    } catch (error) {
+      setBannerError(avatarErrorMessage(error));
+    } finally {
+      setIsSavingBannerPosition(false);
+    }
+  };
+
+  const handleBannerPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!hasActiveProfileBanner) return;
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
+    isDraggingBannerRef.current = true;
+    dragStartYRef.current = e.clientY;
+    dragStartPercentRef.current = bannerDraftPositionY;
+  };
+
+  const handleBannerPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingBannerRef.current) return;
+    const deltaY = e.clientY - dragStartYRef.current;
+    const newY = Math.round(dragStartPercentRef.current - deltaY * 0.45);
+    setBannerDraftPositionY(Math.max(0, Math.min(100, newY)));
+  };
+
+  const handleBannerPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isDraggingBannerRef.current) {
+      isDraggingBannerRef.current = false;
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {
+        // ignore
+      }
     }
   };
 
@@ -7699,7 +7782,8 @@ export default function ProfilePage() {
                   <img
                     src={activeProfileBannerUrl ?? ""}
                     alt="Profile Banner"
-                    className="h-full w-full object-cover object-center"
+                    className="h-full w-full object-cover transition-[object-position] duration-200"
+                    style={{ objectPosition: `center ${activeProfileBannerPositionY}%` }}
                   />
                 ) : (
                   <div
@@ -8745,19 +8829,31 @@ export default function ProfilePage() {
                             </p>
                             <p className="mt-1 text-xs text-gray-400">
                               {t(
-                                "Recommended size: 1200 × 160 px (or 1400 × 200 px). Supported formats: PNG, JPG, WEBP, GIF (up to 5 MB).",
-                                "Рекомендуемый размер: 1200 × 160 px (или 1400 × 200 px). Поддерживаемые форматы: PNG, JPG, WEBP, GIF (до 5 МБ)."
+                                "Supports large images and photos of any size (PNG, JPG, WEBP, GIF up to 5 MB). You can drag to position or center it below.",
+                                "Поддерживаются любые размеры и фотографии (PNG, JPG, WEBP, GIF до 5 МБ). Вы можете двигать изображение или центрировать его."
                               )}
                             </p>
                           </div>
 
                           {/* Live Banner Preview */}
-                          <div className="relative aspect-[7.2/1] w-full overflow-hidden rounded-2xl border border-[#2c1c24] bg-[#080507]">
+                          <div
+                            onPointerDown={handleBannerPointerDown}
+                            onPointerMove={handleBannerPointerMove}
+                            onPointerUp={handleBannerPointerUp}
+                            onPointerCancel={handleBannerPointerUp}
+                            className={`relative aspect-[7.2/1] w-full overflow-hidden rounded-2xl border border-[#2c1c24] bg-[#080507] ${
+                              hasActiveProfileBanner
+                                ? "cursor-grab active:cursor-grabbing select-none touch-none"
+                                : ""
+                            }`}
+                          >
                             {hasActiveProfileBanner ? (
                               <img
                                 src={activeProfileBannerUrl ?? ""}
                                 alt="Banner Preview"
-                                className="h-full w-full object-cover object-center"
+                                className="h-full w-full object-cover pointer-events-none select-none transition-[object-position] duration-75"
+                                style={{ objectPosition: `center ${bannerDraftPositionY}%` }}
+                                draggable={false}
                               />
                             ) : (
                               <div
@@ -8778,13 +8874,111 @@ export default function ProfilePage() {
                                 />
                               </div>
                             )}
-                            <div className="absolute bottom-2 left-3 flex items-center gap-2">
+
+                            {/* Overlays / Badges */}
+                            <div className="absolute bottom-2 left-3 flex items-center gap-2 pointer-events-none">
                               <span className="rounded-md border border-white/10 bg-black/60 px-2 py-0.5 text-[10px] font-mono text-[#ffb7c5] backdrop-blur-sm">
                                 {hasActiveProfileBanner ? t("Custom Banner", "Кастомный") : t("Sakura Pattern", "Узор Sakura")}
                               </span>
-                              <span className="text-[10px] font-mono text-gray-400">1200 × 160 px</span>
+                              {hasActiveProfileBanner && (
+                                <span className="rounded-md border border-white/10 bg-black/60 px-2 py-0.5 text-[10px] font-mono text-gray-300 backdrop-blur-sm">
+                                  Y: {bannerDraftPositionY}%
+                                </span>
+                              )}
                             </div>
+
+                            {hasActiveProfileBanner && (
+                              <div className="absolute top-2 right-3 pointer-events-none rounded-md border border-white/10 bg-black/60 px-2 py-0.5 text-[10px] font-medium text-gray-300 backdrop-blur-sm">
+                                {t("Drag up/down to reposition", "Потяните вверх/вниз для сдвига")}
+                              </div>
+                            )}
                           </div>
+
+                          {/* Position controls */}
+                          {hasActiveProfileBanner && (
+                            <div className="rounded-xl border border-[#23141a] bg-[#0c0709] p-3.5 space-y-3">
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="font-medium text-gray-300">
+                                  {t("Vertical Centering / Offset", "Позиция по вертикали / Центрирование")}
+                                </span>
+                                <span className="font-mono text-[#ffb7c5] font-bold">
+                                  {bannerDraftPositionY}%
+                                </span>
+                              </div>
+
+                              {/* Range Slider */}
+                              <input
+                                type="range"
+                                min="0"
+                                max="100"
+                                value={bannerDraftPositionY}
+                                onChange={(e) => setBannerDraftPositionY(Number(e.target.value))}
+                                className="h-1.5 w-full appearance-none rounded-lg bg-[#26141d] accent-[#ffb7c5] cursor-pointer"
+                              />
+
+                              {/* Preset buttons + Save button */}
+                              <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setBannerDraftPositionY(0)}
+                                    className={`rounded-lg border px-2.5 py-1 text-[11px] font-mono transition cursor-pointer ${
+                                      bannerDraftPositionY === 0
+                                        ? "border-[#ffb7c5] bg-[#ffb7c5]/20 text-[#ffb7c5]"
+                                        : "border-[#2c1c24] bg-[#160d12] text-gray-400 hover:text-white"
+                                    }`}
+                                  >
+                                    {t("Top (0%)", "Сверху (0%)")}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setBannerDraftPositionY(50)}
+                                    className={`rounded-lg border px-2.5 py-1 text-[11px] font-mono transition cursor-pointer ${
+                                      bannerDraftPositionY === 50
+                                        ? "border-[#ffb7c5] bg-[#ffb7c5]/20 text-[#ffb7c5]"
+                                        : "border-[#2c1c24] bg-[#160d12] text-gray-400 hover:text-white"
+                                    }`}
+                                  >
+                                    {t("Center (50%)", "Центр (50%)")}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setBannerDraftPositionY(100)}
+                                    className={`rounded-lg border px-2.5 py-1 text-[11px] font-mono transition cursor-pointer ${
+                                      bannerDraftPositionY === 100
+                                        ? "border-[#ffb7c5] bg-[#ffb7c5]/20 text-[#ffb7c5]"
+                                        : "border-[#2c1c24] bg-[#160d12] text-gray-400 hover:text-white"
+                                    }`}
+                                  >
+                                    {t("Bottom (100%)", "Снизу (100%)")}
+                                  </button>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={handleSaveBannerPosition}
+                                  disabled={
+                                    isSavingBannerPosition ||
+                                    bannerDraftPositionY === activeProfileBannerPositionY
+                                  }
+                                  className="rounded-lg border border-[#ffb7c5]/50 bg-[#ffb7c5]/20 px-3.5 py-1.5 text-xs font-semibold text-[#ffb7c5] transition hover:bg-[#ffb7c5] hover:text-black disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                                >
+                                  {isSavingBannerPosition
+                                    ? t("Saving...", "Сохранение...")
+                                    : bannerDraftPositionY !== activeProfileBannerPositionY
+                                    ? t("Save Position", "Сохранить положение")
+                                    : t("Saved", "Положение сохранено")}
+                                </button>
+                              </div>
+
+                              <p className="text-[11px] text-gray-500 leading-relaxed">
+                                {t(
+                                  "Drag the banner image up/down directly or use presets to focus on any detail of your image.",
+                                  "Потяните изображение баннера вверх или вниз или используйте быстрые кнопки, чтобы отцентрировать любую деталь большого баннера."
+                                )}
+                              </p>
+                            </div>
+                          )}
 
                           {/* Controls */}
                           <div className="flex flex-wrap items-center gap-2.5 pt-1">
@@ -9939,19 +10133,72 @@ export default function ProfilePage() {
                       </section>
 
                       {/* Banner Moderation */}
-                      <section className="rounded-[24px] border border-[#23151b] bg-[#10090d] p-5">
-                        <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-400">
-                          {t("Profile Banner", "Баннер профиля")}
-                        </p>
-                        <p className="mt-1 text-xs text-gray-400">
-                          {hasActiveProfileBanner ? t("Custom banner uploaded.", "Установлен кастомный баннер.") : t("Default Sakura pattern.", "Стандартный узор Sakura.")}
-                        </p>
+                      <section className="rounded-[24px] border border-[#23151b] bg-[#10090d] p-5 space-y-3">
+                        <div>
+                          <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-400">
+                            {t("Profile Banner", "Баннер профиля")}
+                          </p>
+                          <p className="mt-1 text-xs text-gray-400">
+                            {hasActiveProfileBanner ? t("Custom banner uploaded.", "Установлен кастомный баннер.") : t("Default Sakura pattern.", "Стандартный узор Sakura.")}
+                          </p>
+                        </div>
+
+                        {hasActiveProfileBanner && (
+                          <div className="rounded-xl border border-[#23141a] bg-[#0c0709] p-3 space-y-2.5">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-gray-400">{t("Vertical Offset", "Позиция по вертикали")}</span>
+                              <span className="font-mono text-[#ffb7c5]">{bannerDraftPositionY}%</span>
+                            </div>
+                            <input
+                              type="range"
+                              min="0"
+                              max="100"
+                              value={bannerDraftPositionY}
+                              onChange={(e) => setBannerDraftPositionY(Number(e.target.value))}
+                              className="h-1.5 w-full appearance-none rounded-lg bg-[#26141d] accent-[#ffb7c5] cursor-pointer"
+                            />
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setBannerDraftPositionY(0)}
+                                  className="rounded border border-[#2c1c24] bg-[#160d12] px-2 py-0.5 text-[10px] font-mono text-gray-400 hover:text-white cursor-pointer"
+                                >
+                                  0%
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setBannerDraftPositionY(50)}
+                                  className="rounded border border-[#2c1c24] bg-[#160d12] px-2 py-0.5 text-[10px] font-mono text-gray-400 hover:text-white cursor-pointer"
+                                >
+                                  50%
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setBannerDraftPositionY(100)}
+                                  className="rounded border border-[#2c1c24] bg-[#160d12] px-2 py-0.5 text-[10px] font-mono text-gray-400 hover:text-white cursor-pointer"
+                                >
+                                  100%
+                                </button>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={handleSaveBannerPosition}
+                                disabled={isSavingBannerPosition || bannerDraftPositionY === activeProfileBannerPositionY}
+                                className="rounded-lg border border-[#ffb7c5]/50 bg-[#ffb7c5]/20 px-3 py-1 text-[11px] font-semibold text-[#ffb7c5] transition hover:bg-[#ffb7c5] hover:text-black disabled:opacity-40 cursor-pointer"
+                              >
+                                {isSavingBannerPosition ? t("Saving...", "Сохранение...") : t("Save Position", "Сохранить позицию")}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
                         <div className="mt-3 flex flex-wrap gap-2">
                           <button
                             type="button"
                             onClick={() => adminBannerInputRef.current?.click()}
                             disabled={isBannerUploading || isBannerDeleting}
-                            className="rounded-xl border border-[#ffb7c5]/40 bg-[#ffb7c5] px-4 py-2 text-xs font-bold uppercase tracking-[0.1em] text-black hover:bg-white transition disabled:opacity-50"
+                            className="rounded-xl border border-[#ffb7c5]/40 bg-[#ffb7c5] px-4 py-2 text-xs font-bold uppercase tracking-[0.1em] text-black hover:bg-white transition disabled:opacity-50 cursor-pointer"
                           >
                             {isBannerUploading ? t("Uploading...", "Загрузка...") : hasActiveProfileBanner ? t("Replace Banner", "Заменить баннер") : t("Upload Banner", "Загрузить баннер")}
                           </button>
@@ -9960,7 +10207,7 @@ export default function ProfilePage() {
                               type="button"
                               onClick={handleBannerDelete}
                               disabled={isBannerUploading || isBannerDeleting}
-                              className="rounded-xl border border-[#3a2029] bg-[#160c11] px-4 py-2 text-xs font-bold uppercase tracking-[0.1em] text-[#ff9aa9] hover:border-[#ff9aa9] transition disabled:opacity-50"
+                              className="rounded-xl border border-[#3a2029] bg-[#160c11] px-4 py-2 text-xs font-bold uppercase tracking-[0.1em] text-[#ff9aa9] hover:border-[#ff9aa9] transition disabled:opacity-50 cursor-pointer"
                             >
                               {isBannerDeleting ? t("Deleting...", "Удаление...") : t("Reset Banner", "Сбросить баннер")}
                             </button>

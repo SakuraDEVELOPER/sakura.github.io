@@ -185,6 +185,7 @@ const firebaseModuleScript = `
         avatarSize: row.avatar_size || null,
         bannerUrl: row.banner_url || null,
         bannerPath: row.banner_path || null,
+        bannerPositionY: typeof row.banner_position_y === "number" ? row.banner_position_y : 50,
         roles: Array.isArray(row.roles) ? row.roles : [],
         isBanned: row.is_banned === true,
         bannedAt: row.banned_at || null,
@@ -797,15 +798,34 @@ const firebaseModuleScript = `
               if (!profileId) throw createFirebaseError("auth/no-current-user", "Sign in first.");
               const bannerUrl = typeof payload === "string" ? payload : payload?.photoURL ?? payload?.publicUrl ?? null;
               const bannerPath = typeof payload === "object" ? (payload?.avatarPath ?? payload?.path ?? null) : null;
+              const bannerPositionY = typeof payload === "object" && typeof payload?.bannerPositionY === "number" ? Math.max(0, Math.min(100, Math.round(payload.bannerPositionY))) : 50;
               await callSupabaseRpc("update_profile_info", {
                 p_profile_id: profileId,
                 p_banner_url: bannerUrl,
-                p_banner_path: bannerPath
+                p_banner_path: bannerPath,
+                p_banner_position_y: bannerPositionY
               });
               const updated = {
                 ...window.sakuraCurrentUserSnapshot,
                 bannerUrl,
-                bannerPath
+                bannerPath,
+                bannerPositionY
+              };
+              publishUserSnapshot(updated);
+              return (await bridge.getProfileById(profileId)) || updated;
+            },
+
+            updateBannerPosition: async (positionY) => {
+              const profileId = window.sakuraCurrentUserSnapshot?.profileId;
+              if (!profileId) throw createFirebaseError("auth/no-current-user", "Sign in first.");
+              const safeY = Math.max(0, Math.min(100, Math.round(positionY)));
+              await callSupabaseRpc("update_profile_info", {
+                p_profile_id: profileId,
+                p_banner_position_y: safeY
+              });
+              const updated = {
+                ...window.sakuraCurrentUserSnapshot,
+                bannerPositionY: safeY
               };
               publishUserSnapshot(updated);
               return (await bridge.getProfileById(profileId)) || updated;
@@ -817,12 +837,14 @@ const firebaseModuleScript = `
               await callSupabaseRpc("update_profile_info", {
                 p_profile_id: profileId,
                 p_banner_url: "",
-                p_banner_path: ""
+                p_banner_path: "",
+                p_banner_position_y: 50
               });
               const updated = {
                 ...window.sakuraCurrentUserSnapshot,
                 bannerUrl: null,
-                bannerPath: null
+                bannerPath: null,
+                bannerPositionY: 50
               };
               publishUserSnapshot(updated);
               return (await bridge.getProfileById(profileId)) || updated;
@@ -847,10 +869,12 @@ const firebaseModuleScript = `
             adminUpdateProfileBanner: async (profileId, payload) => {
               const bannerUrl = typeof payload === "string" ? payload : payload?.photoURL ?? payload?.publicUrl ?? null;
               const bannerPath = typeof payload === "object" ? (payload?.avatarPath ?? payload?.path ?? null) : null;
+              const bannerPositionY = typeof payload === "object" && typeof payload?.bannerPositionY === "number" ? Math.max(0, Math.min(100, Math.round(payload.bannerPositionY))) : null;
               await callSupabaseRpc("update_profile_info", {
                 p_profile_id: profileId,
                 p_banner_url: bannerUrl,
-                p_banner_path: bannerPath
+                p_banner_path: bannerPath,
+                p_banner_position_y: bannerPositionY
               });
               return await bridge.getProfileById(profileId);
             },
