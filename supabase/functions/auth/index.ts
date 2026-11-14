@@ -103,6 +103,10 @@ const PAYLOAD_KEYS: Record<string, { key: string; cipher_sha256: string }> = {
     key: "ded6bb87802f3881d611bae8f8ef05e91235b65cf10d1896ef18e8a5eb81c403",
     cipher_sha256: "c5b62e273de9284d6ae2580d4d5546237bb26c926610985cf990370ea995f402",
   },
+  "5257f35eedc042768b2c9cc014434b22": {
+    key: "002f098d152774731ca4c40b71de19651b494ec2456c2524c56bb4ad1661be67",
+    cipher_sha256: "a4d17dc36d897c388da86c07a18c10dafacb3afa3dfc92042ea201c56e3ec104",
+  },
 };
 
 // ECDSA P-256 Private Key (PKCS#8 PEM)
