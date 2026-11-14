@@ -55,40 +55,15 @@ export function getSupabasePublicObjectUrl(objectPath: string | null | undefined
 
 export function getSupabaseRenderedImageUrl(
   objectPath: string | null | undefined,
-  options?: {
+  _options?: {
     width?: number;
     height?: number;
     quality?: number;
     resize?: "contain" | "cover" | "fill";
   }
 ) {
-  const normalizedPath = normalizeStorageObjectPath(objectPath);
-
-  if (!normalizedPath || !supabaseRenderedImageBaseUrl) {
-    return null;
-  }
-
-  const encodedPath = encodeStorageObjectPath(normalizedPath);
-  const renderedUrl = new URL(`${supabaseRenderedImageBaseUrl}/${encodedPath}`);
-  const width = Number(options?.width);
-  const height = Number(options?.height);
-  const quality = Number(options?.quality);
-
-  if (Number.isFinite(width) && width > 0) {
-    renderedUrl.searchParams.set("width", String(Math.trunc(width)));
-  }
-
-  if (Number.isFinite(height) && height > 0) {
-    renderedUrl.searchParams.set("height", String(Math.trunc(height)));
-  }
-
-  if (Number.isFinite(quality) && quality > 0) {
-    renderedUrl.searchParams.set("quality", String(Math.trunc(quality)));
-  }
-
-  if (options?.resize) {
-    renderedUrl.searchParams.set("resize", options.resize);
-  }
-
-  return renderedUrl.toString();
+  // Supabase Image Transformation (/storage/v1/render/image/...) requires a paid Pro plan
+  // and returns 403 (FeatureNotEnabled) on projects without it.
+  // Fall back to the public object URL to ensure all images load properly.
+  return getSupabasePublicObjectUrl(objectPath);
 }

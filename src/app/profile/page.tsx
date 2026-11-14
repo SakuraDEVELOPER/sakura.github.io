@@ -784,6 +784,8 @@ function CommentMediaFrame({
   className: string;
   controls?: boolean;
 }) {
+  const [loadError, setLoadError] = useState(false);
+
   if (isCommentVideoMediaType(mediaType)) {
     return (
       <video
@@ -800,7 +802,25 @@ function CommentMediaFrame({
     );
   }
 
-  return <img src={src} alt={alt} loading="lazy" decoding="async" fetchPriority="low" className={className} />;
+  if (loadError) {
+    return (
+      <div className="flex items-center justify-center py-6 px-4 text-xs text-gray-500">
+        <span>Attachment unavailable</span>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      loading="lazy"
+      decoding="async"
+      fetchPriority="low"
+      className={className}
+      onError={() => setLoadError(true)}
+    />
+  );
 }
 const normalizeUsernameDraft = (value: string | null | undefined) =>
   String(value ?? "")
@@ -995,26 +1015,6 @@ const isCommentPhotoOrVideoAttachment = (
 const resolveCommentMediaDisplayUrl = (
   comment: Pick<ProfileComment, "mediaPath" | "mediaType" | "mediaURL">
 ) => {
-  const mediaPath = typeof comment.mediaPath === "string" ? comment.mediaPath.trim() : "";
-
-  if (
-    mediaPath &&
-    (
-      isRenderableCommentImageMediaType(comment.mediaType) ||
-      isRenderableCommentImagePath(mediaPath)
-    )
-  ) {
-    const renderedImageUrl = getSupabaseRenderedImageUrl(mediaPath, {
-      width: 960,
-      quality: 72,
-      resize: "contain",
-    });
-
-    if (renderedImageUrl) {
-      return renderedImageUrl;
-    }
-  }
-
   return resolveCommentMediaUrl(comment);
 };
 const hasProfileAvatarReference = (profile: UserProfile | null | undefined) =>

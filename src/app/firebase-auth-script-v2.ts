@@ -1094,8 +1094,61 @@ const firebaseModuleScript = `
               };
             },
 
-            updateProfileComment: async () => {
-              return null;
+            updateProfileComment: async (commentId, message, mediaObj = null, removeMedia = false) => {
+              if (!commentId) return null;
+              const updatePayload = {
+                message: typeof message === "string" ? message : "",
+                updated_at: new Date().toISOString()
+              };
+
+              if (removeMedia) {
+                updatePayload.media_url = null;
+                updatePayload.media_type = null;
+                updatePayload.media_path = null;
+                updatePayload.media_size = null;
+              } else if (mediaObj && typeof mediaObj === "object") {
+                updatePayload.media_url = mediaObj.url || mediaObj.mediaURL || null;
+                updatePayload.media_type = mediaObj.type || mediaObj.mediaType || null;
+                updatePayload.media_path = mediaObj.path || mediaObj.mediaPath || null;
+                updatePayload.media_size = mediaObj.size || mediaObj.mediaSize || null;
+              }
+
+              try {
+                const response = await fetch(SUPABASE_REST_URL + "/public_profile_comments?id=eq." + commentId, {
+                  method: "PATCH",
+                  headers: {
+                    apikey: SUPABASE_PUBLIC_ANON_KEY,
+                    Authorization: "Bearer " + SUPABASE_PUBLIC_ANON_KEY,
+                    "Content-Type": "application/json",
+                    Prefer: "return=representation"
+                  },
+                  body: JSON.stringify(updatePayload)
+                });
+
+                if (!response.ok) return null;
+                const rows = await response.json();
+                if (Array.isArray(rows) && rows[0]) {
+                  const r = rows[0];
+                  return {
+                    id: r.id,
+                    profileId: r.profile_id,
+                    authorProfileId: r.author_profile_id,
+                    authorName: r.author_name,
+                    authorPhotoURL: r.author_photo_url,
+                    authorAccentRole: r.author_accent_role,
+                    message: r.message,
+                    mediaURL: r.media_url,
+                    mediaType: r.media_type,
+                    mediaPath: r.media_path,
+                    mediaSize: r.media_size,
+                    createdAt: r.created_at,
+                    updatedAt: r.updated_at
+                  };
+                }
+                return null;
+              } catch (e) {
+                return null;
+              }
             },
 
             deleteProfileComment: async (commentId, actorProfileId) => {
