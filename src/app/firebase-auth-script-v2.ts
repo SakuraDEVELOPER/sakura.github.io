@@ -203,6 +203,8 @@ const firebaseModuleScript = `
         lastSignInTime: row.last_sign_in_at || null,
         displayNameUpdatedAt: row.display_name_updated_at || null,
         loginUpdatedAt: row.login_updated_at || null,
+        hwid: row.hwid || null,
+        hwidResetAt: row.hwid_reset_at || null,
         loginHistory: Array.isArray(row.login_history) ? row.login_history : [],
         visitHistory: Array.isArray(row.visit_history) ? row.visit_history : [],
         presence: {
@@ -821,6 +823,22 @@ const firebaseModuleScript = `
                 ...window.sakuraCurrentUserSnapshot,
                 bannerUrl: null,
                 bannerPath: null
+              };
+              publishUserSnapshot(updated);
+              return (await bridge.getProfileById(profileId)) || updated;
+            },
+
+            resetSelfHwid: async () => {
+              const profileId = window.sakuraCurrentUserSnapshot?.profileId;
+              if (!profileId) throw createFirebaseError("auth/no-current-user", "Sign in first.");
+              const res = await callSupabaseRpc("reset_self_hwid", { p_profile_id: profileId });
+              if (res && res.ok === false) {
+                throw new Error(res.error || "Не удалось сбросить HWID.");
+              }
+              const updated = {
+                ...window.sakuraCurrentUserSnapshot,
+                hwid: null,
+                hwidResetAt: res?.hwid_reset_at || new Date().toISOString()
               };
               publishUserSnapshot(updated);
               return (await bridge.getProfileById(profileId)) || updated;

@@ -63,6 +63,7 @@ type UserProfile = {
   isBanned?: boolean;
   bannedAt?: string | null;
   hwid?: string | null;
+  hwidResetAt?: string | null;
   subscriptionUntil?: string | null;
   hasClaimedTrial?: boolean;
   trialClaimedAt?: string | null;
@@ -202,6 +203,7 @@ type Bridge = {
     payload: any
   ) => Promise<UserProfile | null>;
   adminDeleteProfileBanner?: (profileId: number) => Promise<UserProfile | null>;
+  resetSelfHwid?: () => Promise<UserProfile | null>;
   adminUpdateProfileAvatar: (
     profileId: number,
     file: File | AvatarUploadPayload
@@ -1982,7 +1984,9 @@ export default function ProfilePage() {
   const [isRedeemingPromo, setIsRedeemingPromo] = useState(false);
   const [promoErrorMessage, setPromoErrorMessage] = useState<string | null>(null);
   const [promoSuccessMessage, setPromoSuccessMessage] = useState<string | null>(null);
-  const [hwidResetSent, setHwidResetSent] = useState(false);
+  const [isHwidResetting, setIsHwidResetting] = useState(false);
+  const [hwidResetMessage, setHwidResetMessage] = useState<string | null>(null);
+  const [hwidResetError, setHwidResetError] = useState<string | null>(null);
 
   // Freeze state
   const [isFreezingSubscription, setIsFreezingSubscription] = useState(false);
@@ -3424,6 +3428,11 @@ export default function ProfilePage() {
       ? formatTime(profileSubscriptionUntil, locale)
       : t("Not set", "Не указан");
   const profileHwid = resolveProfileHwid(activeProfile);
+  const hwidCooldownMs = 30 * 24 * 60 * 60 * 1000;
+  const lastHwidResetTime = activeProfile?.hwidResetAt ? new Date(activeProfile.hwidResetAt).getTime() : 0;
+  const hwidTimeRemainingMs = lastHwidResetTime ? Math.max(0, lastHwidResetTime + hwidCooldownMs - Date.now()) : 0;
+  const isHwidOnCooldown = hwidTimeRemainingMs > 0;
+  const hwidDaysRemaining = isHwidOnCooldown ? Math.max(1, Math.ceil(hwidTimeRemainingMs / (24 * 60 * 60 * 1000))) : 0;
   const remainingDaysCount = (() => {
     if (hasLifetimeRole) return 999;
     if (isProfileFrozen && typeof activeProfile?.frozenRemainingMs === "number" && activeProfile.frozenRemainingMs > 0) {
@@ -6021,6 +6030,34 @@ export default function ProfilePage() {
     }
   };
 
+  const handleSelfResetHwid = async () => {
+    const bridge = getWindowState().sakuraFirebaseAuth;
+    if (!bridge?.resetSelfHwid) return;
+    if (isHwidOnCooldown) return;
+
+    const confirmed = window.confirm(
+      t(
+        "Are you sure you want to reset your HWID? Next reset will be available in 30 days.",
+        "Вы уверены, что хотите сбросить свой HWID? Следующий сброс будет доступен только через 30 дней."
+      )
+    );
+    if (!confirmed) return;
+
+    setIsHwidResetting(true);
+    setHwidResetError(null);
+    setHwidResetMessage(null);
+
+    try {
+      const snapshot = await bridge.resetSelfHwid();
+      applyUpdatedProfileSnapshot(snapshot);
+      setHwidResetMessage(t("HWID has been successfully reset.", "HWID успешно сброшен."));
+    } catch (error) {
+      setHwidResetError(error instanceof Error ? error.message : "Не удалось сбросить HWID.");
+    } finally {
+      setIsHwidResetting(false);
+    }
+  };
+
   const handleRedeemPromo = async (e: React.FormEvent) => {
     e.preventDefault();
     const bridge = getWindowState().sakuraFirebaseAuth;
@@ -8072,20 +8109,38 @@ export default function ProfilePage() {
                         </span>
                       </div>
 
-                      <div className="flex items-center justify-between rounded-xl border border-[#22141a] bg-[#120b0e] px-3 py-2 text-xs">
-                        <span className="text-[#8c7a84]">{t("HWID Reset", "Сброс HWID")}</span>
-                        {hasActiveSubscriptionRole || hasLifetimeRole ? (
-                          <button
-                            type="button"
-                            onClick={() => setHwidResetSent(true)}
-                            className="font-mono text-[11px] font-bold text-[#ffb7c5] underline cursor-pointer hover:text-white transition"
-                          >
-                            {hwidResetSent ? t("Request Sent", "Запрос отправлен") : t("Request Reset", "Запросить сброс")}
-                          </button>
-                        ) : (
-                          <span className="font-mono text-[11px] font-bold text-[#6d5b65]">
-                            {t("Unavailable", "Недоступно")}
-                          </span>
+                      <div className="flex flex-col gap-1 rounded-xl border border-[#22141a] bg-[#120b0e] px-3 py-2 text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[#8c7a84]">{t("HWID Reset", "Сброс HWID")}</span>
+                          {isOwner ? (
+                            isHwidOnCooldown ? (
+                              <span
+                                title={t(`Next reset available in ${hwidDaysRemaining} days`, `Следующий сброс доступен через ${hwidDaysRemaining} дн.`)}
+                                className="font-mono text-[11px] font-bold text-[#8c7a84]"
+                              >
+                                {t(`Cooldown (${hwidDaysRemaining}d)`, `Кулдаун (${hwidDaysRemaining} дн.)`)}
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={handleSelfResetHwid}
+                                disabled={isHwidResetting}
+                                className="font-mono text-[11px] font-bold text-[#ffb7c5] underline cursor-pointer hover:text-white transition disabled:opacity-50"
+                              >
+                                {isHwidResetting ? t("Resetting...", "Сброс...") : t("Reset HWID", "Сбросить")}
+                              </button>
+                            )
+                          ) : (
+                            <span className="font-mono text-[11px] font-bold text-[#6d5b65]">
+                              {activeProfile?.hwid ? t("Bound", "Привязан") : t("Not bound", "Не привязан")}
+                            </span>
+                          )}
+                        </div>
+                        {hwidResetMessage && (
+                          <p className="text-[10px] text-[#8ce5b2]">✓ {hwidResetMessage}</p>
+                        )}
+                        {hwidResetError && (
+                          <p className="text-[10px] text-[#ff9aa9]">⚠ {hwidResetError}</p>
                         )}
                       </div>
 
